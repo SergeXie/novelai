@@ -1,11 +1,23 @@
-from fastapi import APIRouter, Depends
+import uuid
+
+import bcrypt
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
+from core.entity.do.users_do import User
 from core.entity.vo.login_vo import UserLogin
 from service.user_service import UserService
+from pydantic import BaseModel, Field
 
 loginController = APIRouter()
+
+
+class UserRegisterRequest(BaseModel):
+    account: str = Field(..., min_length=4, max_length=64)
+    password: str = Field(..., min_length=6, max_length=64)
+    nickname: str = Field(..., min_length=1, max_length=64)
 
 
 @loginController.post('/login', name="登录")
@@ -26,3 +38,48 @@ async def login(user_login: UserLogin,
     )
 
     return ResponseUtil.success(msg='登录成功', dict_content={'data': data})
+
+@loginController.post("/register", summary="用户注册")
+async def register(
+    req: UserRegisterRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    用户注册接口
+    - account 唯一
+    - password 使用 bcrypt + salt
+    """
+
+    # 1️⃣ 校验账号是否存在
+    stmt = select(User).where(User.account == req.account)
+    result = await db.execute(stmt)
+    exists = result.scalar_one_or_none()
+
+    if exists:
+        raise HTTPException(status_code=400, detail="账号已存在")
+
+    # 2️⃣ 密码加盐哈希
+    hashed_password = bcrypt.hashpw(
+        req.password.encode("utf-8"),
+        bcrypt.gensalt()
+    ).decode("utf-8")
+
+    # 3️⃣ 创建用户
+    user = User(
+        uuid=str(uuid.uuid4()),
+        account=req.account,
+        nickname=req.nickname,
+        password=hashed_password
+    )
+
+    # 4️⃣ 入库
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+
+    return {
+        "pkId": user.pkId,
+        "uuid": user.uuid,
+        "account": user.account,
+        "nickname": user.nickname
+    }

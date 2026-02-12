@@ -7,10 +7,12 @@ from dao.user_dao import UserDAO
 
 
 async def get_login_user(
-    x_user_uuid: str = Header(..., alias="x-User-Uuid"),
+    x_user_uuid: str = Header(None, alias="x-User-Uuid"),
     db: AsyncSession = Depends(get_db)
 ):
-    print("x_user_uuid:{}".format(x_user_uuid))
+    if not x_user_uuid:
+        raise ServiceWarning(message='请登录！')
+
     user = await UserDAO.get_by_uuid(db, x_user_uuid)
 
     if not user:
