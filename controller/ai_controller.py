@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from common.config.get_db import get_db
+from common.response.response_util import ResponseUtil
 from core.deps.auth import get_login_user
 from core.entity.do.generate_log import AiNovelGenerateLog
 from schemas import GenerateRequest, RefineRequest
@@ -56,6 +57,130 @@ async def get_today_used_chars(
 
     result = await db.execute(stmt)
     return result.scalar_one()
+
+
+async def get_today_total_chars(
+    db: AsyncSession,
+    user_id: int
+) -> int:
+    start, end = get_today_range()
+
+    stmt = select(
+        func.coalesce(
+            func.sum(
+                func.length(AiNovelGenerateLog.userPrompt)
+                + func.length(AiNovelGenerateLog.outputContent)
+            ),
+            0
+        )
+    ).where(
+        AiNovelGenerateLog.userId == user_id,
+        AiNovelGenerateLog.status == 1,
+        AiNovelGenerateLog.createdAt >= start,
+        AiNovelGenerateLog.createdAt <= end
+    )
+
+    result = await db.execute(stmt)
+    return result.scalar_one()
+
+async def get_total_used_chars(
+    db: AsyncSession,
+    user_id: int
+) -> int:
+    stmt = select(
+        func.coalesce(
+            func.sum(
+                func.length(AiNovelGenerateLog.userPrompt)
+                + func.length(AiNovelGenerateLog.outputContent)
+            ),
+            0
+        )
+    ).where(
+        AiNovelGenerateLog.userId == user_id,
+        AiNovelGenerateLog.status == 1
+    )
+
+    result = await db.execute(stmt)
+    return result.scalar_one()
+
+
+async def get_today_input_output(
+    db: AsyncSession,
+    user_id: int
+) -> tuple[int, int]:
+    start, end = get_today_range()
+
+    stmt = select(
+        func.coalesce(func.sum(func.length(AiNovelGenerateLog.userPrompt)), 0),
+        func.coalesce(func.sum(func.length(AiNovelGenerateLog.outputContent)), 0)
+    ).where(
+        AiNovelGenerateLog.userId == user_id,
+        AiNovelGenerateLog.status == 1,
+        AiNovelGenerateLog.createdAt >= start,
+        AiNovelGenerateLog.createdAt <= end
+    )
+
+    result = await db.execute(stmt)
+    input_chars, output_chars = result.one()
+    return input_chars, output_chars
+
+async def get_total_input_output(
+    db: AsyncSession,
+    user_id: int
+) -> tuple[int, int]:
+    stmt = select(
+        func.coalesce(func.sum(func.length(AiNovelGenerateLog.userPrompt)), 0),
+        func.coalesce(func.sum(func.length(AiNovelGenerateLog.outputContent)), 0)
+    ).where(
+        AiNovelGenerateLog.userId == user_id,
+        AiNovelGenerateLog.status == 1
+    )
+
+    result = await db.execute(stmt)
+    input_chars, output_chars = result.one()
+    return input_chars, output_chars
+
+
+@AI.get("/userInfo", name="用户信息")
+async def user_info(
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_login_user)
+):
+    # ===== 当天 =====
+    todayInputChars, todayOutputChars = await get_today_input_output(
+        db, user.pkId
+    )
+
+    # ===== 累计 =====
+    totalInputChars, totalOutputChars = await get_total_input_output(
+        db, user.pkId
+    )
+
+    todayTotalChars = todayInputChars + todayOutputChars
+
+    data= {
+        # ===== 用户信息 =====
+        "userId": user.pkId,
+        "uuid": user.uuid,
+        "account": user.account,
+        "nickname": user.nickname,
+
+        # ===== 当天用量 =====
+        "todayInputChars": todayInputChars,
+        "todayOutputChars": todayOutputChars,
+        "todayTotalChars": todayTotalChars,
+        "todayLimit": DAILY_TOTAL_CHAR_LIMIT,
+        "todayRemainingChars": max(
+            DAILY_TOTAL_CHAR_LIMIT - todayTotalChars, 0
+        ),
+
+        # ===== 累计用量 =====
+        "totalInputChars": totalInputChars,
+        "totalOutputChars": totalOutputChars,
+        "totalUsedChars": totalInputChars + totalOutputChars
+    }
+
+    return ResponseUtil.success(data=data)
 
 
 @AI.post("/generate", summary="根据设定生成小说片段")
