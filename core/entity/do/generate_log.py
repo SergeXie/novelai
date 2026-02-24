@@ -35,6 +35,13 @@ class AiNovelGenerateLog(Base):
         comment="用户输入的提示词"
     )
 
+    requestInputLength: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        comment="生成请求输入总字符数"
+    )
+
     systemPrompt: Mapped[str] = mapped_column(
         Text,
         nullable=False,
@@ -91,6 +98,27 @@ class AiNovelGenerateLog(Base):
         Text,
         nullable=True,
         comment="失败错误信息"
+    )
+
+    actionType: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default="generate",
+        comment="行为类型：generate / refine"
+    )
+
+    refineOriginalLength: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        comment="微调-原始内容字符数"
+    )
+
+    refineSuggestionLength: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        comment="微调-修改建议字符数"
     )
 
     # ========= 时间 =========
