@@ -1,144 +1,17 @@
 from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_login_user
 from core.entity.do.generate_log import AiNovelGenerateLog
 from schemas import GenerateRequest, RefineRequest
+from service.ai_service import get_today_input_output, get_total_input_output, get_today_used_chars, \
+    calc_request_input_size, calc_request_input_length
 from services import generate_novel_text, refine_novel_text, build_system_prompt
-from datetime import datetime, time
 
 AI = APIRouter()
 
 DAILY_TOTAL_CHAR_LIMIT = 2000000
-
-
-# @AI.post("/generate", summary="根据设定生成小说片段")
-# async def generate_chapter(request: GenerateRequest, user=Depends(get_login_user)):
-#     """
-#     接收人物、题材和提示词，返回生成的小说文本。
-#     """
-#     if not request.user_prompt:
-#         raise HTTPException(status_code=400, detail="提示词不能为空")
-#
-#     content = generate_novel_text(request)
-#     print(content)
-#     return {"content": content}
-
-
-def get_today_range():
-    today = datetime.now().date()
-    start = datetime.combine(today, time.min)
-    end = datetime.combine(today, time.max)
-    return start, end
-
-
-async def get_today_used_chars(
-    db: AsyncSession,
-    user_id: int
-) -> int:
-    start, end = get_today_range()
-
-    stmt = select(
-        func.coalesce(
-            func.sum(
-                func.length(AiNovelGenerateLog.userPrompt)
-                + func.length(AiNovelGenerateLog.outputContent)
-            ),
-            0
-        )
-    ).where(
-        AiNovelGenerateLog.userId == user_id,
-        AiNovelGenerateLog.createdAt >= start,
-        AiNovelGenerateLog.createdAt <= end,
-        AiNovelGenerateLog.status == 1
-    )
-
-    result = await db.execute(stmt)
-    return result.scalar_one()
-
-
-async def get_today_total_chars(
-    db: AsyncSession,
-    user_id: int
-) -> int:
-    start, end = get_today_range()
-
-    stmt = select(
-        func.coalesce(
-            func.sum(
-                func.length(AiNovelGenerateLog.userPrompt)
-                + func.length(AiNovelGenerateLog.outputContent)
-            ),
-            0
-        )
-    ).where(
-        AiNovelGenerateLog.userId == user_id,
-        AiNovelGenerateLog.status == 1,
-        AiNovelGenerateLog.createdAt >= start,
-        AiNovelGenerateLog.createdAt <= end
-    )
-
-    result = await db.execute(stmt)
-    return result.scalar_one()
-
-async def get_total_used_chars(
-    db: AsyncSession,
-    user_id: int
-) -> int:
-    stmt = select(
-        func.coalesce(
-            func.sum(
-                func.length(AiNovelGenerateLog.userPrompt)
-                + func.length(AiNovelGenerateLog.outputContent)
-            ),
-            0
-        )
-    ).where(
-        AiNovelGenerateLog.userId == user_id,
-        AiNovelGenerateLog.status == 1
-    )
-
-    result = await db.execute(stmt)
-    return result.scalar_one()
-
-
-async def get_today_input_output(
-    db: AsyncSession,
-    user_id: int
-) -> tuple[int, int]:
-    start, end = get_today_range()
-
-    stmt = select(
-        func.coalesce(func.sum(func.length(AiNovelGenerateLog.userPrompt)), 0),
-        func.coalesce(func.sum(func.length(AiNovelGenerateLog.outputContent)), 0)
-    ).where(
-        AiNovelGenerateLog.userId == user_id,
-        AiNovelGenerateLog.status == 1,
-        AiNovelGenerateLog.createdAt >= start,
-        AiNovelGenerateLog.createdAt <= end
-    )
-
-    result = await db.execute(stmt)
-    input_chars, output_chars = result.one()
-    return input_chars, output_chars
-
-async def get_total_input_output(
-    db: AsyncSession,
-    user_id: int
-) -> tuple[int, int]:
-    stmt = select(
-        func.coalesce(func.sum(func.length(AiNovelGenerateLog.userPrompt)), 0),
-        func.coalesce(func.sum(func.length(AiNovelGenerateLog.outputContent)), 0)
-    ).where(
-        AiNovelGenerateLog.userId == user_id,
-        AiNovelGenerateLog.status == 1
-    )
-
-    result = await db.execute(stmt)
-    input_chars, output_chars = result.one()
-    return input_chars, output_chars
 
 
 @AI.get("/userInfo", name="用户信息")
@@ -157,6 +30,19 @@ async def user_info(
     )
 
     todayTotalChars = todayInputChars + todayOutputChars
+
+    # todayTotalChars：你今天已经用掉的总字符数
+    # todayLimit：你今天最多可以用的字符数
+    # todayRemainingChars：你今天还剩多少字符可以用
+    # totalUsedChars 累计用量
+    # todayInputChars 今天用户输入的总字符数
+    # todayOutputChars  今天系统生成输出的总字符数
+    # todayTotalChars 今天输入 + 输出的字符总量
+    # todayLimit 每日字符使用上限
+    # todayRemainingChars 今天剩余可用字符数
+    # totalInputChars  账号至今累计输入的字符总数
+    # totalOutputChars 账号至今累计生成输出的字符总数
+    # totalUsedChars 账号至今累计消耗的总字符数
 
     data= {
         # ===== 用户信息 =====
@@ -192,6 +78,9 @@ async def generate_chapter(
     """
     根据设定生成小说片段（输入 / 输出全量留痕）
     """
+
+    requestInputLength, requestInput = calc_request_input_size(request)
+
     if not request.user_prompt:
         raise HTTPException(status_code=400, detail="提示词不能为空")
 
@@ -201,7 +90,7 @@ async def generate_chapter(
     todayUsed = await get_today_used_chars(db, user.pkId)
 
     currentInputSize = (
-            len(request.user_prompt) + len(systemPrompt)
+            requestInputLength + len(systemPrompt)
     )
 
     if todayUsed + currentInputSize >= DAILY_TOTAL_CHAR_LIMIT:
@@ -221,8 +110,9 @@ async def generate_chapter(
             userId=user.pkId,
 
             # ===== 输入 =====
-            userPrompt=request.user_prompt,
+            userPrompt=requestInput,
             systemPrompt=systemPrompt,
+            requestInputLength=requestInputLength,
             model="doubao-seed-1-6-lite-251015",
             temperature=0.7,
             maxTokens=request.max_tokens,
@@ -247,8 +137,9 @@ async def generate_chapter(
             userId=user.pkId,
 
             # ===== 输入 =====
-            userPrompt=request.user_prompt,
+            userPrompt=requestInput,
             systemPrompt=systemPrompt,
+            requestInputLength=requestInputLength,
             model="doubao-seed-1-6-lite-251015",
             temperature=0.7,
             maxTokens=request.max_tokens,
@@ -269,10 +160,63 @@ async def generate_chapter(
 
 
 @AI.post("/refine", summary="根据建议微调文本")
-async def refine_chapter(request: RefineRequest, user=Depends(get_login_user)):
+async def refine_chapter(request: RefineRequest, db=Depends(get_db), user=Depends(get_login_user)):
     if not request.original_content or not request.suggestion:
         raise HTTPException(status_code=400, detail="原始内容和修改建议不能为空")
 
-    content = refine_novel_text(request)
-    print("content:{}".format(content))
-    return {"content": content}
+    requestInputLength, requestInput = calc_request_input_length(request)
+    originalLen = len(request.original_content)
+    suggestionLen = len(request.suggestion)
+    try:
+        content = refine_novel_text(request)
+
+        print("content:{}".format(content))
+        log = AiNovelGenerateLog(
+            userId=user.pkId,
+            actionType="refine",
+
+            # ===== 结构化请求输入 =====
+            requestInputLength=requestInputLength,
+
+            # ===== 用户语义输入 =====
+            userPrompt=requestInput,
+            refineOriginalLength=originalLen,
+            refineSuggestionLength=suggestionLen,
+            model="doubao-seed-1-6-lite-251015",
+            temperature=0.7,
+            maxTokens=request.max_tokens,
+
+            outputContent=content,
+            outputLength=len(content),
+            status=1
+        )
+        db.add(log)
+        await db.commit()
+
+        return {"content": content}
+    except Exception as e:
+        await db.rollback()
+
+        # 3️⃣ 失败流水（输入也要记）
+        failLog = AiNovelGenerateLog(
+            userId=user.pkId,
+            actionType="refine",
+
+            # ===== 结构化请求输入 =====
+            requestInputLength=requestInputLength,
+
+            # ===== 用户语义输入 =====
+            userPrompt=requestInput,
+            refineOriginalLength=originalLen,
+            refineSuggestionLength=suggestionLen,
+            model="doubao-seed-1-6-lite-251015",
+            temperature=0.7,
+            maxTokens=request.max_tokens,
+
+            outputContent=None,
+            outputLength=0,
+            status=0
+        )
+        db.add(failLog)
+        await db.commit()
+        raise HTTPException(status_code=500, detail="生成失败")
