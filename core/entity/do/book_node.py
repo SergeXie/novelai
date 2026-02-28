@@ -13,10 +13,11 @@ class BookNode(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     bid: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    uid: Mapped[int] = mapped_column(BigInteger,nullable=False,comment="用户ID")
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[Optional[str]] = mapped_column(Text)  # 虽然表里是MEDIUMTEXT，模型用Text即可
     depth: Mapped[int] = mapped_column(Integer)
     is_leaf: Mapped[int] = mapped_column(Integer)
     parent_id: Mapped[Optional[int]] = mapped_column(BigInteger, index=True)
-    create_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
-    update_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    createTime: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updateTime: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

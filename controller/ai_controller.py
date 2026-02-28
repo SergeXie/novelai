@@ -73,7 +73,8 @@ async def user_info(
 async def generate_chapter(
     request: GenerateRequest,
     db=Depends(get_db),
-    user=Depends(get_login_user)
+    user=Depends(get_login_user),
+
 ):
     """
     根据设定生成小说片段（输入 / 输出全量留痕）
