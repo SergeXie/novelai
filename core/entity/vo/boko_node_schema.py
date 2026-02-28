@@ -58,6 +58,7 @@ class BookNodeDetailResp(BaseModel):
     id: int
     bid: str
     uid: int
+    is_leaf: int
     content: Optional[str]
     name: Optional[str]
     createTime: datetime
@@ -144,6 +145,7 @@ class EditBookReq(BaseModel):
     编辑书籍信息请求
     """
     bid: str
+    bookType: Optional[str] = None
     title: Optional[str] = None
     description: Optional[str] = None
 

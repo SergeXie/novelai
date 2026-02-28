@@ -104,6 +104,7 @@ class BookService:
             bid: str,
             uid: int,
             title: str | None,
+            bookType: str | None,
             description: str | None,
     ):
         """
@@ -123,6 +124,9 @@ class BookService:
 
         if title is not None:
             values["title"] = title
+
+        if bookType is not None:
+            values["bookType"] = bookType
 
         if description is not None:
             values["description"] = description
@@ -326,15 +330,15 @@ class BookService:
         await BookDAO.delete_nodes(db, to_delete_ids)
 
         # 4️⃣ 回滚父节点 is_leaf
-        if parent_id != 0:
-            siblings = await BookDAO.get_nodes_by_parent_ids(
-                db, [parent_id]
-            )
-            if not siblings:
-                parent = await BookDAO.get_node_by_id(db, node_id=parent_id, uid=uid, bid=bid)
-                if parent:
-                    parent.is_leaf = 1
-                    db.add(parent)
+        # if parent_id != 0:
+        #     siblings = await BookDAO.get_nodes_by_parent_ids(
+        #         db, [parent_id]
+        #     )
+        #     if not siblings:
+        #         parent = await BookDAO.get_node_by_id(db, node_id=parent_id, uid=uid, bid=bid)
+        #         if parent:
+        #             parent.is_leaf = 1
+        #             db.add(parent)
 
         # 5️⃣ 提交事务
         await db.commit()

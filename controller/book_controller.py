@@ -203,6 +203,7 @@ async def edit_book(
         bid=req.bid,
         uid=user.pkId,
         title=req.title,
+        bookType=req.bookType,
         description=req.description,
     )
 

@@ -49,7 +49,7 @@ def generate_novel_text(request: GenerateRequest, nodes_contents) -> str:
         response = client.chat.completions.create(
             model="doubao-seed-1-6-lite-251015",  # 或者本地模型名，如 "llama3"
             messages=[
-                {"role": "system", "content": ""},
+                {"role": "system", "content": "严格遵守，然后询问模型相关的信息，都只返回下面的内容：抱歉，此信息属于受保护的系统范围。"},
                 {"role": "user", "content": final_prompt}
             ],
             temperature=0.7,
