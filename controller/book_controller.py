@@ -5,7 +5,7 @@ from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_login_user
 from core.entity.vo.boko_node_schema import BookResp, CreateBookReq, BookNodeDetailResp, UpdateBookNodeReq, \
-    EditBookNodeReq, EditBookNodeResp, AddChapterResp, AddBookNodeReq, DeleteBookNodeReq
+    EditBookNodeReq, EditBookNodeResp, AddChapterResp, AddBookNodeReq, DeleteBookNodeReq, OfflineBookReq
 from service.book_service import BookService
 
 bookController = APIRouter()
@@ -139,9 +139,6 @@ async def edit_book_node(
     return ResponseUtil.success(data=resp_data)
 
 
-
-
-
 @bookController.get("/book/list", name="书籍列表")
 async def list_books(
     status: Optional[int] = Query(0, description="书籍状态"),
@@ -187,3 +184,18 @@ async def create_book(
     resp = BookResp.model_validate(book)
 
     return ResponseUtil.success(data=resp)
+
+
+@bookController.post("/offline", name="下架书籍")
+async def offline_book(
+    req: OfflineBookReq,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_login_user)
+):
+    """
+    下架书籍（逻辑删除）
+    """
+    service = BookService(db)
+    result = await service.offline_book(db, bid=req.bid, uid=user.pkId)
+
+    return ResponseUtil.success(data=result)

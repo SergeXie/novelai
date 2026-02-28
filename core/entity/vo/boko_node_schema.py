@@ -131,5 +131,12 @@ class DeleteBookNodeReq(BaseModel):
     id: int
     bid: str
 
+
+class OfflineBookReq(BaseModel):
+    """
+    下架书籍请求
+    """
+    bid: str
+
 # 核心：解析递归引用
 NodeTreeSchema.model_rebuild()

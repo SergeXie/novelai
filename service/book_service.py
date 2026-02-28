@@ -359,3 +359,40 @@ class BookService:
         return {
             "deleted_ids": to_delete_ids
         }
+
+    @staticmethod
+    async def offline_book(
+            db: AsyncSession,
+            *,
+            bid: str,
+            uid: int
+    ):
+        """
+        下架书籍（逻辑删除）
+        """
+
+        # 1️⃣ 校验书籍
+        book = await BookDAO.get_book_by_bid(db, bid, uid)
+        if not book:
+            raise ServiceWarning("书籍不存在")
+
+        if book.uid != uid:
+            raise ServiceWarning("无权限操作该书籍")
+
+        if book.status == 3:
+            # 已下架，幂等
+            return {"bid": bid, "status": 3}
+
+        # 2️⃣ 更新状态为下架
+        await BookDAO.update_book_status(
+            db,
+            bid=bid,
+            status=3,
+        )
+
+        await db.commit()
+
+        return {
+            "bid": bid,
+            "status": 3,
+        }

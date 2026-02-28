@@ -1,7 +1,7 @@
 import uuid
 from typing import List
 
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.entity.do.book_node import BookNode
@@ -210,4 +210,28 @@ class BookDAO:
             BookNode.__table__.delete().where(
                 BookNode.id.in_(node_ids)
             )
+        )
+
+    @staticmethod
+    async def get_book_by_bid(
+            db: AsyncSession,
+            bid: str,
+            uid:int
+    ) -> Book | None:
+        result = await db.execute(
+            select(Book).where(Book.bid == bid, Book.uid == uid)
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def update_book_status(
+            db: AsyncSession,
+            *,
+            bid: str,
+            status: int,
+    ):
+        await db.execute(
+            update(Book)
+            .where(Book.bid == bid)
+            .values(status=status)
         )
