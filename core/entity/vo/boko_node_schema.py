@@ -138,5 +138,15 @@ class OfflineBookReq(BaseModel):
     """
     bid: str
 
+
+class EditBookReq(BaseModel):
+    """
+    编辑书籍信息请求
+    """
+    bid: str
+    title: Optional[str] = None
+    description: Optional[str] = None
+
+
 # 核心：解析递归引用
 NodeTreeSchema.model_rebuild()

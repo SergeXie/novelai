@@ -1,13 +1,17 @@
+import asyncio
+
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_login_user
 from core.entity.do.generate_log import AiNovelGenerateLog
+from dao.book_dao import BookDAO
 from schemas import GenerateRequest, RefineRequest
 from service.ai_service import get_today_input_output, get_total_input_output, get_today_used_chars, \
     calc_request_input_size, calc_request_input_length
 from services import generate_novel_text, refine_novel_text, build_system_prompt
+from fastapi.concurrency import run_in_threadpool
 
 AI = APIRouter()
 
@@ -80,30 +84,24 @@ async def generate_chapter(
     根据设定生成小说片段（输入 / 输出全量留痕）
     """
 
-    requestInputLength, requestInput = calc_request_input_size(request)
+    nodes_contents = await BookDAO.get_book_nodes_list(db, request.correlation, user.pkId)
 
     if not request.user_prompt:
         raise HTTPException(status_code=400, detail="提示词不能为空")
 
-    systemPrompt = build_system_prompt(request)
-
     # ========= 1️⃣ 限额校验 =========
     todayUsed = await get_today_used_chars(db, user.pkId)
 
-    currentInputSize = (
-            requestInputLength + len(systemPrompt)
-    )
-
-    if todayUsed + currentInputSize >= DAILY_TOTAL_CHAR_LIMIT:
-        raise HTTPException(status_code=400, detail="今日生成额度已用完")
-
+    # 1️⃣ 调用模型生成
+    content, final_prompt = await asyncio.to_thread(generate_novel_text, request, nodes_contents)
     try:
-        # 1️⃣ 调用模型生成
-        content = generate_novel_text(request)
+        if todayUsed + len(final_prompt) >= DAILY_TOTAL_CHAR_LIMIT:
+            raise HTTPException(status_code=400, detail="今日生成额度已用完")
+
         outputLength = len(content)
 
         # 二次校验（防止超量）
-        if todayUsed + currentInputSize + outputLength > DAILY_TOTAL_CHAR_LIMIT:
+        if todayUsed + len(final_prompt) + outputLength > DAILY_TOTAL_CHAR_LIMIT:
             raise HTTPException(status_code=400, detail="本次生成将超出今日额度")
 
         # 2️⃣ 成功流水
@@ -111,9 +109,9 @@ async def generate_chapter(
             userId=user.pkId,
 
             # ===== 输入 =====
-            userPrompt=requestInput,
-            systemPrompt=systemPrompt,
-            requestInputLength=requestInputLength,
+            userPrompt=final_prompt,
+            systemPrompt=None,
+            requestInputLength=len(final_prompt),
             model="doubao-seed-1-6-lite-251015",
             temperature=0.7,
             maxTokens=request.max_tokens,
@@ -128,7 +126,9 @@ async def generate_chapter(
         )
         db.add(log)
         await db.commit()
-        return {"content": content, "len": len(content)}
+        result = {"content": content, "len": len(content)}
+        return ResponseUtil.success(data=result)
+
 
     except Exception as e:
         await db.rollback()
@@ -138,9 +138,9 @@ async def generate_chapter(
             userId=user.pkId,
 
             # ===== 输入 =====
-            userPrompt=requestInput,
-            systemPrompt=systemPrompt,
-            requestInputLength=requestInputLength,
+            userPrompt=final_prompt,
+            systemPrompt=None,
+            requestInputLength=len(final_prompt),
             model="doubao-seed-1-6-lite-251015",
             temperature=0.7,
             maxTokens=request.max_tokens,
@@ -221,3 +221,6 @@ async def refine_chapter(request: RefineRequest, db=Depends(get_db), user=Depend
         db.add(failLog)
         await db.commit()
         raise HTTPException(status_code=500, detail="生成失败")
+
+
+

@@ -21,6 +21,15 @@ class BookDAO:
         return nodes
 
     @staticmethod
+    async def get_book_nodes_list(db: AsyncSession, correlation: list, uid:int):
+        result = await db.execute(
+            select(BookNode.content).where(and_(BookNode.id.in_(correlation),
+                                        BookNode.uid == uid)).order_by(BookNode.id)
+        )
+        nodes = result.scalars().all()
+        return nodes
+
+    @staticmethod
     async def create_node(
             db: AsyncSession,
             *,
@@ -234,4 +243,24 @@ class BookDAO:
             update(Book)
             .where(Book.bid == bid)
             .values(status=status)
+        )
+
+    @staticmethod
+    async def update_book(
+            db: AsyncSession,
+            *,
+            bid: str,
+            uid: int,
+            values: dict,
+    ):
+        """
+        按需更新书籍字段
+        """
+        if not values:
+            return
+
+        await db.execute(
+            update(Book)
+            .where(and_(Book.bid == bid, Book.uid == uid))
+            .values(**values)
         )

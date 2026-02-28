@@ -5,7 +5,7 @@ from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_login_user
 from core.entity.vo.boko_node_schema import BookResp, CreateBookReq, BookNodeDetailResp, UpdateBookNodeReq, \
-    EditBookNodeReq, EditBookNodeResp, AddChapterResp, AddBookNodeReq, DeleteBookNodeReq, OfflineBookReq
+    EditBookNodeReq, EditBookNodeResp, AddChapterResp, AddBookNodeReq, DeleteBookNodeReq, OfflineBookReq, EditBookReq
 from service.book_service import BookService
 
 bookController = APIRouter()
@@ -186,7 +186,33 @@ async def create_book(
     return ResponseUtil.success(data=resp)
 
 
-@bookController.post("/offline", name="下架书籍")
+@bookController.post("/book/edit", name="编辑书籍信息")
+async def edit_book(
+    req: EditBookReq,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_login_user)
+
+):
+    """
+    编辑书籍信息接口
+    """
+    service = BookService(db)
+
+    book = await service.edit_book(
+        db,
+        bid=req.bid,
+        uid=user.pkId,
+        title=req.title,
+        description=req.description,
+    )
+
+    # 显式走 Pydantic v2（现在的标准做法）
+    resp = BookResp.model_validate(book)
+
+    return ResponseUtil.success(data=resp)
+
+
+@bookController.post("/book/offline", name="下架书籍")
 async def offline_book(
     req: OfflineBookReq,
     db: AsyncSession = Depends(get_db),

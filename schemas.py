@@ -16,8 +16,9 @@ class NovelSetting(BaseModel):
 
 # API 请求体
 class GenerateRequest(BaseModel):
-    setting: NovelSetting
-    characters: List[Character]
+    # setting: NovelSetting
+    # characters: List[Character]
+    correlation: list
     user_prompt: str = Field(..., description="当前情节的提示词或指令")
     max_tokens: int = Field(2000, description="生成长度限制")
 

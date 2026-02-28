@@ -82,7 +82,7 @@ class BookService:
         """
         创建书籍 + 初始化标准树结构
         """
-        # 1️⃣ 创建书籍
+        # 1️ 创建书籍
         book = await BookDAO.create_book(
             db,
             uid=uid,
@@ -91,70 +91,54 @@ class BookService:
             description=description,
         )
 
-        bid = book.bid
-
-        # 2️⃣ 初始化 mc_book_node 树结构（同一事务）
-        # —— 正文
-
-        node1 = await BookDAO.create_node(
-            db,
-            bid=bid,
-            uid=uid,
-            name="正文",
-            parent_id=0,
-            is_leaf=0,
-            depth=0,
-        )
-
-        # —— 第一章
-        await BookDAO.create_node(
-            db,
-            bid=bid,
-            uid=uid,
-            name="第一章",
-            parent_id=node1.id,
-            is_leaf=1,
-            depth=1,
-        )
-
-        # —— 设定
-        node2 = await BookDAO.create_node(
-            db,
-            bid=bid,
-            uid=uid,
-            name="设定",
-            parent_id=0,
-            is_leaf=0,
-            depth=0,
-        )
-
-        # —— 人物
-        node3 = await BookDAO.create_node(
-            db,
-            bid=bid,
-            uid=uid,
-            name="人物",
-            parent_id=node2.id,
-            is_leaf=0,
-            depth=1,
-        )
-
-        # —— 主角
-        await BookDAO.create_node(
-            db,
-            bid=bid,
-            uid=uid,
-            name="主角",
-            parent_id=node3.id,
-            is_leaf=1,
-            depth=2,
-        )
-
-        # 3️⃣ 统一提交
+        # 2 统一提交
         await db.commit()
         await db.refresh(book)
 
         return book
+
+    @staticmethod
+    async def edit_book(
+            db: AsyncSession,
+            *,
+            bid: str,
+            uid: int,
+            title: str | None,
+            description: str | None,
+    ):
+        """
+        编辑书籍信息
+        """
+
+        # 1️⃣ 校验书籍存在
+        book = await BookDAO.get_book_by_bid(db, bid, uid)
+        if not book:
+            raise ServiceWarning("书籍不存在")
+
+        if book.uid != uid:
+            raise ServiceWarning("无权限编辑该书籍")
+
+        # 2️⃣ 组装更新字段
+        values = {}
+
+        if title is not None:
+            values["title"] = title
+
+        if description is not None:
+            values["description"] = description
+
+        # 3️ 更新
+        await BookDAO.update_book(
+            db,
+            bid=bid,
+            uid=uid,
+            values=values,
+        )
+
+        await db.commit()
+
+        # 4 返回最新书籍信息
+        return await BookDAO.get_book_by_bid(db, bid, uid)
 
     @staticmethod
     async def list_books(
@@ -266,7 +250,6 @@ class BookService:
 
         # 1️⃣ 处理 root / 非 root
         if parent_id == 0:
-            print("1313131")
             parent = None
             parent_depth = 0
         else:
