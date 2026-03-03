@@ -1,2 +1,6 @@
-2026-3-3 
-#### 1 更新AI模型以及接口新增
+### Build Script
+    python -m PyInstaller --hidden-import aiomysql -n "novelAI" .\main.py
+---
+#### 20260301
+> 聚合AI功能到AINexus单例模式  
+> 调整logger  
