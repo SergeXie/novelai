@@ -6,6 +6,7 @@ from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
 from core.entity.vo.boko_node_schema import NodeTreeSchema
 from dao.book_dao import BookDAO
+from dao.template_dao import TemplateDAO
 
 
 class BookService:
@@ -47,28 +48,48 @@ class BookService:
         return tree
 
     @staticmethod
-    async def create_book(
+    async def _create_nodes_from_template(
             db: AsyncSession,
             *,
-            title: str,
-            bookType: str,
-            description: str | None,
-            uid:int
-    ) -> Book:
+            uid:int,
+            bid: str,
+            nodes: list[dict],
+            parent_id: int,
+            depth: int,
+    ):
         """
-        创建书籍业务逻辑
-        目前仅包装 DAO，后续可加：
-        - 自动创建 mc_book_node 根节点
-        - 风控校验
+        递归创建模板节点
         """
 
-        return await BookDAO.create_book(
-            db,
-            uid=uid,
-            title=title,
-            bookType=bookType,
-            description=description,
-        )
+        for item in nodes:
+            # 1️⃣ 创建当前节点
+            node = BookNode(
+                bid=bid,
+                uid=uid,
+                parent_id=parent_id,
+                name=item["title"],
+                content=item.get("data"),
+                is_leaf=item.get("is_leaf", 1),
+                depth=depth,
+            )
+
+            db.add(node)
+            await db.flush()  # 拿到 node.id
+
+            # 2️⃣ 如果有 children，递归创建
+            children = item.get("children")
+            if children:
+                # 当前节点必须是非叶子
+                node.is_leaf = 0
+
+                await BookService._create_nodes_from_template(
+                    db,
+                    uid=uid,
+                    bid=bid,
+                    nodes=children,
+                    parent_id=node.id,
+                    depth=depth + 1,
+                )
 
     @staticmethod
     async def create_book_with_tree(
@@ -78,10 +99,12 @@ class BookService:
             title: str,
             bookType: str,
             description: str | None,
+            template_id: str
     ) -> Book:
         """
         创建书籍 + 初始化标准树结构
         """
+        print("uid:{}".format(uid))
         # 1️ 创建书籍
         book = await BookDAO.create_book(
             db,
@@ -89,6 +112,28 @@ class BookService:
             title=title,
             bookType=bookType,
             description=description,
+            template_id=template_id
+        )
+
+        # 2️ 查询模板
+        template = await TemplateDAO.get_template_by_template_id(
+            db,
+            template_id,
+        )
+
+        if not template:
+            raise ServiceWarning("模板不存在或已禁用")
+
+        template_data = template.data  # JSON
+
+        # 3️⃣ 递归创建节点（root parent_id = 0）
+        await BookService._create_nodes_from_template(
+            db,
+            uid=uid,
+            bid=book.bid,
+            nodes=template_data,
+            parent_id=0,
+            depth=0,
         )
 
         # 2 统一提交
@@ -358,7 +403,7 @@ class BookService:
         下架书籍（逻辑删除）
         """
 
-        # 1️⃣ 校验书籍
+        # 1️ 校验书籍
         book = await BookDAO.get_book_by_bid(db, bid, uid)
         if not book:
             raise ServiceWarning("书籍不存在")
@@ -370,7 +415,7 @@ class BookService:
             # 已下架，幂等
             return {"bid": bid, "status": 3}
 
-        # 2️⃣ 更新状态为下架
+        # 2️ 更新状态为下架
         await BookDAO.update_book_status(
             db,
             bid=bid,
@@ -382,4 +427,41 @@ class BookService:
         return {
             "bid": bid,
             "status": 3,
+        }
+
+    @staticmethod
+    async def hard_delete_book(
+            db: AsyncSession,
+            *,
+            bid: str,
+            uid: int,
+    ):
+        """
+        真正删除书籍（物理删除）
+        """
+
+        # 1️ 校验书籍存在
+        book = await BookDAO.get_book_by_bid(db, bid, uid)
+        if not book:
+            raise ServiceWarning("书籍不存在")
+
+        if book.uid != uid:
+            raise ServiceWarning("无权限操作该书籍")
+
+        # ️ 2 必须已下架才能物理删除
+        if book.status != 3:
+            raise ServiceWarning("请先下架书籍后再删除")
+
+        # 3️ 删除节点
+        await BookDAO.delete_nodes_by_bid(db, bid, uid)
+
+        # 4 删除书籍
+        await BookDAO.hard_delete_book(db, bid, uid)
+
+        # 5️ 提交事务
+        await db.commit()
+
+        return {
+            "bid": bid,
+            "deleted": True
         }

@@ -5,7 +5,8 @@ from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_login_user
 from core.entity.vo.boko_node_schema import BookResp, CreateBookReq, BookNodeDetailResp, UpdateBookNodeReq, \
-    EditBookNodeReq, EditBookNodeResp, AddChapterResp, AddBookNodeReq, DeleteBookNodeReq, OfflineBookReq, EditBookReq
+    EditBookNodeReq, EditBookNodeResp, AddChapterResp, AddBookNodeReq, DeleteBookNodeReq, OfflineBookReq, EditBookReq, \
+    HardDeleteBookReq
 from service.book_service import BookService
 
 bookController = APIRouter()
@@ -177,7 +178,8 @@ async def create_book(
         title=req.title,
         description=req.description,
         bookType=req.bookType,
-        uid=user.pkId
+        uid=user.pkId,
+        template_id=req.template_id,
     )
 
     # 显式序列化（你现在已经统一这么做）
@@ -224,5 +226,21 @@ async def offline_book(
     """
     service = BookService(db)
     result = await service.offline_book(db, bid=req.bid, uid=user.pkId)
+
+    return ResponseUtil.success(data=result)
+
+
+@bookController.post("/hardDelete", name="彻底删除书籍")
+async def hard_delete_book(
+    req: HardDeleteBookReq,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_login_user)
+
+):
+    """
+    真正删除书籍接口
+    """
+    service = BookService(db)
+    result = await service.hard_delete_book(db, bid=req.bid, uid=user.pkId)
 
     return ResponseUtil.success(data=result)

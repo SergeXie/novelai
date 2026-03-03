@@ -22,6 +22,7 @@ class NodeTreeSchema(BaseModel):
 class CreateBookReq(BaseModel):
     """创建书籍请求参数"""
     bookType: str
+    template_id: Optional[str] = None
     title: str
     description: Optional[str] = None
 
@@ -36,6 +37,7 @@ class BookResp(BaseModel):
     description: Optional[str]
     status: int
     wordCount: int
+    template_id: Optional[str]
     createTime: datetime
     updateTime: datetime
 
@@ -149,6 +151,10 @@ class EditBookReq(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
 
+
+
+class HardDeleteBookReq(BaseModel):
+    bid: str
 
 # 核心：解析递归引用
 NodeTreeSchema.model_rebuild()

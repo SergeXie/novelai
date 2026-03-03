@@ -14,10 +14,13 @@ class NovelSetting(BaseModel):
     tone: str = Field("严肃", description="文风基调，如：幽默、黑暗、轻松")
     world_view: Optional[str] = Field(None, description="世界观简述")
 
+
 # API 请求体
 class GenerateRequest(BaseModel):
     # setting: NovelSetting
     # characters: List[Character]
+    level: int  # 模型等级
+    temperature: float  #
     correlation: list
     user_prompt: str = Field(..., description="当前情节的提示词或指令")
     max_tokens: int = Field(2000, description="生成长度限制")

@@ -76,6 +76,13 @@ class Book(Base):
         comment="全书总字数",
     )
 
+    template_id: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        unique=True,
+        comment="模板唯一标识",
+    )
+
     createTime: Mapped[DateTime] = mapped_column(
         DateTime,
         nullable=False,

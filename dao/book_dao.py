@@ -1,7 +1,7 @@
 import uuid
 from typing import List
 
-from sqlalchemy import select, and_, update
+from sqlalchemy import select, and_, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.entity.do.book_node import BookNode
@@ -24,9 +24,9 @@ class BookDAO:
     async def get_book_nodes_list(db: AsyncSession, correlation: list, uid:int):
         result = await db.execute(
             select(BookNode.content).where(and_(BookNode.id.in_(correlation),
-                                        BookNode.uid == uid)).order_by(BookNode.id)
+                                                BookNode.uid == uid)).order_by(BookNode.id)
         )
-        nodes = result.scalars().all()
+        nodes = [str(row) for row in result.scalars().all() if row is not None]
         return nodes
 
     @staticmethod
@@ -64,6 +64,8 @@ class BookDAO:
             title: str,
             bookType: str,
             description: str | None,
+            template_id: str | None,
+
     ) -> Book:
         """
         创建书籍记录
@@ -76,13 +78,13 @@ class BookDAO:
             description=description,
             status=0,  # 默认草稿
             wordCount=0,
+            template_id=template_id
         )
 
         db.add(book)
         await db.commit()
         await db.refresh(book)
         return book
-
 
     @staticmethod
     async def list_books(
@@ -263,4 +265,27 @@ class BookDAO:
             update(Book)
             .where(and_(Book.bid == bid, Book.uid == uid))
             .values(**values)
+        )
+
+
+    @staticmethod
+    async def delete_nodes_by_bid(
+        db: AsyncSession,
+        bid: str,
+        uid: int,
+
+    ):
+        await db.execute(
+            delete(BookNode).where(and_(BookNode.bid == bid, BookNode.uid == uid))
+        )
+
+    @staticmethod
+    async def hard_delete_book(
+            db: AsyncSession,
+            bid: str,
+            uid: int,
+
+    ):
+        await db.execute(
+            delete(Book).where(and_(Book.bid == bid, Book.uid == uid))
         )
