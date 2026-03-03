@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     # --- 平台级别限制 ---
     PLATFORM_DAILY_TOKEN_LIMIT: int = Field(alias="PLATFORM_DAILY_TOKEN_LIMIT")
 
+    MULTIPLIER: float = Field(alias="MULTIPLIER")
     # --- 计费与模型配置 ---
     # 模型配置嵌套
     # Pydantic 会自动寻找以 DEEPSEEK_ 开头和 OPENAI_ 开头的环境变量

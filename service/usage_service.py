@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.config.config import settings
 from core.entity.do.generate_log import AiNovelGenerateLog
 from dao.ai_log_dao import AILogDAO
+from dao.ai_model_dao import AiModelDAO
 from schemas import GenerateRequest
 
 
@@ -150,32 +151,41 @@ class UsageService:
 
         # 3. 校验个人每日额度
         user_stats = await self.get_today_usage(user_id)
-        if user_stats["total"] + current_request_len > settings.USER_DAILY_TOKEN_LIMIT :
-            # TODO multiplier 还要x与倍率
+        print(user_stats["total"] + current_request_len)
+        limit = settings.USER_DAILY_TOKEN_LIMIT
+        usage = float((user_stats["total"] + current_request_len)) * settings.MULTIPLIER
+
+        logger.error(f"倍率:{settings.MULTIPLIER}  限额:{limit}  已用:{usage} 用户id：{user_id}")
+
+        if usage > limit:
             logger.error(f"用户id:{user_id} 今日总额度已耗尽！")
             raise HTTPException(status_code=429, detail="您今日的生成额度已用完")
 
-    async def record(self, user_id: int,
+    async def record(self,db: AsyncSession,user_id: int,
+                     level: int,
                      system_prompt:str,
                      user_prompt: str,
                      model_name:str,
                      temperature:float,
                      max_tokens:int,
                      output_content:str):
+        # 查 models
+        ai_model_multiplier = await AiModelDAO.first_ai_models(db, level)
+
         log = AiNovelGenerateLog(
             userId=user_id,
-
+            multiplier=ai_model_multiplier,
             # ===== 输入 =====
             userPrompt=user_prompt,
             systemPrompt=system_prompt,
-            requestInputLength=len(user_prompt),
+            requestInputLength=len(user_prompt) * ai_model_multiplier,
             model=model_name,
             temperature=temperature,
             maxTokens=max_tokens,
 
             # ===== 输出 =====
             outputContent=output_content,
-            outputLength=len(output_content),
+            outputLength=len(output_content)* ai_model_multiplier,
             tokenEstimate=len(output_content) // 2,
 
             # ===== 状态 =====

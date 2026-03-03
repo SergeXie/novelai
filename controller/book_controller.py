@@ -157,7 +157,6 @@ async def list_books(
 
     # 关键：手动走 Pydantic v2 序列化
     resp_data = [BookResp.model_validate(item) for item in data]
-    print("resp_data:{}".format(resp_data))
     return ResponseUtil.success(data=resp_data)
 
 

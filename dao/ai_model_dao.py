@@ -24,3 +24,11 @@ class AiModelDAO:
 
         result = await db.execute(stmt)
         return result.scalars().all()
+
+    @staticmethod
+    async def first_ai_models(db: AsyncSession, level: int):
+        stmt = select(McAiModel.multiplier).where(McAiModel.level == level)
+        result = await db.execute(stmt)
+        multiplier = result.scalars().first()
+        return multiplier
+
