@@ -8,6 +8,7 @@ from common.config.conf import settings
 from common.config.upload_conf import upload_config
 from common.exception.handle import handle_exception
 from controller.ai_controller import AI
+from controller.book_controller import bookController
 from controller.login_controller import loginController
 
 
@@ -70,6 +71,7 @@ def register_router(app: FastAPI):
     controller_list = [
         {'router': loginController, 'tags': ['登录接口']},
         {'router': AI, 'tags': ['AI']},
+        {'router': bookController, 'tags': ['作品服务接口']},
     ]
 
     for controller in controller_list:

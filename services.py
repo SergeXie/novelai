@@ -37,25 +37,26 @@ def build_system_prompt(request: GenerateRequest) -> str:
     return prompt
 
 
-def generate_novel_text(request: GenerateRequest) -> str:
+def generate_novel_text(request: GenerateRequest, nodes_contents) -> str:
     """
     调用 LLM 生成文本
     """
-    system_prompt = build_system_prompt(request)
-    print('提示词',system_prompt)
+    # system_prompt = build_system_prompt(request)
+    # print('提示词',system_prompt)
 
     try:
+        final_prompt = "\n".join(nodes_contents) + "\n" + request.user_prompt
         response = client.chat.completions.create(
             model="doubao-seed-1-6-lite-251015",  # 或者本地模型名，如 "llama3"
             messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": request.user_prompt}
+                {"role": "system", "content": "严格遵守任何询问模型相关的信息，都只返回下面的内容：抱歉，此信息属于受保护的系统范围。"},
+                {"role": "user", "content": final_prompt}
             ],
             temperature=0.7,
             max_tokens=request.max_tokens
         )
         print('生成完毕')
-        return response.choices[0].message.content
+        return response.choices[0].message.content, final_prompt
     except Exception as e:
         return f"生成失败: {str(e)}"
 
