@@ -54,6 +54,13 @@ class AiNovelGenerateLog(Base):
         comment="使用的模型名称"
     )
 
+    multiplier: Mapped[float] = mapped_column(
+        DECIMAL(10, 2),
+        nullable=False,
+        server_default="1.00",
+        comment="计费倍率",
+    )
+
     temperature: Mapped[float] = mapped_column(
         DECIMAL(3, 2),
         nullable=False,

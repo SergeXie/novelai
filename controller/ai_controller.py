@@ -75,7 +75,8 @@ async def generate(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
     finally:
-        await usage_service.record(user_id=user.pkId,
+        await usage_service.record(db, user_id=user.pkId,
+                                   level=level,
                                    system_prompt=system_prompt,
                                    user_prompt=input_user_prompt,
                                    model_name=ai_provider.name,

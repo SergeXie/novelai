@@ -23,10 +23,10 @@ class BookDAO:
     @staticmethod
     async def get_book_nodes_list(db: AsyncSession, correlation: list, uid:int):
         result = await db.execute(
-            select(BookNode.content).where(and_(BookNode.id.in_(correlation),
+            select(BookNode.name, BookNode.content).where(and_(BookNode.id.in_(correlation),
                                                 BookNode.uid == uid)).order_by(BookNode.id)
         )
-        nodes = [str(row) for row in result.scalars().all() if row is not None]
+        nodes = [str(item) for row in result for item in row if item is not None]
         return nodes
 
     @staticmethod
