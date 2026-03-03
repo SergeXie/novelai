@@ -10,6 +10,8 @@ from common.exception.handle import handle_exception
 from controller.ai_controller import AI
 from controller.book_controller import bookController
 from controller.login_controller import loginController
+from controller.template_controller import templateController
+from controller.user_controller import userController
 
 
 @asynccontextmanager
@@ -72,6 +74,8 @@ def register_router(app: FastAPI):
         {'router': loginController, 'tags': ['登录接口']},
         {'router': AI, 'tags': ['AI']},
         {'router': bookController, 'tags': ['作品服务接口']},
+        {'router': userController, 'tags': ['用户相关接口']},
+        {'router': templateController, 'tags': ['书籍模板类型（作品类型）']},
     ]
 
     for controller in controller_list:
