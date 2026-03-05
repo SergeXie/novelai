@@ -19,6 +19,7 @@ class NovelSetting(BaseModel):
 class GenerateRequest(BaseModel):
     # setting: NovelSetting
     # characters: List[Character]
+    bid: str
     level: int  # 模型等级
     temperature: float  #
     correlation: list

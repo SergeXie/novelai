@@ -14,18 +14,16 @@ async def user_info(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_login_user)
 ):
-
+    m = settings.MULTIPLIER
     usage_service = UsageService(db)
 
     # ===== 当天 =====
-    todayInputChars, todayOutputChars = await usage_service.get_today_input_output(
-        db, user.pkId
-    )
+    todayInputChars, todayOutputChars = await usage_service.get_user_daily_input_output(user.pkId)
+    todayInputChars, todayOutputChars = float(todayInputChars) * m, float(todayInputChars) * m
 
     # ===== 累计 =====
-    totalInputChars, totalOutputChars = await usage_service.get_total_input_output(
-        db, user.pkId
-    )
+    totalInputChars, totalOutputChars = await usage_service.get_user_total_input_output(user.pkId)
+    totalInputChars, totalOutputChars = float(totalInputChars) * m, float(totalOutputChars) * m
 
     todayTotalChars = todayInputChars + todayOutputChars
 

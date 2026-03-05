@@ -8,6 +8,7 @@ from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.entity.do.users_do import User
 from core.entity.vo.login_vo import UserLogin
+from core.entity.vo.user_schema import ChangePasswordReq
 from service.user_service import UserService
 from pydantic import BaseModel, Field
 
@@ -38,6 +39,7 @@ async def login(user_login: UserLogin,
     )
 
     return ResponseUtil.success(msg='登录成功', dict_content={'data': data})
+
 
 @loginController.post("/register", summary="用户注册")
 async def register(
@@ -83,3 +85,21 @@ async def register(
         "account": user.account,
         "nickname": user.nickname
     }
+
+
+@loginController.post("/user/changePwd", name="修改密码")
+async def change_password(
+    req: ChangePasswordReq,
+    db: AsyncSession = Depends(get_db)
+):
+
+    service = UserService()
+
+    await service.change_password(
+        db=db,
+        account=req.account,
+        password=req.password,
+        new_password=req.newPassword
+    )
+
+    return ResponseUtil.success(msg="密码修改成功")

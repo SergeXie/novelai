@@ -13,7 +13,7 @@ class AiModelService:
         """
         获取模型列表
         """
-        return await AiModelDAO.list_models(
-            db,
+        aimodel_dao = AiModelDAO(db)
+        return await aimodel_dao.list_models(
             only_enabled=only_enabled,
         )

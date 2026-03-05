@@ -40,3 +40,35 @@ class UserService:
             "account": user.account,
             "nickname": user.nickname
         }
+
+    async def change_password(self, db, account: str, password: str, new_password: str):
+
+        # 1 查询用户
+        user = await UserDAO.get_by_account(db, account)
+
+        if not user:
+            raise ValueError("用户不存在")
+
+        # 2 校验旧密码
+        password_ok = bcrypt.checkpw(
+            password.encode("utf-8"),
+            user.password.encode("utf-8")
+        )
+
+        if not password_ok:
+            raise ServiceWarning("原密码错误")
+
+        # 3 加密新密码
+        hashed_password = bcrypt.hashpw(
+            new_password.encode("utf-8"),
+            bcrypt.gensalt()
+        ).decode()
+
+        # 4 更新密码
+        await UserDAO.update_password(
+            db,
+            user.pkId,
+            hashed_password
+        )
+
+        return True

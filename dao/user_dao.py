@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.entity.do.users_do import User
@@ -39,3 +39,19 @@ class UserDAO:
         except Exception as e:
             await db.rollback()
             raise e
+
+    @staticmethod
+    async def update_password(
+        db: AsyncSession,
+        user_id: int,
+        new_password: str
+    ):
+
+        stmt = (
+            update(User)
+            .where(User.pkId == user_id)
+            .values(password=new_password)
+        )
+
+        await db.execute(stmt)
+        await db.commit()

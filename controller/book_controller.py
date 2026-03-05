@@ -201,6 +201,7 @@ async def edit_book(
 
     book = await service.edit_book(
         db,
+        template_id=req.template_id,
         bid=req.bid,
         uid=user.pkId,
         title=req.title,

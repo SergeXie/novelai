@@ -62,6 +62,22 @@ class McAiModel(Base):
         comment="计费倍率",
     )
 
+    # 新增字段：最大生成 Token 数
+    max_tokens: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default="4096",
+        comment="单次请求最大生成长度"
+    )
+
+    # 新增字段：最大上下文窗口
+    context_window: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default="32768",
+        comment="模型支持的最大上下文总长"
+    )
+
     status: Mapped[int] = mapped_column(
         SmallInteger,
         nullable=False,
