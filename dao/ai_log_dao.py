@@ -1,5 +1,5 @@
 from loguru import logger
-from sqlalchemy import select, func, update, desc
+from sqlalchemy import select, func, update, desc, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 from typing import List, Tuple
@@ -156,7 +156,7 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
                     AiNovelGenerateLog.createdAt,
                     AiNovelGenerateLog.actionType
                 )
-                .where(AiNovelGenerateLog.bid == bid)
+                .where(and_(AiNovelGenerateLog.bid == bid, AiNovelGenerateLog.isDelete == 0))
                 .order_by(desc(AiNovelGenerateLog.createdAt))
                 .limit(size)
                 .offset(offset)
@@ -179,3 +179,23 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
         except Exception as e:
             logger.error(f"分页查询 AI 日志失败: {e}")
             return [], 0
+
+    @staticmethod
+    async def logic_delete(
+        db: AsyncSession,
+        uid:int,
+        request_ids: list
+    ):
+        """
+        逻辑删除 AI 记录
+        """
+
+        stmt = (
+            update(AiNovelGenerateLog)
+            .where(and_(AiNovelGenerateLog.requestId.in_(request_ids),
+                        AiNovelGenerateLog.userId == uid))
+            .values(isDelete=1)
+        )
+
+        await db.execute(stmt)
+        await db.commit()

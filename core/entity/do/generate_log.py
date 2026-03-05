@@ -154,6 +154,12 @@ class AiNovelGenerateLog(Base):
         comment="微调-修改建议字符数"
     )
 
+    isDelete: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        comment="逻辑删除 1 删除 0未删除"
+    )
+
     # ========= 时间 =========
     createdAt: Mapped[str] = mapped_column(
         DateTime,

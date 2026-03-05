@@ -8,7 +8,7 @@ from ai.ai_nexus import get_ai_nexus
 from common.config.get_db import get_db, get_db_context
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_login_user
-from core.entity.vo.ai_model_vo import AiModelResp
+from core.entity.vo.ai_model_vo import AiModelResp, DeleteHistoryReq
 from dao.book_dao import BookDAO
 from core.entity.schemas import GenerateRequest
 from service.ai_service import AiModelService
@@ -141,3 +141,20 @@ async def get_history_list(
 
     return ResponseUtil.success(data=result)
 
+
+@aiController.post("/history/delete", name="小说生成对话记录删除")
+async def delete_history(
+    req: DeleteHistoryReq,
+    user=Depends(get_login_user),
+    db=Depends(get_db),
+):
+
+    service = AiModelService()
+
+    await service.delete_history(
+        db=db,
+        uid=user.pkId,
+        request_ids=req.requestIds
+    )
+
+    return ResponseUtil.success(msg="删除成功")

@@ -14,3 +14,7 @@ class AiModelResp(BaseModel):
     multiplier: Decimal
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DeleteHistoryReq(BaseModel):
+    requestIds: list
