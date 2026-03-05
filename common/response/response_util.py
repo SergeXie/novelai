@@ -3,8 +3,10 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 from typing import Any, Dict, Optional
-from common.config.constant import HttpStatusConstant
-from utils.time_format_util import parse_and_format_date
+
+from starlette.status import HTTP_401_UNAUTHORIZED, HTTP_403_FORBIDDEN, HTTP_500_INTERNAL_SERVER_ERROR, HTTP_200_OK
+
+from common.utils.time_format_util import parse_and_format_date
 
 
 class ResponseUtil:
@@ -31,7 +33,7 @@ class ResponseUtil:
         :param model_content: 可选，BaseModel类型，成功响应结果中自定义属性的值
         :return: 成功响应结果
         """
-        result = {'code': HttpStatusConstant.SUCCESS, 'msg': msg}
+        result = {'code': HTTP_200_OK, 'msg': msg}
 
         if data is not None:
             result['data'] = data
@@ -99,7 +101,7 @@ class ResponseUtil:
         :param model_content: 可选，BaseModel类型，未认证响应结果中自定义属性的值
         :return: 未认证响应结果
         """
-        result = {'code': HttpStatusConstant.UNAUTHORIZED, 'msg': msg}
+        result = {'code': HTTP_401_UNAUTHORIZED, 'msg': msg}
 
         if data is not None:
             result['data'] = data
@@ -133,7 +135,7 @@ class ResponseUtil:
         :param model_content: 可选，BaseModel类型，未授权响应结果中自定义属性的值
         :return: 未授权响应结果
         """
-        result = {'code': HttpStatusConstant.FORBIDDEN, 'msg': msg}
+        result = {'code': HTTP_403_FORBIDDEN, 'msg': msg}
 
         if data is not None:
             result['data'] = data
@@ -167,7 +169,7 @@ class ResponseUtil:
         :param model_content: 可选，BaseModel类型，错误响应结果中自定义属性的值
         :return: 错误响应结果
         """
-        result = {'code': HttpStatusConstant.ERROR, 'msg': msg}
+        result = {'code': HTTP_500_INTERNAL_SERVER_ERROR, 'msg': msg}
 
         if data is not None:
             result['data'] = data

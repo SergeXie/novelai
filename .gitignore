@@ -20,6 +20,7 @@ build/
 .eggs/
 *.whl
 demo/
+/novelai_envs
 .python-version
 noveai_envs/
 # PyInstaller

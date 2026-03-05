@@ -147,6 +147,7 @@ class EditBookReq(BaseModel):
     编辑书籍信息请求
     """
     bid: str
+    template_id: Optional[str] = None
     bookType: Optional[str] = None
     title: Optional[str] = None
     description: Optional[str] = None

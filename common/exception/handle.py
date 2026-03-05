@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.exceptions import HTTPException
+from loguru import logger
 from pydantic_validation_decorator import FieldValidationError
 from common.exception.lzsd_exception import (
     AuthException,
@@ -10,7 +11,6 @@ from common.exception.lzsd_exception import (
     ServiceWarning,
 )
 from common.response.response_util import jsonable_encoder, JSONResponse, ResponseUtil
-from common.log.log import log as logger
 
 
 def handle_exception(app: FastAPI):

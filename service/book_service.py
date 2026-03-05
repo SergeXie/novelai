@@ -146,6 +146,7 @@ class BookService:
     async def edit_book(
             db: AsyncSession,
             *,
+            template_id: str,
             bid: str,
             uid: int,
             title: str | None,
@@ -176,6 +177,7 @@ class BookService:
         if description is not None:
             values["description"] = description
 
+        values["template_id"] = template_id
         # 3️ 更新
         await BookDAO.update_book(
             db,
