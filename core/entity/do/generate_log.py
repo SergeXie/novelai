@@ -157,6 +157,7 @@ class AiNovelGenerateLog(Base):
     isDelete: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
+        default=0,
         comment="逻辑删除 1 删除 0未删除"
     )
 

@@ -165,7 +165,7 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             # 3. 构建总数查询（用于前端分页插件）
             count_stmt = (
                 select(func.count(AiNovelGenerateLog.id))
-                .where(AiNovelGenerateLog.bid == bid)
+                .where(and_(AiNovelGenerateLog.bid == bid, AiNovelGenerateLog.isDelete == 0))
             )
 
             # 4. 执行
