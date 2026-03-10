@@ -1,10 +1,10 @@
-from typing import List, Any
+from typing import List, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.exception.lzsd_exception import ServiceWarning
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
-from core.entity.vo.boko_node_schema import NodeTreeSchema
+from core.entity.vo.book_node_schema import NodeTreeSchema
 from dao.book_dao import BookDAO
 from dao.template_dao import TemplateDAO
 
@@ -13,10 +13,10 @@ class BookService:
     def __init__(self, db: AsyncSession):
         self.book_dao = BookDAO(db)
 
-    async def get_tree(self, bid:str, uid:int) -> List[NodeTreeSchema]:
+    async def get_tree(self, bid:str, uid:int, max_depth:Optional[int] = None) -> List[NodeTreeSchema]:
         tree = []
         # 从 DAO 获取原始数据库对象
-        nodes = await self.book_dao.get_book_nodes(bid, uid)
+        nodes = await self.book_dao.get_book_nodes(bid, uid, max_depth)
 
         if nodes:
             # 1. 转换原始数据库对象为模型对象
@@ -47,6 +47,31 @@ class BookService:
 
         return tree
 
+    async def get_sub_tree(self, bid: str, uid: int, root_id: int) -> List[NodeTreeSchema]:
+        """
+        获取指定 root_id 节点及其所有子孙构成的树
+        """
+        # 1. 依然获取该书的所有节点（构建完整的 map 关系）
+        # 注意：如果节点数巨大，建议在 DAO 层加 defer(BookNode.content)
+        full_tree = await self.get_tree(bid, uid)
+
+        # 2. 我们需要一个平铺的 map 来快速定位 root_id
+        # 如果 get_tree 内部没有返回 map，我们可以简单递归查找或在 get_tree 时保留 map
+        def find_node_in_tree(nodes: List[NodeTreeSchema], target_id: int) -> Optional[NodeTreeSchema]:
+            for node in nodes:
+                if node.id == target_id:
+                    return node
+                if node.children:
+                    found = find_node_in_tree(node.children, target_id)
+                    if found:
+                        return found
+            return None
+
+        target_node = find_node_in_tree(full_tree, root_id)
+
+        # 3. 返回该节点及其子树（包装成列表格式）
+        return [target_node] if target_node else []
+
     @staticmethod
     async def _create_nodes_from_template(
             db: AsyncSession,
@@ -70,6 +95,7 @@ class BookService:
                 name=item["title"],
                 content=item.get("data"),
                 is_leaf=item.get("is_leaf", 1),
+                type=item.get("type", 0),
                 depth=depth,
             )
 
@@ -97,24 +123,12 @@ class BookService:
             *,
             uid: int,
             title: str,
-            bookType: str,
             description: str | None,
             template_id: str
     ) -> Book:
         """
         创建书籍 + 初始化标准树结构
         """
-        print("uid:{}".format(uid))
-        # 1️ 创建书籍
-        book = await BookDAO.create_book(
-            db,
-            uid=uid,
-            title=title,
-            bookType=bookType,
-            description=description,
-            template_id=template_id
-        )
-
         # 2️ 查询模板
         template = await TemplateDAO.get_template_by_template_id(
             db,
@@ -123,6 +137,18 @@ class BookService:
 
         if not template:
             raise ServiceWarning("模板不存在或已禁用")
+
+        print("user:{} create book:{} tpl:{}".format(uid, title, template.tpl_name))
+
+        # 1️ 创建书籍
+        book = await BookDAO.create_book(
+            db,
+            uid=uid,
+            title=title,
+            bookType=template.tpl_name,
+            description=description,
+            template_id=template_id
+        )
 
         template_data = template.data  # JSON
 
@@ -235,12 +261,13 @@ class BookService:
 
     @staticmethod
     async def update_book_node_content(
-        db: AsyncSession,
-        *,
-        node_id: int,
-        uid: int,
-        bid: str,
-        content: str | None,
+            db: AsyncSession,
+            *,
+            node_id: int,
+            uid: int,
+            bid: str,
+            content: str | None,
+            data: dict | None = None,
     ) -> BookNode:
         """
         编辑书籍节点内容
@@ -250,7 +277,6 @@ class BookService:
             node_id=node_id,
             uid=uid,
             bid=bid
-
         )
 
         if not node:
@@ -260,6 +286,7 @@ class BookService:
             db,
             node=node,
             content=content,
+            data=data,
         )
 
     @staticmethod
@@ -270,6 +297,7 @@ class BookService:
             uid: int,
             bid: str,
             name: str | None,
+            data: dict | None = None,
     ) -> BookNode:
         """
         编辑章节 / 节点
@@ -294,6 +322,7 @@ class BookService:
             parent_id: int,
             is_leaf: int,
             name: str,
+            data: dict | None = None,
     ) -> BookNode:
         """
         新增章节（业务接口）
@@ -306,9 +335,6 @@ class BookService:
         else:
             # 1️⃣ 校验节点
             parent = await BookDAO.get_node_parent_by_id(db, parent_id=parent_id, uid=uid, bid=bid)
-            print(parent.uid)
-            print(parent.parent_id)
-            print(parent.name)
             if not parent:
                 raise ServiceWarning("父节点不存在")
             if parent.bid != bid:
@@ -325,6 +351,7 @@ class BookService:
             is_leaf=1 if is_leaf else 0,
             name=name,
             depth=parent_depth + 1,
+            data=data
         )
 
         # 3️⃣ 父节点修正（核心规则）

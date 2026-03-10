@@ -1,5 +1,5 @@
 import uuid
-from typing import List
+from typing import List, Optional
 
 from sqlalchemy import select, and_, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,13 +12,32 @@ class BookDAO:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_book_nodes(self, bid: str, uid:int) -> List[BookNode]:
-        result = await self.db.execute(
-            select(BookNode).where(and_(BookNode.bid == bid,
-                                        BookNode.uid == uid)).order_by(BookNode.id)
+    async def get_book_nodes(self, bid: str, uid:int, max_depth: Optional[int] = None) -> List[BookNode]:
+        """
+            获取书籍节点列表
+            :param bid: 书籍ID
+            :param uid: 用户ID
+            :param max_depth: 最大深度限制（可选）
+            """
+        # 1. 基础查询条件
+        stmt = select(BookNode).where(
+            and_(
+                BookNode.bid == bid,
+                BookNode.uid == uid
+            )
         )
+
+        # 2. 动态添加深度限制
+        if max_depth is not None:
+            # 增加 depth <= max_depth 的限制
+            stmt = stmt.where(BookNode.depth <= max_depth)
+
+        # 3. 排序执行
+        stmt = stmt.order_by(BookNode.id)
+
+        result = await self.db.execute(stmt)
         nodes = result.scalars().all()
-        return nodes
+        return list(nodes)
 
     @staticmethod
     async def get_book_nodes_list(db: AsyncSession, correlation: list, uid:int):
@@ -38,7 +57,7 @@ class BookDAO:
             name: str,
             parent_id: int,
             is_leaf: int,
-            depth: int,
+            depth: int
     ) -> BookNode:
         """
         创建单个书籍节点
@@ -50,7 +69,7 @@ class BookDAO:
             parent_id=parent_id,
             is_leaf=is_leaf,
             depth=depth,
-            content=None,
+            content=None
         )
         db.add(node)
         await db.flush()  #  关键：提前拿到 node.id
@@ -59,13 +78,11 @@ class BookDAO:
     @staticmethod
     async def create_book(
             db: AsyncSession,
-            *,
             uid: int,
             title: str,
             bookType: str,
             description: str | None,
             template_id: str | None,
-
     ) -> Book:
         """
         创建书籍记录
@@ -146,12 +163,17 @@ class BookDAO:
             *,
             node: BookNode,
             content: str | None,
+            data: dict | None = None,
     ) -> BookNode:
         """
         更新节点内容
         """
-        node.content = content
+        if content is not None:
+            node.content = content
+        if data is not None:
+            node.data = data
         db.add(node)
+
         await db.commit()
         await db.refresh(node)
         return node
@@ -162,12 +184,15 @@ class BookDAO:
             node: BookNode,
             *,
             name: str | None,
+            data: dict | None = None,
     ) -> BookNode:
         """
         更新节点名称 / 正文
         """
         if name is not None:
             node.name = name
+        if data is not None:
+            node.data = data
 
         db.add(node)
         await db.commit()
@@ -184,7 +209,7 @@ class BookDAO:
             is_leaf: int,
             name: str,
             depth: int,
-
+            data: dict | None = None,
     ) -> BookNode:
         """
         新增章节（自动补正文根节点）
@@ -197,6 +222,7 @@ class BookDAO:
             name=name,
             is_leaf=is_leaf,
             depth=depth,
+            data=data,
         )
         db.add(node)
         await db.flush()

@@ -11,7 +11,7 @@ from core.deps.auth import get_login_user
 from core.entity.vo.ai_model_vo import AiModelResp, DeleteHistoryReq
 from dao.book_dao import BookDAO
 from core.entity.schemas import GenerateRequest
-from service.ai_service import AiModelService
+from service.ai_service import AIService, async_generate_task
 from service.usage_service import UsageService
 
 aiController = APIRouter()
@@ -24,9 +24,8 @@ async def list_models(
     """
     获取 AI 模型列表
     """
-    models = await AiModelService.list_models(
-        db,
-    )
+    service = AIService(db=db)
+    models = await service.list_models()
     # 显式走 Pydantic v2（你当前标准做法）
     resp = [AiModelResp.model_validate(m) for m in models]
 
@@ -38,8 +37,7 @@ async def generate(
         request: GenerateRequest,
         background_tasks: BackgroundTasks,
         db=Depends(get_db),
-        user=Depends(get_login_user),
-        nexus=Depends(get_ai_nexus),
+        user=Depends(get_login_user)
 ):
     """
     根据设定生成小说片段（输入 / 输出全量留痕）
@@ -53,65 +51,24 @@ async def generate(
     if not user_prompt:
         raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail="提示词不能为空")
 
-    ai_provider = AIProvider.from_level(level)
-    system_prompt, output_prompt = "", ""
-
-    request_id = uuid.uuid4().hex
-
-    # --- 第一阶段：快查并立即释放 ---
-    # 使用 contextmanager 确保查完瞬间连接就回池子
-    usage_service = UsageService(db=db)
-    await usage_service.check_quota_or_raise(user_id=user.pkId, current_request_len=len(user_prompt))
-
     nodes_contents = await BookDAO.get_book_nodes_list(db, correlation, user.pkId)
     input_user_prompt = "\n".join(nodes_contents) + "\n" + user_prompt
-    await usage_service.record(
+
+    ai_service = AIService(db=db)
+    request_id = await ai_service.prepare_and_record_request(
         user_id=user.pkId,
-        request_id=request_id,
-        level=level,
-        node_ids=correlation,
         bid=bid,
         origin_prompt=user_prompt,
-        system_prompt=system_prompt,
         user_prompt=input_user_prompt,
-        temperature=temperature,
-        output_content=output_prompt,
-    )
-
-    # 4. 第二阶段：将耗时的 AI 生成丢入后台任务，不阻塞当前响应
-    background_tasks.add_task(
-        async_generate_task,  # 具体的执行函数
-        nexus,
-        ai_provider,
-        input_user_prompt,
-        request,
-        request_id
+        level=level,
+        temperature=0.7,
+        action_type="generate",
+        correlation=correlation,
+        background_tasks=background_tasks,
     )
 
     # 5. 立即返回 requestId 供前端轮询
     return ResponseUtil.success(data={"requestId": request_id})
-
-async def async_generate_task(nexus, ai_provider, input_user_prompt, request, request_id):
-    """后台异步执行 AI 调用并更新结果"""
-    system_prompt, output_prompt = "", ""
-    try:
-        # 真正的 AI 耗时操作
-        system_prompt, output_prompt = await nexus.generate_novel_text(
-            provider=ai_provider,
-            user_prompt=input_user_prompt,
-            temperature=request.temperature,
-        )
-        status = 1 # 成功
-    except Exception as e:
-        output_prompt = f"Error: {str(e)}"
-        status = 0 # 失败
-        logger.error(f"Async Generation Error for {request_id}: {output_prompt}")
-
-    # 使用新的数据库上下文更新结果
-    async with get_db_context() as db:
-        usage_service = UsageService(db=db)
-        await usage_service.update_output_content_by_request_id(request_id, output_prompt)
-
 
 @aiController.get("/poll")
 async def poll(requestId: str, db=Depends(get_db), user=Depends(get_login_user)):
@@ -149,10 +106,9 @@ async def delete_history(
     db=Depends(get_db),
 ):
 
-    service = AiModelService()
+    service = AIService(db=db)
 
     await service.delete_history(
-        db=db,
         uid=user.pkId,
         request_ids=req.requestIds
     )

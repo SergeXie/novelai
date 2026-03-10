@@ -16,7 +16,12 @@ async_engine = create_async_engine(
 )
 
 
-AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=async_engine)
+AsyncSessionLocal = async_sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=async_engine,
+    expire_on_commit=False
+)
 
 
 class Base(AsyncAttrs, DeclarativeBase):

@@ -1,17 +1,13 @@
 from datetime import datetime, time
-from urllib import request
 
-import bcrypt
 from fastapi import HTTPException
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from common.config.config import settings
-from common.exception.lzsd_exception import ServiceWarning
 from core.entity.do.generate_log import AiNovelGenerateLog
-from core.entity.do.mc_ai_model import McAiModel
 from dao.ai_log_dao import AILogDAO
 from dao.ai_model_dao import AiModelDAO
-from dao.user_dao import UserDAO
 
 
 def get_today_range():
@@ -66,7 +62,7 @@ class UsageService:
         limit = settings.USER_DAILY_TOKEN_LIMIT
         usage = float((total + current_request_len)) * settings.MULTIPLIER
 
-        logger.error(f"倍率:{settings.MULTIPLIER}  限额:{limit}  已用:{usage} 用户id：{user_id}")
+        logger.info(f"倍率:{settings.MULTIPLIER}  限额:{limit}  已用:{usage} 用户id：{user_id}")
 
         if usage > limit:
             logger.error(f"用户id:{user_id} 今日总额度已耗尽！")
@@ -81,7 +77,8 @@ class UsageService:
                      system_prompt:str,
                      user_prompt: str,
                      temperature:float,
-                     output_content:str):
+                     output_content:str,
+                     action_type:str):
         # 查 models
         ai_model_multiplier = 1
         max_tokens = 0
@@ -110,7 +107,7 @@ class UsageService:
             outputContent=output_content,
             outputLength=len(output_content)* ai_model_multiplier,
             tokenEstimate=len(output_content) // 2,
-
+            actionType=action_type,
             # ===== 状态 =====
             status=1
         )
