@@ -1,4 +1,4 @@
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ai.config_model import LLMProviderConfig
@@ -46,6 +46,18 @@ class Settings(BaseSettings):
     free: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
     doubaoplus: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
     claude: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
+
+    # 读取环境变量，设置默认值为空字符串
+    ai_system_prompt: str = Field(default="", alias="AI_SYSTEM_PROMPT")
+
+    @field_validator("ai_system_prompt", mode="after")
+    @classmethod
+    def format_line_breaks(cls, v: str) -> str:
+        """自动处理 \n 转义字符为真实换行"""
+        if isinstance(v, str):
+            # 将配置中的 \n 替换为实际换行符，并去除首尾空格
+            return v.replace("\\n", "\n").strip()
+        return v
 
     # 配置加载规则
     model_config = SettingsConfigDict(

@@ -1,10 +1,11 @@
+import json
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_login_user
-from core.entity.vo.boko_node_schema import BookResp, CreateBookReq, BookNodeDetailResp, UpdateBookNodeReq, \
+from core.entity.vo.book_node_schema import BookResp, CreateBookReq, BookNodeDetailResp, UpdateBookNodeReq, \
     EditBookNodeReq, EditBookNodeResp, AddChapterResp, AddBookNodeReq, DeleteBookNodeReq, OfflineBookReq, EditBookReq, \
     HardDeleteBookReq
 from service.book_service import BookService
@@ -13,12 +14,22 @@ bookController = APIRouter()
 
 
 @bookController.get("/book/tree", name="作品树状结构")
-async def get_book_nodes(bid: str, db: AsyncSession = Depends(get_db),
+async def get_book_nodes(bid: str,
+                         max_depth: Optional[int] = Query(None, description="最大深度限制"), # 增加可选参数
+                         db: AsyncSession = Depends(get_db),
                          user=Depends(get_login_user)):
     book_service = BookService(db)
-    tree = await book_service.get_tree(bid, uid=user.pkId)
+    tree = await book_service.get_tree(bid, uid=user.pkId, max_depth=max_depth)
     return ResponseUtil.success(data=tree)
 
+@bookController.get("/book/node/children", name="作品树状结构")
+async def get_book_children_nodes(bid: str,
+                         root_id:int,
+                         db: AsyncSession = Depends(get_db),
+                         user=Depends(get_login_user)):
+    book_service = BookService(db)
+    tree = await book_service.get_sub_tree(bid, uid=user.pkId, root_id=root_id)
+    return ResponseUtil.success(data=tree)
 
 @bookController.post("/user/chapter/add", name="新增树状结构章节/节点")
 async def add_chapter(
@@ -29,6 +40,7 @@ async def add_chapter(
     """
     新增章节接口
     """
+    data = json.loads(req.data)
     chapter = await BookService.add_chapter(
         db,
         uid=user.pkId,
@@ -36,6 +48,7 @@ async def add_chapter(
         parent_id=req.parent_id,
         is_leaf=req.is_leaf,
         name=req.name,
+        data=data
     )
 
     resp = AddChapterResp(
@@ -44,6 +57,7 @@ async def add_chapter(
         parent_id=chapter.parent_id,
         is_leaf=chapter.is_leaf,
         name=chapter.name,
+        data=chapter.data
     )
     #
     return ResponseUtil.success(data=resp)
@@ -74,17 +88,18 @@ async def edit_book_node(
     req: EditBookNodeReq,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_login_user)
-
 ):
     """
     编辑章节 / 节点接口
     """
+    data = json.loads(req.data)
     node = await BookService.edit_book_node(
         db,
         node_id=req.id,
         uid=user.pkId,
         bid=req.bid,
         name=req.name,
+        data=data
     )
 
     # 显式走 Pydantic v2（方案一）
@@ -132,6 +147,7 @@ async def edit_book_node(
         uid=user.pkId,
         bid=req.bid,
         content=req.content,
+        data=req.data,
     )
 
     #  显式走 Pydantic v2（方案一）
@@ -176,7 +192,6 @@ async def create_book(
         db,
         title=req.title,
         description=req.description,
-        bookType=req.bookType,
         uid=user.pkId,
         template_id=req.template_id,
     )

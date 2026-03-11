@@ -1,8 +1,10 @@
+import json
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from fastapi import Query
-from pydantic import BaseModel, Field, model_validator, field_serializer, ConfigDict
+from pydantic import BaseModel, Field, field_serializer, ConfigDict, field_validator
+from sqlalchemy import JSON
 
 
 class NodeTreeSchema(BaseModel):
@@ -13,15 +15,35 @@ class NodeTreeSchema(BaseModel):
     # content: Optional[str] = None
     parent_id: Optional[int] = None
     is_leaf: int = 0
+    type: int = 0
+    data: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="扩展配置数据"
+    )
 
     children:Optional[List["NodeTreeSchema"]] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("data", mode="before")
+    @classmethod
+    def transform_json_to_dict(cls, v: Any) -> Dict[str, Any]:
+        """
+        核心修复逻辑：
+        如果数据库读取出来的是字符串（JSON 字符串），自动转为字典。
+        """
+        if isinstance(v, str):
+            try:
+                # 处理你之前提到的 {\"name\":\"晓燕\"...} 这种转义字符串
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return {}
+        if v is None:
+            return {}
+        return v
 
 class CreateBookReq(BaseModel):
     """创建书籍请求参数"""
-    bookType: str
     template_id: Optional[str] = None
     title: str
     description: Optional[str] = None
@@ -62,9 +84,18 @@ class BookNodeDetailResp(BaseModel):
     uid: int
     is_leaf: int
     content: Optional[str]
-    name: Optional[str]
+    name: str
+    type: int = 0
+    depth: int = 0
     createTime: datetime
     updateTime: datetime
+
+    # 扩展字段
+    # 使用 Dict[str, Any] 对应数据库的 JSON 类型
+    data: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="扩展配置数据"
+    )
 
     @field_serializer("createTime", "updateTime", mode="plain")
     def serialize_datetime(self, value: datetime) -> str:
@@ -83,6 +114,7 @@ class UpdateBookNodeReq(BaseModel):
     id: int = Query(..., description="mc_book_node 节点ID"),
     bid: str = Query(..., description="mc_book_node bid ID"),
     content: Optional[str] = None
+    data: Optional[Dict[str, Any]] = None
 
 
 class EditBookNodeReq(BaseModel):
@@ -92,6 +124,7 @@ class EditBookNodeReq(BaseModel):
     id: int
     bid:str
     name: Optional[str] = None
+    data: Optional[str] = None
 
 
 class EditBookNodeResp(BaseModel):
@@ -117,6 +150,7 @@ class AddBookNodeReq(BaseModel):
     parent_id: int
     is_leaf: int
     name: str
+    data: Optional[str] = None
 
 
 class AddChapterResp(BaseModel):
@@ -128,6 +162,7 @@ class AddChapterResp(BaseModel):
     parent_id: int
     is_leaf: int
     name: str
+    data: Optional[Dict[str, Any]] = None
 
 
 class DeleteBookNodeReq(BaseModel):

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union, List, Dict, Any
 
 from sqlalchemy import (
     String, Text, DateTime, BigInteger, Integer, DECIMAL, JSON
@@ -48,7 +48,7 @@ class AiNovelGenerateLog(Base):
 
     # 存储节点 ID 数组，例如 ["node_1", "node_2"]
     # Mapped[Optional[list]] 对应 Python 的列表类型
-    node_ids: Mapped[Optional[list]] = mapped_column(
+    node_ids: Mapped[Optional[Union[List[Any], Dict[str, Any]]]] = mapped_column(
         JSON,
         nullable=True,
         comment="关联的节点ID数组"
@@ -137,7 +137,7 @@ class AiNovelGenerateLog(Base):
         String(32),
         nullable=False,
         default="generate",
-        comment="行为类型：generate / refine"
+        comment="行为类型：generate / refine / render"
     )
 
     refineOriginalLength: Mapped[int] = mapped_column(
