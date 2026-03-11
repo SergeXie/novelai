@@ -40,7 +40,11 @@ async def add_chapter(
     """
     新增章节接口
     """
-    data = json.loads(req.data)
+    if req.data:
+        data = json.loads(req.data)
+    else:
+        data = None
+
     chapter = await BookService.add_chapter(
         db,
         uid=user.pkId,
@@ -92,7 +96,11 @@ async def edit_book_node(
     """
     编辑章节 / 节点接口
     """
-    data = json.loads(req.data)
+    if req.data:
+        data = json.loads(req.data)
+    else:
+        data = None
+
     node = await BookService.edit_book_node(
         db,
         node_id=req.id,
