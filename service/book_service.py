@@ -311,6 +311,7 @@ class BookService:
             db,
             node,
             name=name,
+            data=data
         )
 
     @staticmethod
