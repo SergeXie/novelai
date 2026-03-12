@@ -135,9 +135,6 @@ class BookService:
             template_id,
         )
 
-        if not template:
-            raise ServiceWarning("模板不存在或已禁用")
-
         print("user:{} create book:{} tpl:{}".format(uid, title, template.tpl_name))
 
         # 1️ 创建书籍

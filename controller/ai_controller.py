@@ -43,7 +43,7 @@ async def generate(
     根据设定生成小说片段（输入 / 输出全量留痕）
     """
     user_prompt = request.user_prompt
-    correlation = request.correlation
+    correlation = request.correlation  # 章节ID
     bid = request.bid
     level = request.level
     temperature = request.temperature
@@ -52,7 +52,7 @@ async def generate(
         raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail="提示词不能为空")
     # TODO 后续需要做的事情查询bid然后查询出来 type > 1 的拿出name
     #  然后在input_user_prompt拼接 name: 然后换行 "\n".join(nodes_contents) + "\n" + user_prompt
-    nodes_contents = await BookDAO.get_book_nodes_list(db, correlation, user.pkId)
+    nodes_contents = await BookDAO.get_book_nodes_list(db, correlation, user.pkId, bid)
     input_user_prompt = "\n".join(nodes_contents) + "\n" + user_prompt
 
     ai_service = AIService(db=db)

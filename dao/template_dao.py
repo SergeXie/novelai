@@ -32,4 +32,13 @@ class TemplateDAO:
             McTemplate.status == 1
         )
         result = await db.execute(stmt)
-        return result.scalar_one_or_none()
+
+        data = result.scalar_one_or_none()
+        if not data:
+            # 如果template_id不存在取第一个
+            stmt = select(McTemplate).where(McTemplate.status == 1)
+            result = await db.execute(stmt)
+            return result.scalar_one_or_none()
+
+        return data
+
