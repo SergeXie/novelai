@@ -45,6 +45,8 @@ async def add_chapter(
     else:
         data = None
 
+    content = req.content if req.content else None
+
     chapter = await BookService.add_chapter(
         db,
         uid=user.pkId,
@@ -52,7 +54,8 @@ async def add_chapter(
         parent_id=req.parent_id,
         is_leaf=req.is_leaf,
         name=req.name,
-        data=data
+        data=data,
+        content=content
     )
 
     resp = AddChapterResp(

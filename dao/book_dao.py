@@ -210,6 +210,7 @@ class BookDAO:
             name: str,
             depth: int,
             data: dict | None = None,
+            content: str | None = None,
     ) -> BookNode:
         """
         新增章节（自动补正文根节点）
@@ -223,6 +224,7 @@ class BookDAO:
             is_leaf=is_leaf,
             depth=depth,
             data=data,
+            content=content
         )
         db.add(node)
         await db.flush()
