@@ -40,13 +40,25 @@ class BookDAO:
         return list(nodes)
 
     @staticmethod
-    async def get_book_nodes_list(db: AsyncSession, correlation: list, uid:int):
+    async def get_book_nodes_list(db: AsyncSession, correlation: list, uid: int, bid: str):
         result = await db.execute(
             select(BookNode.name, BookNode.content).where(and_(BookNode.id.in_(correlation),
                                                 BookNode.uid == uid)).order_by(BookNode.id)
         )
         nodes = [str(item) for row in result for item in row if item is not None]
-        return nodes
+
+        bid_nodes_result = await db.execute(select(BookNode.name, BookNode.content).where(and_(
+            BookNode.bid == bid, BookNode.uid == uid, BookNode.type > 1)).order_by(BookNode.id.desc()))
+
+        # 逻辑：遍历每一行，只有当 row.content 不为空时，才取出 (name, content) 并拍平
+        nodes_name = [
+            item
+            for row in bid_nodes_result
+            if row.content  # 核心判断：只有 content 有内容时才处理这一行
+            for item in (row.name, row.content)
+        ]
+
+        return nodes_name + nodes
 
     @staticmethod
     async def create_node(
@@ -210,6 +222,7 @@ class BookDAO:
             name: str,
             depth: int,
             data: dict | None = None,
+            content: str | None = None,
     ) -> BookNode:
         """
         新增章节（自动补正文根节点）
@@ -223,6 +236,7 @@ class BookDAO:
             is_leaf=is_leaf,
             depth=depth,
             data=data,
+            content=content
         )
         db.add(node)
         await db.flush()

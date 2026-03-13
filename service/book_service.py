@@ -135,9 +135,6 @@ class BookService:
             template_id,
         )
 
-        if not template:
-            raise ServiceWarning("模板不存在或已禁用")
-
         print("user:{} create book:{} tpl:{}".format(uid, title, template.tpl_name))
 
         # 1️ 创建书籍
@@ -324,6 +321,7 @@ class BookService:
             is_leaf: int,
             name: str,
             data: dict | None = None,
+            content: str | None = None,
     ) -> BookNode:
         """
         新增章节（业务接口）
@@ -352,7 +350,8 @@ class BookService:
             is_leaf=1 if is_leaf else 0,
             name=name,
             depth=parent_depth + 1,
-            data=data
+            data=data,
+            content=content
         )
 
         # 3️⃣ 父节点修正（核心规则）
