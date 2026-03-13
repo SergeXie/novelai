@@ -36,7 +36,7 @@ class TemplateDAO:
         data = result.scalar_one_or_none()
         if not data:
             # 如果template_id不存在取第一个
-            stmt = select(McTemplate).where(McTemplate.status == 1)
+            stmt = select(McTemplate).where(McTemplate.template_id == "TPLXIAOSHUO")
             result = await db.execute(stmt)
             return result.scalar_one_or_none()
 
