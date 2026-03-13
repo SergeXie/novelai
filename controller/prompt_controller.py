@@ -51,6 +51,7 @@ async def render(
             action_type="render",
             correlation=payload,
             background_tasks=background_tasks,
+            origin_prompt=""
         )
         return ResponseUtil.success(data={"request_id": request_id})
     except ValueError as e:

@@ -151,6 +151,7 @@ class AddBookNodeReq(BaseModel):
     is_leaf: int
     name: str
     data: Optional[str] = None
+    content: Optional[str] = None
 
 
 class AddChapterResp(BaseModel):

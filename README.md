@@ -14,3 +14,6 @@
 > 调整书籍创建接口，去除无用参数，增加type字段，统一节点参数；  
 > 修复节点接口不返回data json数据的bug；  
 > 优化部分DAO整合db代码。
+
+#### 20260312
+> generate新增name拼接根据 type>1 查询出name:content 拼接
