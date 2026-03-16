@@ -164,6 +164,8 @@ class AddChapterResp(BaseModel):
     is_leaf: int
     name: str
     data: Optional[Dict[str, Any]] = None
+    content: Optional[str] = None
+
 
 
 class DeleteBookNodeReq(BaseModel):
