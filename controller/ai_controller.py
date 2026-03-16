@@ -51,8 +51,9 @@ async def generate(
     if not user_prompt:
         raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail="提示词不能为空")
     nodes_contents = await BookDAO.get_book_nodes_list(db, correlation, user.pkId, bid)
+    print("nodes_contents:{}".format(nodes_contents))
     input_user_prompt = "\n".join(nodes_contents) + "\n" + user_prompt
-
+    print("input_user_prompt:{}".format(input_user_prompt))
     ai_service = AIService(db=db)
     request_id = await ai_service.prepare_and_record_request(
         user_id=user.pkId,
