@@ -46,7 +46,6 @@ class BookDAO:
                                                 BookNode.uid == uid)).order_by(BookNode.id)
         )
         nodes = [str(item) for row in result for item in row if item is not None]
-        print("nodes:{}".format(nodes))
         bid_nodes_result = await db.execute(select(BookNode.name, BookNode.content).where(and_(
             BookNode.bid == bid, BookNode.uid == uid, BookNode.type > 1)).order_by(BookNode.id.desc()))
 
@@ -58,9 +57,12 @@ class BookDAO:
             for item in (row.name, row.content)
         ]
 
-        print("nodes_name:{}".format(nodes_name))
-
-        return nodes_name + nodes
+        # 查询书籍
+        stmt = select(Book).where(and_(Book.bid == bid, Book.uid == uid))
+        result = await db.execute(stmt)
+        book = result.scalar_one_or_none()
+        book_list = [book.title, book.description]
+        return book_list + nodes_name + nodes
 
     @staticmethod
     async def create_node(
