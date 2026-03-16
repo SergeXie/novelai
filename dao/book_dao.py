@@ -46,7 +46,7 @@ class BookDAO:
                                                 BookNode.uid == uid)).order_by(BookNode.id)
         )
         nodes = [str(item) for row in result for item in row if item is not None]
-
+        print("nodes:{}".format(nodes))
         bid_nodes_result = await db.execute(select(BookNode.name, BookNode.content).where(and_(
             BookNode.bid == bid, BookNode.uid == uid, BookNode.type > 1)).order_by(BookNode.id.desc()))
 
@@ -57,6 +57,8 @@ class BookDAO:
             if row.content  # 核心判断：只有 content 有内容时才处理这一行
             for item in (row.name, row.content)
         ]
+
+        print("nodes_name:{}".format(nodes_name))
 
         return nodes_name + nodes
 
@@ -223,6 +225,7 @@ class BookDAO:
             depth: int,
             data: dict | None = None,
             content: str | None = None,
+            type: int,
     ) -> BookNode:
         """
         新增章节（自动补正文根节点）
@@ -236,7 +239,8 @@ class BookDAO:
             is_leaf=is_leaf,
             depth=depth,
             data=data,
-            content=content
+            content=content,
+            type=type
         )
         db.add(node)
         await db.flush()
