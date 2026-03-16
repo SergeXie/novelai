@@ -17,3 +17,6 @@
 
 #### 20260312
 > generate新增name拼接根据 type>1 查询出name:content 拼接
+
+#### 20260316
+> node type 节点类型bug修改
