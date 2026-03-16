@@ -42,10 +42,10 @@ class Settings(BaseSettings):
     # Pydantic 会自动寻找以 DEEPSEEK_ 开头和 OPENAI_ 开头的环境变量
     deepseek: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
     doubao: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
-
     free: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
     doubaoplus: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
     claude: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
+    gemini: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
 
     # 读取环境变量，设置默认值为空字符串
     ai_system_prompt: str = Field(default="", alias="AI_SYSTEM_PROMPT")

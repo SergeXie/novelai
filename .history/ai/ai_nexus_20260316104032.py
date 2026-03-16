@@ -7,7 +7,6 @@ from ai.adapters.doubao import DoubaoAdapter
 from ai.adapters.doubao_plus import DoubaoPlusAdapter
 from ai.adapters.enums import AIProvider
 from ai.adapters.ollama import OllamaAdapter
-from ai.adapters.gemini import GeminiAdapter
 from common.config.config import settings
 
 
@@ -20,7 +19,6 @@ class AINexus:
             AIProvider.DOUBAO: DoubaoAdapter(),
             AIProvider.DOUBAOPLUS: DoubaoPlusAdapter(),
             AIProvider.CLAUDE: ClaudeAdapter(),
-            AIProvider.GEMINI: GeminiAdapter(),
         }
 
     # 建议使用忽略大小写的正则匹配

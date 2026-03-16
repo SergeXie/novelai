@@ -6,7 +6,6 @@ class AIProvider(str, Enum):
     DOUBAO = "doubao"
     DOUBAOPLUS = "openai"
     CLAUDE = "claude"
-    GEMINI = "gemini"
 
     @classmethod
     def from_level(cls, level: int) -> "AIProvider":
@@ -24,7 +23,6 @@ class AIProvider(str, Enum):
             2: cls.DOUBAO,      # 2级对应豆包模型
             3: cls.DOUBAOPLUS,  # 3级对应豆包Plus模型
             4: cls.CLAUDE,      # 4级对应Claude模型
-            5: cls.GEMINI,      # 5级Gemini模型
         }
 
         # 使用 dict.get() 实现“默认返回豆包”的逻辑
