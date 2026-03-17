@@ -1,6 +1,7 @@
 import json
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
@@ -64,9 +65,13 @@ async def add_chapter(
         parent_id=chapter.parent_id,
         is_leaf=chapter.is_leaf,
         name=chapter.name,
-        data=chapter.data
+        data=chapter.data,
+        content=content
+
     )
-    #
+
+    logger.info("新增节点成功 响应体：{}".format(resp))
+
     return ResponseUtil.success(data=resp)
 
 
