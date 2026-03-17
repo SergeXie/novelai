@@ -322,6 +322,7 @@ class BookService:
             name: str,
             data: dict | None = None,
             content: str | None = None,
+            type: int,
     ) -> BookNode:
         """
         新增章节（业务接口）
@@ -341,7 +342,6 @@ class BookService:
 
             parent_depth = parent.depth
 
-        print("type:{}".format(parent.type))
         # 3️⃣ 创建章节节点
         node = await BookDAO.add_chapter_node(
             db,
@@ -353,7 +353,7 @@ class BookService:
             depth=parent_depth + 1,
             data=data,
             content=content,
-            type=parent.type
+            type=type if type else parent.type
         )
 
         # 3️⃣ 父节点修正（核心规则）

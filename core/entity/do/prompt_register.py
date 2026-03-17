@@ -56,5 +56,12 @@ class PromptRegistry(Base):
         comment="创建时间"
     )
 
+    isRelated: Mapped[int] = mapped_column(
+        Integer,
+        server_default="1",
+        default=1,
+        comment="1:关联, 0:不关联"
+    )
+
     def __repr__(self) -> str:
         return f"<PromptRegistry(key='{self.tool_key}', name='{self.name}')>"

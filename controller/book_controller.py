@@ -56,7 +56,8 @@ async def add_chapter(
         is_leaf=req.is_leaf,
         name=req.name,
         data=data,
-        content=content
+        content=content,
+        type=req.type
     )
 
     resp = AddChapterResp(
