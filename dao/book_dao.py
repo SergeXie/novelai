@@ -46,22 +46,36 @@ class BookDAO:
                                                 BookNode.uid == uid)).order_by(BookNode.id)
         )
         nodes = [str(item) for row in result for item in row if item is not None]
-        bid_nodes_result = await db.execute(select(BookNode.name, BookNode.content).where(and_(
-            BookNode.bid == bid, BookNode.uid == uid, BookNode.type > 1)).order_by(BookNode.id.desc()))
+        bid_nodes_result = await db.execute(
+            select(BookNode.content, BookNode.type).where(
+                and_(
+                    BookNode.bid == bid,
+                    BookNode.uid == uid,
+                    BookNode.type > 1
+                )
+            ).order_by(BookNode.id.desc())
+        )
 
-        # 逻辑：遍历每一行，只有当 row.content 不为空时，才取出 (name, content) 并拍平
-        nodes_name = [
-            item
-            for row in bid_nodes_result
-            if row.content  # 核心判断：只有 content 有内容时才处理这一行
-            for item in (row.name, row.content)
-        ]
+        rows = bid_nodes_result.all()
+
+        type_map = {
+            2: "角色",
+            3: "世界观",
+            4: "写作手法"
+        }
+
+        nodes_name = []
+
+        for row in rows:
+            if row.content and row.type in type_map:
+                nodes_name.append(type_map[row.type])
+                nodes_name.append(row.content)
 
         # 查询书籍
         stmt = select(Book).where(and_(Book.bid == bid, Book.uid == uid))
         result = await db.execute(stmt)
         book = result.scalar_one_or_none()
-        book_list = [book.title, book.description]
+        book_list = ["作品名称:{}".format(book.title), "简介:{}".format(book.description)]
         return book_list + nodes_name + nodes
 
     @staticmethod

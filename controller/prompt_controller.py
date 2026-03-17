@@ -36,12 +36,13 @@ async def render(
 ):
     service = PromptService(db)
     try:
-        final_prompt = await service.render_prompt_content(tool_key, inputs)
+        final_prompt = await service.render_prompt_content(bid, user.pkId, tool_key, inputs)
         ai_service = AIService(db)
         payload = {
             "tool_key": tool_key,
             **inputs
         }
+
         request_id = await ai_service.prepare_and_record_request(
             user_id=user.pkId,
             bid=bid,

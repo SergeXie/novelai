@@ -99,13 +99,13 @@ class UsageService:
             # ===== 输入 =====
             userPrompt=user_prompt,
             systemPrompt=system_prompt,
-            requestInputLength=len(user_prompt) * ai_model_multiplier,
+            requestInputLength=len(user_prompt),
             model=model_name,
             temperature=temperature,
             maxTokens=max_tokens,
             # ===== 输出 =====
             outputContent=output_content,
-            outputLength=len(output_content)* ai_model_multiplier,
+            outputLength=len(output_content),
             tokenEstimate=len(output_content) // 2,
             actionType=action_type,
             # ===== 状态 =====

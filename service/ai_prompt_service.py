@@ -6,11 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.config.get_db import get_db_context
 from core.entity.do.prompt_register import PromptRegistry
 from dao.ai_prompt_registry_dao import PromptRegistryDAO
+from dao.book_dao import BookDAO
 
 
 class PromptService:
     def __init__(self, db: AsyncSession):
         self.dao = PromptRegistryDAO(db)
+        self.db = db
 
     async def get_all_prompts(self) -> List[PromptRegistry]:
         """获取所有记录的原始逻辑"""
@@ -20,7 +22,10 @@ class PromptService:
         """根据key获取详情"""
         return await self.dao.get_by_tool_key(tool_key)
 
-    async def render_prompt_content(self, tool_key: str, inputs: dict) -> str:
+    async def render_prompt_content(self, bid: str, user_id:int, tool_key: str, inputs: dict) -> str:
+        nodes_contents = await BookDAO.get_book_nodes_list(self.db, [], user_id, bid)
+        input_user_prompt = "\n".join(nodes_contents) + "\n"
+
         # 1. 获取模板配置
         config = await self.dao.get_active_by_key(tool_key)
         if not config:
@@ -35,9 +40,9 @@ class PromptService:
             from jinja2 import Environment, meta
             env = Environment(enable_async=True)
             template = env.from_string(template_str)
-            return await template.render_async(**inputs)
+            template_str =  await template.render_async(**inputs)
 
         elif config.engine_type == "fstring":
-            return template_str.format(**inputs)
+            template_str =  template_str.format(**inputs)
 
-        return template_str
+        return input_user_prompt + template_str
