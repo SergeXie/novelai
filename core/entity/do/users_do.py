@@ -19,7 +19,7 @@ class OnlineStatus(enum.Enum):
 
 
 class User(Base):
-    __tablename__ = "users"
+    __tablename__ = "mc_users"
 
     pkId: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True, comment="主键ID")
     uuid: Mapped[str] = mapped_column(String(36), nullable=False, unique=True, comment="唯一标识符")
@@ -29,6 +29,10 @@ class User(Base):
     password: Mapped[str] = mapped_column(String(128), nullable=False, comment="密码")
     onlineStatus: Mapped[OnlineStatus] = mapped_column(Enum(OnlineStatus), nullable=False,
                                                         default=OnlineStatus.OFFLINE, comment="在线状态")
+
+    status: Mapped[AccountStatus] = mapped_column(Enum(AccountStatus), nullable=False, default=AccountStatus.ACTIVE,
+                                                  comment="帐号状态")
+
     createTime: Mapped[DateTime] = mapped_column(DateTime, nullable=False, server_default=func.current_timestamp(),
                                                   comment="创建时间")
 

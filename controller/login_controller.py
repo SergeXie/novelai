@@ -1,11 +1,12 @@
 import uuid
-
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
+from core.deps.auth import get_login_user
+from core.deps.token_utils import TokenManager
 from core.entity.do.users_do import User
 from core.entity.vo.login_vo import UserLogin
 from core.entity.vo.user_schema import ChangePasswordReq
@@ -37,6 +38,8 @@ async def login(user_login: UserLogin,
         account=user_login.account,
         password=user_login.password
     )
+    # 存储token到map上
+    TokenManager.store_token(user_login.account, data)
 
     return ResponseUtil.success(msg='登录成功', dict_content={'data': data})
 
@@ -90,7 +93,8 @@ async def register(
 @loginController.post("/user/changePwd", name="修改密码")
 async def change_password(
     req: ChangePasswordReq,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_login_user)
 ):
 
     service = UserService()
