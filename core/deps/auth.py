@@ -70,4 +70,4 @@ async def get_login_user(authorization: str = Header(None, alias="authorization"
         return query_user
     else:
         logger.warning('用户凭证已失效，请重新登录')
-        raise ServiceWarning(data='', message='用户凭证已失效，请重新登录！')
+        raise AuthException(data='', message='用户凭证已失效，请重新登录！')

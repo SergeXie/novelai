@@ -80,7 +80,6 @@ class UserService:
         # 登录成功（返回你需要的最小信息）
         return {
             'accessToken': "Bearer" + " " + access_token,
-            "uuid": user.uuid,
             "account": user.account,
             "nickname": user.nickname
         }
