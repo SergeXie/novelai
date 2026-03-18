@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
+from dao.ai_prompt_registry_dao import PromptRegistryDAO
 
 
 class BookDAO:
@@ -40,12 +41,13 @@ class BookDAO:
         return list(nodes)
 
     @staticmethod
-    async def get_book_nodes_list(db: AsyncSession, correlation: list, uid: int, bid: str):
+    async def get_book_nodes_list(db: AsyncSession, correlation: list, uid: int, bid: str, interface_name:str = None):
         result = await db.execute(
             select(BookNode.name, BookNode.content).where(and_(BookNode.id.in_(correlation),
                                                 BookNode.uid == uid)).order_by(BookNode.id)
         )
         nodes = [str(item) for row in result for item in row if item is not None]
+
         bid_nodes_result = await db.execute(
             select(BookNode.content, BookNode.type).where(
                 and_(
@@ -64,12 +66,22 @@ class BookDAO:
             4: "写作手法"
         }
 
+        # 查找 mc_prompt_registry name工具是否存在关联
+
         nodes_name = []
 
         for row in rows:
             if row.content and row.type in type_map:
-                nodes_name.append(type_map[row.type])
-                nodes_name.append(row.content)
+                if interface_name == "render": # 只适用于渲染提示词
+                    prompt_registry_is_related = await PromptRegistryDAO.get_active_by_is_related(db, type_map[row.type])
+                    if prompt_registry_is_related.isRelated:
+                        # 如果允许关联则加入倒拼接提示词中
+                        nodes_name.append(type_map[row.type])
+                        nodes_name.append(row.content)
+                else:
+                    # 如果允许关联则加入倒拼接提示词中
+                    nodes_name.append(type_map[row.type])
+                    nodes_name.append(row.content)
 
         # 查询书籍
         stmt = select(Book).where(and_(Book.bid == bid, Book.uid == uid))

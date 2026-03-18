@@ -23,7 +23,9 @@ class PromptService:
         return await self.dao.get_by_tool_key(tool_key)
 
     async def render_prompt_content(self, bid: str, user_id:int, tool_key: str, inputs: dict) -> str:
-        nodes_contents = await BookDAO.get_book_nodes_list(self.db, [], user_id, bid)
+        # 提示词拼接
+        nodes_contents = await BookDAO.get_book_nodes_list(self.db, [], user_id, bid, interface_name="render")
+
         input_user_prompt = "\n".join(nodes_contents) + "\n"
 
         # 1. 获取模板配置
@@ -40,9 +42,10 @@ class PromptService:
             from jinja2 import Environment, meta
             env = Environment(enable_async=True)
             template = env.from_string(template_str)
-            template_str =  await template.render_async(**inputs)
+            template_str = await template.render_async(**inputs)
 
         elif config.engine_type == "fstring":
-            template_str =  template_str.format(**inputs)
+            template_str = template_str.format(**inputs)
+
 
         return input_user_prompt + template_str

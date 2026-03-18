@@ -41,3 +41,15 @@ class PromptRegistryDAO:
         )
         result = await self.db.execute(stmt)
         return result.scalars().first()
+
+    @staticmethod
+    async def get_active_by_is_related(db: AsyncSession, name: str) -> Optional[PromptRegistry]:
+        """
+        获取正在启用的指定工具配置（业务最常用）
+        """
+        stmt = select(PromptRegistry).where(
+            PromptRegistry.name == name,
+            PromptRegistry.status == 1
+        )
+        result = await db.execute(stmt)
+        return result.scalars().first()

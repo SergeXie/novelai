@@ -140,20 +140,6 @@ class AiNovelGenerateLog(Base):
         comment="行为类型：generate / refine / render"
     )
 
-    refineOriginalLength: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-        default=0,
-        comment="微调-原始内容字符数"
-    )
-
-    refineSuggestionLength: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-        default=0,
-        comment="微调-修改建议字符数"
-    )
-
     isDelete: Mapped[int] = mapped_column(
         Integer,
         nullable=False,

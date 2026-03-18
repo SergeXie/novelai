@@ -20,3 +20,6 @@
 
 #### 20260316
 > node type 节点类型bug修改
+
+#### 20260317
+> mc_prompt_registry表新增isRelated 是否关联字段，并在/render接口get_book_nodes_list函数拼接提示词根据isRelated为true拼接
