@@ -18,6 +18,15 @@ class PromptService:
         """获取所有记录的原始逻辑"""
         return await self.dao.get_all_prompts()
 
+    async def get_all_prompts_scope(self) -> List[PromptRegistry]:
+        """获取所有记录的原始逻辑"""
+        return await self.dao.get_all_prompts_scope()
+
+    async def get_scope_detail_prompts(self, scope:int) -> List[PromptRegistry]:
+
+        return await self.dao.get_prompts_detail_scope(scope)
+
+
     async def get_detail_by_key(self, tool_key: str) -> Optional[PromptRegistry]:
         """根据key获取详情"""
         return await self.dao.get_by_tool_key(tool_key)
