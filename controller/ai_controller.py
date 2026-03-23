@@ -20,6 +20,8 @@ aiController = APIRouter()
 @aiController.get("/engineList", name="模型列表")
 async def list_models(
     db=Depends(get_db),
+    user=Depends(get_login_user)
+
 ):
     """
     获取 AI 模型列表

@@ -1,14 +1,39 @@
+import uuid
+from datetime import timedelta, datetime, timezone
+from typing import Union
 import bcrypt
+import jwt
+from common.config.config import settings
 from common.exception.lzsd_exception import LoginException, ServiceWarning
-from core.entity.do.users_do import OnlineStatus
+from core.entity.do.users_do import OnlineStatus, AccountStatus
 from dao.user_dao import UserDAO
 from sqlalchemy.ext.asyncio import AsyncSession
+from loguru import logger
 
 
 class UserService:
 
-    @staticmethod
+    @classmethod
+    async def create_access_token(cls, data: dict, expires_delta: Union[timedelta, None] = None):
+        """
+        根据登录信息创建当前用户token
+
+        :param data: 登录信息
+        :param expires_delta: token有效期
+        :return: token
+        """
+        to_encode = data.copy()
+        if expires_delta:
+            expire = datetime.now(timezone.utc) + expires_delta
+        else:
+            expire = datetime.now(timezone.utc) + timedelta(minutes=30)
+        to_encode.update({'exp': expire})
+        encoded_jwt = jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+        return encoded_jwt
+
+    @classmethod
     async def login(
+        cls,
         db: AsyncSession,
         account: str,
         password: str
@@ -26,7 +51,25 @@ class UserService:
         )
 
         if not password_ok:
-            raise ServiceWarning(message="账号或密码错误")
+            logger.warning(f'用户：{user.account}账号或密码错误')
+            raise ServiceWarning(message=f"用户：{user.account}账号或密码错误")
+
+        if user.status != AccountStatus.ACTIVE:
+            logger.warning(f'用户：{user.account} 已停用')
+            raise LoginException(message='用户已停用')
+
+        access_token_expires = timedelta(minutes=settings.jwt_expire_minutes)
+        session_id = str(uuid.uuid4())
+
+        access_token = await cls.create_access_token(
+            data={
+                'uuid': user.uuid,
+                'account': user.account,
+                'nickname': user.nickname,
+                'session_id': session_id,
+            },
+            expires_delta=access_token_expires,
+        )
 
         # 1️⃣ 更新在线状态
         user.onlineStatus = OnlineStatus.ONLINE
@@ -36,7 +79,7 @@ class UserService:
 
         # 登录成功（返回你需要的最小信息）
         return {
-            "uuid": user.uuid,
+            'accessToken': "Bearer" + " " + access_token,
             "account": user.account,
             "nickname": user.nickname
         }
@@ -72,3 +115,6 @@ class UserService:
         )
 
         return True
+
+
+

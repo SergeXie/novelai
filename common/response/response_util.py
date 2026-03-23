@@ -114,7 +114,7 @@ class ResponseUtil:
 
         result.update({'success': False, 'time': parse_and_format_date()})
 
-        return JSONResponse(status_code=status.HTTP_200_OK, content=jsonable_encoder(result))
+        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=jsonable_encoder(result))
 
     @classmethod
     def forbidden(
@@ -148,7 +148,7 @@ class ResponseUtil:
 
         result.update({'success': False, 'time': parse_and_format_date()})
 
-        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content=jsonable_encoder(result))
+        return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content=jsonable_encoder(result))
 
     @classmethod
     def error(
