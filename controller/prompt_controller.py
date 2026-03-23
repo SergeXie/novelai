@@ -23,6 +23,32 @@ async def list_all_prompts(db: AsyncSession = Depends(get_db), user=Depends(get_
     return ResponseUtil.success(data=result)
 
 
+@promptController.get("/scopes", name="获取节点默认提示词工具")
+async def get_prompts_scopes(scope: int, db: AsyncSession = Depends(get_db)):
+    # 实例化 Service 并透传 Session
+    service = PromptService(db)
+
+    # 调用 Service 业务
+    data = await service.get_scope_detail_prompts(scope)
+
+    # 转换为 Schema 并返回
+    result = [PromptRegistryResp.model_validate(p) for p in data]
+    return ResponseUtil.success(data=result)
+
+
+@promptController.get("/contentTools", name="获取正文AI工具列表")
+async def get_contentTools(db: AsyncSession = Depends(get_db), user=Depends(get_login_user)):
+    # 实例化 Service 并透传 Session
+    service = PromptService(db)
+
+    # 调用 Service 业务
+    data = await service.get_all_prompts_scope()
+
+    # 转换为 Schema 并返回
+    result = [PromptRegistryResp.model_validate(p) for p in data]
+    return ResponseUtil.success(data=result)
+
+
 @promptController.post("/render", name="渲染提示词")
 async def render(
         background_tasks: BackgroundTasks,

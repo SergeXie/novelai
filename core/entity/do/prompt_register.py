@@ -50,6 +50,20 @@ class PromptRegistry(Base):
         comment="最后更新时间"
     )
 
+    scope: Mapped[int] = mapped_column(
+        Integer,
+        server_default="0",
+        default=0,
+        comment="作用域对应节点类型"
+    )
+
+    weight: Mapped[int] = mapped_column(
+        Integer,
+        server_default="0",
+        default=0,
+        comment="权重"
+    )
+
     create_time: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now(),
