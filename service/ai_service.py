@@ -53,8 +53,8 @@ class AIService:
         request_id = uuid.uuid4().hex
         if correlation is None:
             correlation = []
-        print(user_prompt)
-        return request_id
+        # print(user_prompt)
+        # return request_id
 
         usage_service = UsageService(self.db)
         # 1. 校验配额
