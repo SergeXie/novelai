@@ -50,8 +50,12 @@ class AIService:
         """
         第一阶段：校验、记录、生成请求ID (同步执行，快速返回)
         """
+        request_id = uuid.uuid4().hex
         if correlation is None:
             correlation = []
+        print(user_prompt)
+        return request_id
+
         usage_service = UsageService(self.db)
         # 1. 校验配额
         await usage_service.check_quota_or_raise(
@@ -61,7 +65,6 @@ class AIService:
 
         ai_provider = AIProvider.from_level(level)
         input_user_prompt = user_prompt
-        request_id = uuid.uuid4().hex
 
         # 3. 初始存证（此时 output_content 为空）
         await usage_service.record(

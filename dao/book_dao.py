@@ -6,25 +6,34 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
-from dao.ai_prompt_registry_dao import PromptRegistryDAO
 
 
 class BookDAO:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_book_nodes(self, bid: str, uid:int, max_depth: Optional[int] = None) -> List[BookNode]:
+    async def get_book_by_bid(self, user_id:int, bid: str) -> Optional[Book]:
+        stmt = select(BookNode).where(
+            and_(
+                BookNode.bid == bid,
+                BookNode.uid == user_id
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_book_nodes(self, bid: str, user_id:int, max_depth: Optional[int] = None) -> List[BookNode]:
         """
             获取书籍节点列表
             :param bid: 书籍ID
-            :param uid: 用户ID
+            :param user_id: 用户ID
             :param max_depth: 最大深度限制（可选）
             """
         # 1. 基础查询条件
         stmt = select(BookNode).where(
             and_(
                 BookNode.bid == bid,
-                BookNode.uid == uid
+                BookNode.uid == user_id
             )
         )
 
@@ -40,86 +49,14 @@ class BookDAO:
         nodes = result.scalars().all()
         return list(nodes)
 
-    @staticmethod
-    async def get_book_nodes_list(db: AsyncSession, correlation: list, uid: int, bid: str, interface_name:str = None):
-        result = await db.execute(
-            select(BookNode.name, BookNode.content).where(and_(BookNode.id.in_(correlation),
-                                                BookNode.uid == uid)).order_by(BookNode.id)
+    async def get_book_node_list(self, user_id:int, bid:str, correlation: list)->List[BookNode]:
+        result = await self.db.execute(
+            select(BookNode).where(and_(BookNode.id.in_(correlation), BookNode.uid==user_id, BookNode.bid==bid)).order_by(BookNode.type)
         )
-        nodes = [str(item) for row in result for item in row if item is not None]
+        nodes = result.scalars().all()
+        return list(nodes)
 
-        bid_nodes_result = await db.execute(
-            select(BookNode.content, BookNode.type).where(
-                and_(
-                    BookNode.bid == bid,
-                    BookNode.uid == uid,
-                    BookNode.type > 1
-                )
-            ).order_by(BookNode.id.desc())
-        )
-
-        rows = bid_nodes_result.all()
-
-        type_map = {
-            2: "角色",
-            3: "世界观",
-            4: "写作手法"
-        }
-
-        # 查找 mc_prompt_registry name工具是否存在关联
-
-        nodes_name = []
-
-        for row in rows:
-            if row.content and row.type in type_map:
-                if interface_name == "render": # 只适用于渲染提示词
-                    prompt_registry_is_related = await PromptRegistryDAO.get_active_by_is_related(db, type_map[row.type])
-                    if prompt_registry_is_related.isRelated:
-                        # 如果允许关联则加入倒拼接提示词中
-                        nodes_name.append(type_map[row.type])
-                        nodes_name.append(row.content)
-                else:
-                    # 如果允许关联则加入倒拼接提示词中
-                    nodes_name.append(type_map[row.type])
-                    nodes_name.append(row.content)
-
-        # 查询书籍
-        stmt = select(Book).where(and_(Book.bid == bid, Book.uid == uid))
-        result = await db.execute(stmt)
-        book = result.scalar_one_or_none()
-        book_list = ["作品名称:{}".format(book.title), "简介:{}".format(book.description)]
-        return book_list + nodes_name + nodes
-
-    @staticmethod
-    async def create_node(
-            db: AsyncSession,
-            *,
-            bid: str,
-            uid: int,
-            name: str,
-            parent_id: int,
-            is_leaf: int,
-            depth: int
-    ) -> BookNode:
-        """
-        创建单个书籍节点
-        """
-        node = BookNode(
-            bid=bid,
-            uid=uid,
-            name=name,
-            parent_id=parent_id,
-            is_leaf=is_leaf,
-            depth=depth,
-            content=None
-        )
-        db.add(node)
-        await db.flush()  #  关键：提前拿到 node.id
-        return node
-
-    @staticmethod
-    async def create_book(
-            db: AsyncSession,
+    async def create_book(self,
             uid: int,
             title: str,
             bookType: str,
@@ -140,15 +77,13 @@ class BookDAO:
             template_id=template_id
         )
 
-        db.add(book)
-        await db.commit()
-        await db.refresh(book)
+        self.db.add(book)
+        await self.db.commit()
+        await self.db.refresh(book)
         return book
 
-    @staticmethod
     async def list_books(
-            db: AsyncSession,
-            *,
+            self,
             uid: int,
             status: int | None = None,
     ) -> list[Book]:
@@ -162,13 +97,12 @@ class BookDAO:
 
         stmt = stmt.order_by(Book.createTime.desc())
 
-        result = await db.execute(stmt)
-        return result.scalars().all()
+        result = await self.db.execute(stmt)
+        books = result.scalars().all()
+        return list(books)
 
-    @staticmethod
     async def get_node_by_id(
-            db: AsyncSession,
-            *,
+            self,
             node_id: int,
             uid: int,
             bid: str,
@@ -179,13 +113,11 @@ class BookDAO:
         stmt = select(BookNode).where(and_(BookNode.id == node_id,
                                            BookNode.bid == bid,
                                            BookNode.uid == uid))
-        result = await db.execute(stmt)
+        result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    @staticmethod
     async def get_node_parent_by_id(
-            db: AsyncSession,
-            *,
+            self,
             parent_id: int,
             uid: int,
             bid: str,
@@ -196,13 +128,11 @@ class BookDAO:
         stmt = select(BookNode).where(and_(BookNode.id == parent_id,
                                            BookNode.bid == bid,
                                            BookNode.uid == uid))
-        result = await db.execute(stmt)
+        result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    @staticmethod
     async def update_node_content(
-            db: AsyncSession,
-            *,
+            self,
             node: BookNode,
             content: str | None,
             data: dict | None = None,
@@ -214,15 +144,14 @@ class BookDAO:
             node.content = content
         if data is not None:
             node.data = data
-        db.add(node)
+        self.db.add(node)
 
-        await db.commit()
-        await db.refresh(node)
+        await self.db.commit()
+        await self.db.refresh(node)
         return node
 
-    @staticmethod
     async def update_node(
-            db: AsyncSession,
+            self,
             node: BookNode,
             *,
             name: str | None,
@@ -236,24 +165,22 @@ class BookDAO:
         if data is not None:
             node.data = data
 
-        db.add(node)
-        await db.commit()
-        await db.refresh(node)
+        self.db.add(node)
+        await self.db.commit()
+        await self.db.refresh(node)
         return node
 
-    @staticmethod
     async def add_chapter_node(
-            db: AsyncSession,
-            *,
+            self,
             uid: int,
             bid: str,
             parent_id: int,
             is_leaf: int,
             name: str,
             depth: int,
+            type: int,
             data: dict | None = None,
             content: str | None = None,
-            type: int,
     ) -> BookNode:
         """
         新增章节（自动补正文根节点）
@@ -270,59 +197,74 @@ class BookDAO:
             content=content,
             type=type
         )
-        db.add(node)
-        await db.flush()
+        self.db.add(node)
+        await self.db.flush()
         return node
 
-    @staticmethod
     async def get_nodes_by_parent_ids(
-        db: AsyncSession,
+        self,
         parent_ids: list[int],
     ) -> list[BookNode]:
-        result = await db.execute(
+        result = await self.db.execute(
             select(BookNode).where(BookNode.parent_id.in_(parent_ids))
         )
-        return result.scalars().all()
+        nodes = result.scalars().all()
+        return list(nodes)
 
-    @staticmethod
     async def delete_nodes(
-        db: AsyncSession,
-        node_ids: list[int],
+            self,
+            uid:int,
+            bid:str,
+            node_ids: list[int],
     ):
-        await db.execute(
-            BookNode.__table__.delete().where(
-                BookNode.id.in_(node_ids)
+        """
+            安全删除节点：校验归属关系并执行事务
+            """
+        if not node_ids:
+            return
+
+        # 1. 使用标准的 delete 语句并增加 uid/bid 校验（防止越权）
+        stmt = (
+            delete(BookNode)
+            .where(
+                and_(
+                    BookNode.id.in_(node_ids),
+                    BookNode.uid == uid,
+                    BookNode.bid == bid
+                )
             )
         )
 
-    @staticmethod
+        # 2. 执行删除
+        await self.db.execute(stmt)
+        await self.db.commit()
+
+
     async def get_book_by_bid(
-            db: AsyncSession,
+            self,
             bid: str,
             uid:int
     ) -> Book | None:
-        result = await db.execute(
+        result = await self.db.execute(
             select(Book).where(Book.bid == bid, Book.uid == uid)
         )
         return result.scalar_one_or_none()
 
-    @staticmethod
+
     async def update_book_status(
-            db: AsyncSession,
-            *,
+            self,
             bid: str,
             status: int,
     ):
-        await db.execute(
+        await self.db.execute(
             update(Book)
             .where(Book.bid == bid)
             .values(status=status)
         )
 
-    @staticmethod
+
     async def update_book(
-            db: AsyncSession,
-            *,
+            self,
             bid: str,
             uid: int,
             values: dict,
@@ -333,31 +275,30 @@ class BookDAO:
         if not values:
             return
 
-        await db.execute(
+        await self.db.execute(
             update(Book)
             .where(and_(Book.bid == bid, Book.uid == uid))
             .values(**values)
         )
 
 
-    @staticmethod
     async def delete_nodes_by_bid(
-        db: AsyncSession,
+        self,
         bid: str,
         uid: int,
 
     ):
-        await db.execute(
+        await self.db.execute(
             delete(BookNode).where(and_(BookNode.bid == bid, BookNode.uid == uid))
         )
 
-    @staticmethod
+
     async def hard_delete_book(
-            db: AsyncSession,
+            self,
             bid: str,
             uid: int,
 
     ):
-        await db.execute(
+        await self.db.execute(
             delete(Book).where(and_(Book.bid == bid, Book.uid == uid))
         )

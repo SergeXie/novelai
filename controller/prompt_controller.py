@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
-from core.deps.auth import get_login_user
+from core.deps.auth import get_login_user, check_book_owner
 from core.entity.vo.prompt_register_vo import PromptRegistryResp
 from service.ai_prompt_service import PromptService
 from service.ai_service import AIService
@@ -48,6 +48,19 @@ async def get_contentTools(db: AsyncSession = Depends(get_db), user=Depends(get_
     result = [PromptRegistryResp.model_validate(p) for p in data]
     return ResponseUtil.success(data=result)
 
+@promptController.get("/get_book_creation_tool", name="获取创建作品AI工具")
+async def get_book_creation(db: AsyncSession = Depends(get_db)):
+    prompt_service = PromptService(db)
+    data = []
+    tool = await prompt_service.get_tool_by_key("FhaOjVZT456JWH3P")
+    if tool:
+        data["title"] = PromptRegistryResp.model_validate(tool)
+
+    tool = await prompt_service.get_tool_by_key("kOtnrNg6CUm5IZfJ")
+    if tool:
+        data["intro"] = PromptRegistryResp.model_validate(tool)
+
+    return ResponseUtil.success(data=data)
 
 @promptController.post("/render", name="渲染提示词")
 async def render(
@@ -58,11 +71,11 @@ async def render(
         inputs: dict = Body(...),
         db: AsyncSession = Depends(get_db),
         user=Depends(get_login_user),
-
+        book=Depends(check_book_owner),
 ):
     service = PromptService(db)
     try:
-        final_prompt = await service.render_prompt_content(bid, user.pkId, tool_key, inputs)
+        final_prompt = await service.render_prompt_content(user_id=user.pkId, book=book, tool_key=tool_key, inputs=inputs)
         ai_service = AIService(db)
         payload = {
             "tool_key": tool_key,

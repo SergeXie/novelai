@@ -7,11 +7,14 @@ from ai.adapters.enums import AIProvider
 from ai.ai_nexus import get_ai_nexus
 from common.config.get_db import get_db, get_db_context
 from common.response.response_util import ResponseUtil
-from core.deps.auth import get_login_user
+from core.deps.auth import get_login_user, check_book_owner
+from core.entity.do.books import Book
 from core.entity.vo.ai_model_vo import AiModelResp, DeleteHistoryReq
 from dao.book_dao import BookDAO
 from core.entity.schemas import GenerateRequest
+from service.ai_prompt_service import PromptService
 from service.ai_service import AIService, async_generate_task
+from service.book_service import BookService
 from service.usage_service import UsageService
 
 aiController = APIRouter()
@@ -21,7 +24,6 @@ aiController = APIRouter()
 async def list_models(
     db=Depends(get_db),
     user=Depends(get_login_user)
-
 ):
     """
     获取 AI 模型列表
@@ -39,27 +41,30 @@ async def generate(
         request: GenerateRequest,
         background_tasks: BackgroundTasks,
         db=Depends(get_db),
-        user=Depends(get_login_user)
+        book:Book=Depends(check_book_owner),
+        user=Depends(get_login_user),
 ):
     """
     根据设定生成小说片段（输入 / 输出全量留痕）
     """
     user_prompt = request.user_prompt
+    if not user_prompt:
+        return ResponseUtil.error(msg="提示词不能为空")
+
     correlation = request.correlation  # 章节ID
     bid = request.bid
     level = request.level
     temperature = request.temperature
 
-    if not user_prompt:
-        raise HTTPException(status_code=HTTP_400_BAD_REQUEST, detail="提示词不能为空")
-    nodes_contents = await BookDAO.get_book_nodes_list(db, correlation, user.pkId, bid)
-    input_user_prompt = "\n".join(nodes_contents) + "\n" + user_prompt
+    prompt_service = PromptService(db=db)
+    final_prompt = prompt_service.generate_prompt_by_nodes(user_id=user.id, bid=bid, ids=correlation)
+
     ai_service = AIService(db=db)
     request_id = await ai_service.prepare_and_record_request(
         user_id=user.pkId,
         bid=bid,
         origin_prompt=user_prompt,
-        user_prompt=input_user_prompt,
+        user_prompt=final_prompt,
         level=level,
         temperature=0.7,
         action_type="generate",

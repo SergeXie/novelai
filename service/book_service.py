@@ -12,6 +12,7 @@ from dao.template_dao import TemplateDAO
 class BookService:
     def __init__(self, db: AsyncSession):
         self.book_dao = BookDAO(db)
+        self.db = db
 
     async def get_tree(self, bid:str, uid:int, max_depth:Optional[int] = None) -> List[NodeTreeSchema]:
         tree = []
@@ -72,10 +73,7 @@ class BookService:
         # 3. 返回该节点及其子树（包装成列表格式）
         return [target_node] if target_node else []
 
-    @staticmethod
-    async def _create_nodes_from_template(
-            db: AsyncSession,
-            *,
+    async def _create_nodes_from_template(self,
             uid:int,
             bid: str,
             nodes: list[dict],
@@ -99,8 +97,8 @@ class BookService:
                 depth=depth,
             )
 
-            db.add(node)
-            await db.flush()  # 拿到 node.id
+            self.db.add(node)
+            await self.db.flush()  # 拿到 node.id
 
             # 2️⃣ 如果有 children，递归创建
             children = item.get("children")
@@ -108,8 +106,7 @@ class BookService:
                 # 当前节点必须是非叶子
                 node.is_leaf = 0
 
-                await BookService._create_nodes_from_template(
-                    db,
+                await self._create_nodes_from_template(
                     uid=uid,
                     bid=bid,
                     nodes=children,
@@ -117,10 +114,8 @@ class BookService:
                     depth=depth + 1,
                 )
 
-    @staticmethod
     async def create_book_with_tree(
-            db: AsyncSession,
-            *,
+            self,
             uid: int,
             title: str,
             description: str | None,
@@ -131,15 +126,14 @@ class BookService:
         """
         # 2️ 查询模板
         template = await TemplateDAO.get_template_by_template_id(
-            db,
+            self.db,
             template_id,
         )
 
         print("user:{} create book:{} tpl:{}".format(uid, title, template.tpl_name))
 
         # 1️ 创建书籍
-        book = await BookDAO.create_book(
-            db,
+        book = await self.book_dao.create_book(
             uid=uid,
             title=title,
             bookType=template.tpl_name,
@@ -150,8 +144,7 @@ class BookService:
         template_data = template.data  # JSON
 
         # 3️⃣ 递归创建节点（root parent_id = 0）
-        await BookService._create_nodes_from_template(
-            db,
+        await self._create_nodes_from_template(
             uid=uid,
             bid=book.bid,
             nodes=template_data,
@@ -160,15 +153,13 @@ class BookService:
         )
 
         # 2 统一提交
-        await db.commit()
-        await db.refresh(book)
+        await self.db.commit()
+        await self.db.refresh(book)
 
         return book
 
-    @staticmethod
     async def edit_book(
-            db: AsyncSession,
-            *,
+            self,
             template_id: str,
             bid: str,
             uid: int,
@@ -181,7 +172,7 @@ class BookService:
         """
 
         # 1️⃣ 校验书籍存在
-        book = await BookDAO.get_book_by_bid(db, bid, uid)
+        book = await self.book_dao.get_book_by_bid(bid, uid)
         if not book:
             raise ServiceWarning("书籍不存在")
 
@@ -202,21 +193,16 @@ class BookService:
 
         values["template_id"] = template_id
         # 3️ 更新
-        await BookDAO.update_book(
-            db,
+        await self.book_dao.update_book(
             bid=bid,
             uid=uid,
             values=values,
         )
-
-        await db.commit()
-
         # 4 返回最新书籍信息
-        return await BookDAO.get_book_by_bid(db, bid, uid)
+        return await self.book_dao.get_book_by_bid(bid, uid)
 
-    @staticmethod
     async def list_books(
-            db: AsyncSession,
+            self,
             *,
             status: int | None = None,
             uid:int
@@ -225,16 +211,13 @@ class BookService:
         获取用户书籍列表
         """
 
-        return await BookDAO.list_books(
-            db,
+        return await self.book_dao.list_books(
             uid=uid,
             status=status,
         )
 
-    @staticmethod
     async def get_book_node_detail(
-            db: AsyncSession,
-            *,
+            self,
             node_id: int,
             uid: int,
             bid: str,
@@ -242,8 +225,7 @@ class BookService:
         """
         获取书籍节点详情
         """
-        node = await BookDAO.get_node_by_id(
-            db,
+        node = await self.book_dao.get_node_by_id(
             node_id=node_id,
             uid=uid,
             bid=bid,
@@ -256,10 +238,8 @@ class BookService:
         return node
 
 
-    @staticmethod
     async def update_book_node_content(
-            db: AsyncSession,
-            *,
+            self,
             node_id: int,
             uid: int,
             bid: str,
@@ -269,8 +249,7 @@ class BookService:
         """
         编辑书籍节点内容
         """
-        node = await BookDAO.get_node_by_id(
-            db,
+        node = await self.book_dao.get_node_by_id(
             node_id=node_id,
             uid=uid,
             bid=bid
@@ -279,17 +258,15 @@ class BookService:
         if not node:
             raise ServiceWarning("书籍节点不存在")
 
-        return await BookDAO.update_node_content(
-            db,
+        return await self.book_dao.update_node_content(
             node=node,
             content=content,
             data=data,
         )
 
-    @staticmethod
+
     async def edit_book_node(
-            db: AsyncSession,
-            *,
+            self,
             node_id: int,
             uid: int,
             bid: str,
@@ -299,30 +276,27 @@ class BookService:
         """
         编辑章节 / 节点
         """
-        node = await BookDAO.get_node_by_id(db, node_id=node_id, uid=uid, bid=bid)
+        node = await self.book_dao.get_node_by_id(node_id=node_id, uid=uid, bid=bid)
 
         if not node:
             raise ServiceWarning("节点不存在")
 
-        return await BookDAO.update_node(
-            db,
+        return await self.book_dao.update_node(
             node,
             name=name,
             data=data
         )
 
-    @staticmethod
     async def add_chapter(
-            db: AsyncSession,
-            *,
+            self,
             uid: int,
             bid: str,
             parent_id: int,
             is_leaf: int,
             name: str,
-            data: dict | None = None,
-            content: str | None = None,
             type: int,
+            data: dict | None = None,
+            content: str | None = None
     ) -> BookNode:
         """
         新增章节（业务接口）
@@ -334,7 +308,7 @@ class BookService:
             parent_depth = 0
         else:
             # 1️⃣ 校验节点
-            parent = await BookDAO.get_node_parent_by_id(db, parent_id=parent_id, uid=uid, bid=bid)
+            parent = await self.book_dao.get_node_parent_by_id(parent_id=parent_id, uid=uid, bid=bid)
             if not parent:
                 raise ServiceWarning("父节点不存在")
             if parent.bid != bid:
@@ -343,8 +317,7 @@ class BookService:
             parent_depth = parent.depth
 
         # 3️⃣ 创建章节节点
-        node = await BookDAO.add_chapter_node(
-            db,
+        node = await self.book_dao.add_chapter_node(
             uid=uid,
             bid=bid,
             parent_id=parent_id,
@@ -359,18 +332,17 @@ class BookService:
         # 3️⃣ 父节点修正（核心规则）
         if parent and parent.is_leaf == 1:
             parent.is_leaf = 0
-            db.add(parent)
+            self.db.add(parent)
 
         # 5️⃣ 提交
-        await db.commit()
-        await db.refresh(node)
+        await self.db.commit()
+        await self.db.refresh(node)
 
         return node
 
-    @staticmethod
+
     async def delete_node_(
-            db: AsyncSession,
-            *,
+            self,
             bid: str,
             node_id: int,
             uid:int
@@ -380,7 +352,7 @@ class BookService:
         """
 
         # 1️⃣ 校验目标节点
-        node = await BookDAO.get_node_by_id(db, node_id=node_id, uid=uid, bid=bid)
+        node = await self.book_dao.get_node_by_id(node_id=node_id, uid=uid, bid=bid)
         if not node:
             raise ServiceWarning("节点不存在")
 
@@ -397,36 +369,29 @@ class BookService:
             current_id = queue.pop(0)
             to_delete_ids.append(current_id)
 
-            children = await BookDAO.get_nodes_by_parent_ids(
-                db, [current_id]
-            )
+            children = await self.book_dao.get_nodes_by_parent_ids([current_id])
             queue.extend([c.id for c in children])
 
         # 3️⃣ 执行删除
-        await BookDAO.delete_nodes(db, to_delete_ids)
+        await self.book_dao.delete_nodes(uid=uid, bid=bid, node_ids=to_delete_ids)
 
         # 4️⃣ 回滚父节点 is_leaf
         # if parent_id != 0:
-        #     siblings = await BookDAO.get_nodes_by_parent_ids(
-        #         db, [parent_id]
+        #     siblings = await self.book_dao.get_nodes_by_parent_ids(
+        #         [parent_id]
         #     )
         #     if not siblings:
-        #         parent = await BookDAO.get_node_by_id(db, node_id=parent_id, uid=uid, bid=bid)
+        #         parent = await self.book_dao.get_node_by_id(node_id=parent_id, uid=uid, bid=bid)
         #         if parent:
         #             parent.is_leaf = 1
         #             db.add(parent)
-
-        # 5️⃣ 提交事务
-        await db.commit()
 
         return {
             "deleted_ids": to_delete_ids
         }
 
-    @staticmethod
     async def offline_book(
-            db: AsyncSession,
-            *,
+            self,
             bid: str,
             uid: int
     ):
@@ -435,7 +400,7 @@ class BookService:
         """
 
         # 1️ 校验书籍
-        book = await BookDAO.get_book_by_bid(db, bid, uid)
+        book = await self.book_dao.get_book_by_bid(bid, uid)
         if not book:
             raise ServiceWarning("书籍不存在")
 
@@ -447,23 +412,18 @@ class BookService:
             return {"bid": bid, "status": 3}
 
         # 2️ 更新状态为下架
-        await BookDAO.update_book_status(
-            db,
+        await self.book_dao.update_book_status(
             bid=bid,
             status=3,
         )
-
-        await db.commit()
 
         return {
             "bid": bid,
             "status": 3,
         }
 
-    @staticmethod
     async def hard_delete_book(
-            db: AsyncSession,
-            *,
+            self,
             bid: str,
             uid: int,
     ):
@@ -472,7 +432,7 @@ class BookService:
         """
 
         # 1️ 校验书籍存在
-        book = await BookDAO.get_book_by_bid(db, bid, uid)
+        book = await self.book_dao.get_book_by_bid(bid, uid)
         if not book:
             raise ServiceWarning("书籍不存在")
 
@@ -484,13 +444,10 @@ class BookService:
             raise ServiceWarning("请先下架书籍后再删除")
 
         # 3️ 删除节点
-        await BookDAO.delete_nodes_by_bid(db, bid, uid)
+        await self.book_dao.delete_nodes_by_bid(bid, uid)
 
         # 4 删除书籍
-        await BookDAO.hard_delete_book(db, bid, uid)
-
-        # 5️ 提交事务
-        await db.commit()
+        await self.book_dao.hard_delete_book(bid, uid)
 
         return {
             "bid": bid,

@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     # 不设置默认值，强制要求环境变量中有 DATABASE_URL
     DATABASE_URL: str = Field(alias="DATABASE_URL")
 
+    ENV_MODE: str = Field(alias="ENV_MODE")
+
     # --- 用户级别限制 ---
     USER_DAILY_TOKEN_LIMIT: int = Field(alias="USER_DAILY_TOKEN_LIMIT")
     SINGLE_REQUEST_TOKEN_LIMIT: int = Field(alias="SINGLE_REQUEST_TOKEN_LIMIT")
