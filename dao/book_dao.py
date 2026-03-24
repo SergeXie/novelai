@@ -12,15 +12,15 @@ class BookDAO:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_book_by_bid(self, user_id:int, bid: str) -> Optional[Book]:
-        stmt = select(BookNode).where(
-            and_(
-                BookNode.bid == bid,
-                BookNode.uid == user_id
-            )
-        )
-        result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+    # async def get_book_by_bid(self, user_id:int, bid: str) -> Optional[Book]:
+    #     stmt = select(BookNode).where(
+    #         and_(
+    #             BookNode.bid == bid,
+    #             BookNode.uid == user_id
+    #         )
+    #     )
+    #     result = await self.db.execute(stmt)
+    #     return result.scalar_one_or_none()
 
     async def get_book_nodes(self, bid: str, user_id:int, max_depth: Optional[int] = None) -> List[BookNode]:
         """
@@ -243,10 +243,10 @@ class BookDAO:
     async def get_book_by_bid(
             self,
             bid: str,
-            uid:int
+            user_id:int
     ) -> Book | None:
         result = await self.db.execute(
-            select(Book).where(Book.bid == bid, Book.uid == uid)
+            select(Book).where(Book.bid == bid, Book.uid == user_id)
         )
         return result.scalar_one_or_none()
 

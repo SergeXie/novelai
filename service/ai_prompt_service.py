@@ -149,10 +149,10 @@ class PromptService:
             book_basic_prompt = await self.generate_book_base_prompt(book=book)
             book_global_prompt = await self.generate_book_global_prompt(book=book)
             # 拼接顺序：背景设定 -> 前情提要 -> 当前任务指令(渲染后的 template_str)
-            final_content = f"{book_basic_prompt}\n\n{book_global_prompt}\n\n# 当前任务\n{final_content}"
+            final_content = f"{book_basic_prompt}\n\n{book_global_prompt}\n\n{final_content}"
 
         final_content = final_content.strip()
-
+        print('######################### Final Rendered Prompt #########################')
         print(final_content)
 
         return final_content

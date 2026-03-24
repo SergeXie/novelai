@@ -91,7 +91,7 @@ async def check_book_owner(
         user=Depends(get_login_user)
 ) -> Book:
     book_dao = BookDAO(db)
-    book = book_dao.get_book_by_bid(user_id=user.id, bid=bid)
+    book = await book_dao.get_book_by_bid(user_id=user.pkId, bid=bid)
 
     if not book:
         raise HTTPException(

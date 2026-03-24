@@ -15,6 +15,7 @@ dependencies = [
     "pydantic-settings>=2.13.1",
     "pydantic-validation-decorator>=0.1.5",
     "pyinstaller>=6.18.0",
+    "pyjwt>=2.12.1",
     "python-dateutil>=2.9.0.post0",
     "python-dotenv>=1.2.1",
     "sqlalchemy>=2.0.48",
