@@ -105,13 +105,15 @@ async def edit_book_node(
     """
     编辑章节 / 节点接口
     """
+    books = BookService(db)
+
+
     if req.data:
         data = json.loads(req.data)
     else:
         data = None
 
-    node = await BookService.edit_book_node(
-        db,
+    node = await books.edit_book_node(
         node_id=req.id,
         uid=user.pkId,
         bid=req.bid,
@@ -135,8 +137,9 @@ async def get_book_node_detail(
     """
     获取书籍节点详情接口
     """
-    node = await BookService.get_book_node_detail(
-        db,
+    books = BookService(db)
+
+    node = await books.get_book_node_detail(
         node_id=id,
         uid=user.pkId,
         bid=bid
@@ -158,8 +161,9 @@ async def edit_book_node(
     """
     编辑书籍节点内容接口
     """
-    node = await BookService.update_book_node_content(
-        db,
+    books = BookService(db)
+
+    node = await books.update_book_node_content(
         node_id=req.id,
         uid=user.pkId,
         bid=req.bid,
@@ -182,8 +186,10 @@ async def list_books(
     """
     获取书籍列表接口
     """
-    data = await BookService.list_books(
-        db,
+
+    books = BookService(db)
+
+    data = await books.list_books(
         status=status,
         uid=user.pkId
     )
@@ -254,7 +260,7 @@ async def offline_book(
     下架书籍（逻辑删除）
     """
     service = BookService(db)
-    result = await service.offline_book(db, bid=req.bid, uid=user.pkId)
+    result = await service.offline_book(bid=req.bid, uid=user.pkId)
 
     return ResponseUtil.success(data=result)
 
@@ -270,6 +276,6 @@ async def hard_delete_book(
     真正删除书籍接口
     """
     service = BookService(db)
-    result = await service.hard_delete_book(db, bid=req.bid, uid=user.pkId)
+    result = await service.hard_delete_book(bid=req.bid, uid=user.pkId)
 
     return ResponseUtil.success(data=result)

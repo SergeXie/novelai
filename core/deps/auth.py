@@ -9,6 +9,7 @@ from common.config.get_db import get_db
 from common.exception.lzsd_exception import AuthException
 from core.deps.token_utils import TokenManager
 from core.entity.do.books import Book
+from core.entity.schemas import GenerateRequest
 from core.entity.vo.user_vo import TokenData
 from dao.book_dao import BookDAO
 from dao.user_dao import UserDAO
@@ -86,12 +87,15 @@ async def get_login_user(authorization: str = Header(None, alias="authorization"
 
 
 async def check_book_owner(
-        bid: str = Body(...),
-        db: AsyncSession = Depends(get_db),
-        user=Depends(get_login_user)
+    request: GenerateRequest,   # ✅ 直接拿整个请求体
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_login_user)
 ) -> Book:
     book_dao = BookDAO(db)
-    book = await book_dao.get_book_by_bid(user_id=user.pkId, bid=bid)
+    book = await book_dao.get_book_by_bid(
+        user_id=user.pkId,
+        bid=request.bid
+    )
 
     if not book:
         raise HTTPException(

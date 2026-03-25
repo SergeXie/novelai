@@ -41,7 +41,7 @@ async def generate(
         request: GenerateRequest,
         background_tasks: BackgroundTasks,
         db=Depends(get_db),
-        book:Book=Depends(check_book_owner),
+        book: Book=Depends(check_book_owner),
         user=Depends(get_login_user),
 ):
     """
@@ -57,8 +57,7 @@ async def generate(
     temperature = request.temperature
 
     prompt_service = PromptService(db=db)
-    final_prompt = prompt_service.generate_prompt_by_nodes(user_id=user.id, bid=bid, ids=correlation)
-
+    final_prompt = await prompt_service.generate_prompt_by_nodes(user_id=user.pkId, bid=bid, ids=correlation)
     ai_service = AIService(db=db)
     request_id = await ai_service.prepare_and_record_request(
         user_id=user.pkId,
