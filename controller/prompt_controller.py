@@ -53,7 +53,7 @@ async def get_contentTools(db: AsyncSession = Depends(get_db), user=Depends(get_
 @promptController.get("/get_book_creation_tool", name="获取创建作品AI工具")
 async def get_book_creation(db: AsyncSession = Depends(get_db)):
     prompt_service = PromptService(db)
-    data = []
+    data = dict()
     tool = await prompt_service.get_tool_by_key("FhaOjVZT456JWH3P")
     if tool:
         data["title"] = PromptRegistryResp.model_validate(tool)
