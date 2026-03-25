@@ -48,8 +48,8 @@ async def add_chapter(
 
     content = req.content if req.content else None
 
-    chapter = await BookService.add_chapter(
-        db,
+    book_service = BookService(db=db)
+    chapter = await book_service.add_chapter(
         uid=user.pkId,
         bid=req.bid,
         parent_id=req.parent_id,
@@ -86,8 +86,8 @@ async def delete_book_node(
     """
     删除节点（包含子树）
     """
-    result = await BookService.delete_node_(
-        db,
+    book_service = BookService(db)
+    result = await book_service.delete_node_(
         bid=req.bid,
         node_id=req.id,
         uid=user.pkId
@@ -204,9 +204,7 @@ async def create_book(
     创建书籍（自动初始化树结构）
     """
     service = BookService(db)
-
     book = await service.create_book_with_tree(
-        db,
         title=req.title,
         description=req.description,
         uid=user.pkId,
@@ -232,7 +230,6 @@ async def edit_book(
     service = BookService(db)
 
     book = await service.edit_book(
-        db,
         template_id=req.template_id,
         bid=req.bid,
         uid=user.pkId,

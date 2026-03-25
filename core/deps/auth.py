@@ -1,17 +1,17 @@
 import jwt
-from fastapi import Depends, Header
-from jwt import InvalidTokenError
+from fastapi import Depends, Header, Body, HTTPException
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette import status
 
 from common.config.config import settings
 from common.config.get_db import get_db
-from common.exception.lzsd_exception import ServiceWarning, AuthException
+from common.exception.lzsd_exception import AuthException
 from core.deps.token_utils import TokenManager
-from core.entity.do.users_do import AccountStatus, OnlineStatus
+from core.entity.do.books import Book
 from core.entity.vo.user_vo import TokenData
+from dao.book_dao import BookDAO
 from dao.user_dao import UserDAO
-from fastapi import Request
 
 
 # async def get_login_user(
@@ -32,12 +32,24 @@ from fastapi import Request
 #     return user
 
 async def get_login_user(authorization: str = Header(None, alias="authorization"),
+                         dev: str = Header(None, alias="dev"),
                          query_db: AsyncSession = Depends(get_db)):
 
     try:
         token = authorization
         if not token:
             raise AuthException(message='Not authorization')
+
+        # --- 调试模式后门 ---
+        # 如果开启了调试模式，且 Token 不是以 Bearer 开头，尝试将其视作 account 直接查询
+        if settings.ENV_MODE == "development":
+            if dev:
+                # 调试时直接在 Header 填入用户账号，如 "test"
+                query_user = await UserDAO.get_by_account(query_db, account=dev)
+                if query_user:
+                    return query_user
+        # ------------------
+
         if token.startswith('@Bearer'):
             return
         else:
@@ -53,7 +65,7 @@ async def get_login_user(authorization: str = Header(None, alias="authorization"
 
         token_data = TokenData(uuid=uuid)
 
-    except InvalidTokenError:
+    except Exception as e:
         logger.warning('用户凭证已失效，请重新登录！')
         raise AuthException(data='', message='用户token已失效，请重新登录')
 
@@ -71,3 +83,19 @@ async def get_login_user(authorization: str = Header(None, alias="authorization"
     else:
         logger.warning('用户凭证已失效，请重新登录')
         raise AuthException(data='', message='用户凭证已失效，请重新登录！')
+
+
+async def check_book_owner(
+        bid: str = Body(...),
+        db: AsyncSession = Depends(get_db),
+        user=Depends(get_login_user)
+) -> Book:
+    book_dao = BookDAO(db)
+    book = await book_dao.get_book_by_bid(user_id=user.pkId, bid=bid)
+
+    if not book:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="书籍不存在或无权访问"
+        )
+    return book

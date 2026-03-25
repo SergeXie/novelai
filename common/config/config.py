@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     # 不设置默认值，强制要求环境变量中有 DATABASE_URL
     DATABASE_URL: str = Field(alias="DATABASE_URL")
 
+    ENV_MODE: str = Field(alias="ENV_MODE")
+
     # --- 用户级别限制 ---
     USER_DAILY_TOKEN_LIMIT: int = Field(alias="USER_DAILY_TOKEN_LIMIT")
     SINGLE_REQUEST_TOKEN_LIMIT: int = Field(alias="SINGLE_REQUEST_TOKEN_LIMIT")
@@ -42,10 +44,10 @@ class Settings(BaseSettings):
     # Pydantic 会自动寻找以 DEEPSEEK_ 开头和 OPENAI_ 开头的环境变量
     deepseek: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
     doubao: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
-
     free: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
     doubaoplus: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
     claude: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
+    gemini: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
 
     # 读取环境变量，设置默认值为空字符串
     ai_system_prompt: str = Field(default="", alias="AI_SYSTEM_PROMPT")
