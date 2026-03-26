@@ -4,6 +4,7 @@ from typing import List, Optional
 from sqlalchemy import select, and_, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.utils.text_util import strip_html_tags
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
 
@@ -12,15 +13,40 @@ class BookDAO:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    # async def get_book_by_bid(self, user_id:int, bid: str) -> Optional[Book]:
-    #     stmt = select(BookNode).where(
-    #         and_(
-    #             BookNode.bid == bid,
-    #             BookNode.uid == user_id
-    #         )
-    #     )
-    #     result = await self.db.execute(stmt)
-    #     return result.scalar_one_or_none()
+    async def get_all_contents_grouped(self, bids: list[str]):
+
+        stmt = select(
+            BookNode.bid,
+            BookNode.content
+        ).where(
+            BookNode.bid.in_(bids)
+        )
+
+        result = await self.db.execute(stmt)
+
+        rows = result.all()
+
+        data_map = {}
+
+        for bid, content in rows:
+            if not content:
+                continue
+
+            data_map.setdefault(bid, []).append(content)
+
+        return data_map
+
+    async def get_contents_by_bid(self, bid: str) -> list[str]:
+
+        stmt = select(BookNode.content).where(
+            BookNode.bid == bid
+        )
+
+        result = await self.db.execute(stmt)
+
+        contents = result.scalars().all()
+
+        return [c for c in contents if c]
 
     async def get_book_nodes(self, bid: str, user_id:int, max_depth: Optional[int] = None) -> List[BookNode]:
         """
@@ -99,6 +125,31 @@ class BookDAO:
 
         result = await self.db.execute(stmt)
         books = result.scalars().all()
+
+        books = list(books)
+
+        if not books:
+            return books
+
+        # 1️⃣ 收集所有 bid
+        bids = [b.bid for b in books]
+
+        # 2️⃣ 一次查所有 content
+        content_map = await self.get_all_contents_grouped(bids)
+
+        # 3️⃣ 计算字数
+        for book in books:
+
+            contents = content_map.get(book.bid, [])
+
+            total = 0
+
+            for content in contents:
+                clean = strip_html_tags(content)
+                total += len(clean)
+
+            book.wordCount = total  # 直接覆盖
+
         return list(books)
 
     async def get_node_by_id(
@@ -134,6 +185,7 @@ class BookDAO:
     async def update_node_content(
             self,
             node: BookNode,
+            book_len: int,
             content: str | None,
             data: dict | None = None,
     ) -> BookNode:
@@ -144,6 +196,9 @@ class BookDAO:
             node.content = content
         if data is not None:
             node.data = data
+        if book_len:
+            node.book_len = book_len
+
         self.db.add(node)
 
         await self.db.commit()

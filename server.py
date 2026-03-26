@@ -27,6 +27,7 @@ async def register_init(app: FastAPI):
 
 def register_app():
     # FastAPI
+    
     app = FastAPI(
         title=settings.TITLE,
         version=settings.VERSION,

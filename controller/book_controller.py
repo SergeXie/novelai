@@ -168,8 +168,9 @@ async def edit_book_node(
         node_id=req.id,
         uid=user.pkId,
         bid=req.bid,
+        book_len=req.len,
         content=req.content,
-        data=req.data,
+        data=req.data
     )
 
     #  显式走 Pydantic v2（方案一）
