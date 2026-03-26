@@ -10,11 +10,9 @@ from common.response.response_util import ResponseUtil
 from core.deps.auth import get_login_user, check_book_owner
 from core.entity.do.books import Book
 from core.entity.vo.ai_model_vo import AiModelResp, DeleteHistoryReq
-from dao.book_dao import BookDAO
 from core.entity.schemas import GenerateRequest
 from service.ai_prompt_service import PromptService
-from service.ai_service import AIService, async_generate_task
-from service.book_service import BookService
+from service.ai_service import AIService
 from service.usage_service import UsageService
 
 aiController = APIRouter()

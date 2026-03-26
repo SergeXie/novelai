@@ -5,6 +5,8 @@ from common.exception.lzsd_exception import ServiceWarning
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
 from core.entity.vo.book_node_schema import NodeTreeSchema
+from core.entity.vo.bool_vo import Character
+from core.enums.node_type import BookNodeCategory
 from dao.book_dao import BookDAO
 from dao.template_dao import TemplateDAO
 
@@ -453,3 +455,22 @@ class BookService:
             "bid": bid,
             "deleted": True
         }
+
+    async def auto_create_book(self, user_id:int, title:str, summary:str, roles:List[Character])->Book:
+        book = await self.create_book_with_tree(
+            title=title,
+            description=summary,
+            uid=user_id,
+            template_id="TPLXIAOSHUO",
+        )
+
+        if book:
+            nodes = await self.book_dao.get_book_nodes(bid=book.bid, user_id=user_id, max_depth=1)
+            node:BookNode = None
+            for node in nodes:
+                if node.type == BookNodeCategory.ROLES.code:
+                    for role in roles:
+                        await self.book_dao.add_child_node(bid=book.bid, uid=user_id, parent_node=node, is_leaf=1, name=role.name, content=role.role)
+
+        return book
+

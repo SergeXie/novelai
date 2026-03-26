@@ -185,7 +185,6 @@ class BookDAO:
         """
         新增章节（自动补正文根节点）
         """
-
         node = BookNode(
             bid=bid,
             uid=uid,
@@ -196,6 +195,43 @@ class BookDAO:
             data=data,
             content=content,
             type=type
+        )
+        self.db.add(node)
+        await self.db.flush()
+        return node
+
+    async def add_child_node(
+            self,
+            uid: int,
+            bid: str,
+            parent_node: BookNode,
+            is_leaf: int,
+            name: str,
+            data: dict | None = None,
+            content: str | None = None,
+            type:int = 0
+    ) -> BookNode:
+        """
+        新增章节（自动补正文根节点）
+        """
+        _depth = 1
+        _parent_id = 0
+        _type = type
+        if parent_node:
+            _parent_id = parent_node.id
+            _depth = parent_node.depth + 1
+            _type = parent_node.type
+
+        node = BookNode(
+            bid=bid,
+            uid=uid,
+            parent_id=_parent_id,
+            name=name,
+            is_leaf=is_leaf,
+            depth=_depth,
+            data=data,
+            content=content,
+            type=_type
         )
         self.db.add(node)
         await self.db.flush()

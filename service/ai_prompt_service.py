@@ -126,7 +126,7 @@ class PromptService:
 
         return "\n\n".join(prompt_segments)
 
-    async def render_prompt_content(self, user_id:int, book:Book, tool_key: str, inputs: dict) -> str:
+    async def render_prompt_content(self, book:Optional[Book], tool_key: str, inputs: dict) -> str:
         # 1. 获取模板配置
         config = await self.dao.get_active_by_key(tool_key)
         if not config:
@@ -146,13 +146,11 @@ class PromptService:
 
         # 3. 关联背景信息拼接 (优化点：将基本信息与节点信息合并)
         if config.isRelated:
-            book_basic_prompt = await self.generate_book_base_prompt(book=book)
-            book_global_prompt = await self.generate_book_global_prompt(book=book)
-            # 拼接顺序：背景设定 -> 前情提要 -> 当前任务指令(渲染后的 template_str)
-            final_content = f"{book_basic_prompt}\n\n{book_global_prompt}\n\n{final_content}"
+            if book:
+                book_basic_prompt = await self.generate_book_base_prompt(book=book)
+                book_global_prompt = await self.generate_book_global_prompt(book=book)
+                # 拼接顺序：背景设定 -> 前情提要 -> 当前任务指令(渲染后的 template_str)
+                final_content = f"{book_basic_prompt}\n\n{book_global_prompt}\n\n{final_content}"
 
         final_content = final_content.strip()
-        print('######################### Final Rendered Prompt #########################')
-        print(final_content)
-
         return final_content

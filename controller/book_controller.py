@@ -9,6 +9,7 @@ from core.deps.auth import get_login_user
 from core.entity.vo.book_node_schema import BookResp, CreateBookReq, BookNodeDetailResp, UpdateBookNodeReq, \
     EditBookNodeReq, EditBookNodeResp, AddChapterResp, AddBookNodeReq, DeleteBookNodeReq, OfflineBookReq, EditBookReq, \
     HardDeleteBookReq
+from core.entity.vo.bool_vo import AutoCreateBookReq
 from service.book_service import BookService
 
 bookController = APIRouter()
@@ -222,6 +223,20 @@ async def create_book(
 
     return ResponseUtil.success(data=resp)
 
+@bookController.post("/book/autoCreate", response_model=BookResp, name="自动创建书籍")
+async def create_book_auto(
+    req: AutoCreateBookReq,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_login_user)
+
+):
+    service = BookService(db)
+    book = await service.auto_create_book(user_id=user.pkId, title=req.title, summary=req.summary, roles=req.characters)
+    if not book:
+        return ResponseUtil.error(msg="未知错误")
+    else:
+        resp = BookResp.model_validate(book)
+        return ResponseUtil.success(data=resp)
 
 @bookController.post("/book/edit", name="编辑书籍信息")
 async def edit_book(
