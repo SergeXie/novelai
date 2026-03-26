@@ -10,6 +10,7 @@ from common.exception.handle import handle_exception
 from controller.ai_controller import aiController
 from controller.book_controller import bookController
 from controller.login_controller import loginController
+from controller.product_controller import productRouter
 from controller.prompt_controller import promptController
 from controller.template_controller import templateController
 from controller.user_controller import userController
@@ -74,7 +75,8 @@ def register_router(app: FastAPI):
         {'router': promptController, 'tags': ['提示词']},
         {'router': bookController, 'tags': ['作品服务接口']},
         {'router': userController, 'tags': ['用户相关接口']},
-        {'router': templateController, 'tags': ['书籍模板类型（作品类型）']}
+        {'router': templateController, 'tags': ['书籍模板类型（作品类型）']},
+        {'router': productRouter, 'tags': ['产品中心']}
     ]
 
     for controller in controller_list:
