@@ -2,6 +2,7 @@ from typing import List, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.exception.lzsd_exception import ServiceWarning
+from common.utils.text_util import strip_html_tags
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
 from core.entity.vo.book_node_schema import NodeTreeSchema
@@ -15,6 +16,22 @@ class BookService:
     def __init__(self, db: AsyncSession):
         self.book_dao = BookDAO(db)
         self.db = db
+
+
+    async def count_book_words(self,bid: str) -> int:
+        """
+        统计书籍字数（去HTML）
+        """
+
+        contents = await self.book_dao.get_contents_by_bid(bid)
+
+        total = 0
+
+        for content in contents:
+            clean_text = strip_html_tags(content)
+            total += len(clean_text)
+
+        return total
 
     async def get_tree(self, bid:str, uid:int, max_depth:Optional[int] = None) -> List[NodeTreeSchema]:
         tree = []
@@ -239,12 +256,12 @@ class BookService:
 
         return node
 
-
     async def update_book_node_content(
             self,
             node_id: int,
             uid: int,
             bid: str,
+            book_len: int,
             content: str | None,
             data: dict | None = None,
     ) -> BookNode:
@@ -262,10 +279,10 @@ class BookService:
 
         return await self.book_dao.update_node_content(
             node=node,
+            book_len=book_len,
             content=content,
             data=data,
         )
-
 
     async def edit_book_node(
             self,

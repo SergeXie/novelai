@@ -39,6 +39,7 @@ class BookNode(Base):
 
     depth: Mapped[int] = mapped_column(Integer)
     is_leaf: Mapped[int] = mapped_column(Integer)
+    book_len: Mapped[int] = mapped_column(Integer)
     parent_id: Mapped[Optional[int]] = mapped_column(BigInteger, index=True)
     createTime: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updateTime: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

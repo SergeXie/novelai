@@ -58,6 +58,23 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 43200
     jwt_redis_expire_minutes: int = 30
 
+    # ==================== 支付配置：支付宝 ====================
+
+    ALIPAY_APP_ID: str = Field(alias="ALIPAY_APP_ID")
+    ALIPAY_PRIVATE_KEY: str = Field(alias="ALIPAY_PRIVATE_KEY")
+    ALIPAY_PUBLIC_KEY: str = Field(alias="ALIPAY_PUBLIC_KEY")
+
+    ALIPAY_NOTIFY_URL: str = Field(alias="ALIPAY_NOTIFY_URL")
+    ALIPAY_RETURN_URL: str = Field(alias="ALIPAY_RETURN_URL")
+    ALIPAY_GATEWAY: str = Field(alias="ALIPAY_GATEWAY")
+
+    # ==================== 支付配置：微信 ====================
+
+    WECHAT_APP_ID: str = Field(alias="WECHAT_APP_ID", default="")
+    WECHAT_MCH_ID: str = Field(alias="WECHAT_MCH_ID", default="")
+    WECHAT_API_KEY: str = Field(alias="WECHAT_API_KEY", default="")
+    WECHAT_NOTIFY_URL: str = Field(alias="WECHAT_NOTIFY_URL", default="")
+
     @field_validator("ai_system_prompt", mode="after")
     @classmethod
     def format_line_breaks(cls, v: str) -> str:

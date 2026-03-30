@@ -18,6 +18,7 @@ venv.bak/
 dist/
 build/
 .eggs/
+test
 *.whl
 demo/
 /novelai_envs
