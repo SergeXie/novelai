@@ -82,13 +82,14 @@ async def register(
     await db.commit()
     await db.refresh(user)
 
-    return {
+    data =  {
         "pkId": user.pkId,
         "uuid": user.uuid,
         "account": user.account,
         "nickname": user.nickname
     }
 
+    return ResponseUtil.success(data=data)
 
 @loginController.post("/user/changePwd", name="修改密码")
 async def change_password(

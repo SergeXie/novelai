@@ -1,8 +1,7 @@
 from fastapi import APIRouter, Depends
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.requests import Request
-
+from fastapi import Request
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_login_user
@@ -11,6 +10,7 @@ from core.entity.vo.product_schema_vo import ProductListResponse
 from service.order_service import OrderService
 from service.payment.payment_service import PaymentService
 from service.product_service import ProductService
+from urllib.parse import parse_qs
 
 productRouter = APIRouter(prefix="/order")
 
@@ -66,20 +66,22 @@ async def alipay_callback(request: Request, db: AsyncSession = Depends(get_db)):
     """
     支付宝异步回调
     """
-    data = await request.form()
-    data = dict(data)
+    req_json = await request.json()
 
-    logger.info(f"[回调] 支付宝回调数据: {data}")
+    raw_body = req_json
 
-    try:
-        service = PaymentService()
-        result = await service.handle_alipay_callback(db, data)
+    logger.info(f"🔥 raw_body: {raw_body}")
 
-        if result:
-            return "success"
-        else:
-            return "fail"
 
-    except Exception as e:
-        logger.error(f"[回调] 处理失败 err={e}")
+    # try:
+    service = PaymentService()
+    result = await service.handle_alipay_callback(db, raw_body)
+
+    if result:
+        return "success"
+    else:
         return "fail"
+
+    # except Exception as e:
+    #     logger.error(f"[回调] 处理失败 err={e}")
+    #     return "fail"
