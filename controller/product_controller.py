@@ -7,6 +7,7 @@ from common.response.response_util import ResponseUtil
 from core.deps.auth import get_login_user
 from core.entity.vo.order_schema_vo import CreateOrderRequest, CreateOrderResponse
 from core.entity.vo.product_schema_vo import ProductListResponse
+from service.account_service import AccountService
 from service.order_service import OrderService
 from service.payment.payment_service import PaymentService
 from service.product_service import ProductService
@@ -14,6 +15,19 @@ from urllib.parse import parse_qs
 
 productRouter = APIRouter(prefix="/order")
 
+
+@productRouter.get("/amounts")
+async def get_account_info(
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_login_user),
+):
+    """
+    我的资产信息
+    """
+
+    data = await AccountService.get_account_info(db, user.pkId)
+
+    return ResponseUtil.success(data=data)
 
 @productRouter.get("/history", name="历史订购")
 async def get_orders_history(

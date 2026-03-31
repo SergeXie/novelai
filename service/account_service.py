@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.exception.lzsd_exception import ServiceWarning
 from core.entity.do.token_usage_log_do import TokenUsageLog
 from core.entity.do.user_account_do import UserAccount, AccountLog
+from core.entity.vo.user_vo import AccountInfoResponse
 from dao.membership_dao import MembershipDAO
 from dao.package_dao import PackageDAO
 
@@ -15,6 +16,49 @@ class AccountService:
     """
     账户服务（发权益）
     """
+
+    @staticmethod
+    async def get_account_info(db: AsyncSession, uid: int):
+        """
+        获取用户资产信息
+        """
+
+        # ==================== 1. 获取账户 ====================
+        account: UserAccount = await db.get(UserAccount, uid)
+
+        if not account:
+            #  自动初始化（推荐）
+            return dict()
+
+        # ==================== 2. 获取会员配置 ====================
+
+        membership = await MembershipDAO.get_by_code(db, account.level_code)
+
+        # ==================== 3. 计算总余额 ====================
+
+        total_balance = account.monthly_balance + account.permanent_balance
+
+        # ==================== 4. 处理权益 ====================
+
+        unlocked_models = []
+        extra_privileges = {}
+
+        if membership:
+            unlocked_models = membership.unlocked_models or []
+            extra_privileges = membership.extra_privileges or {}
+
+        # ==================== 5. 返回 ====================
+        return AccountInfoResponse(
+            level=account.level_code,
+            level_name=membership.level_name if membership else "免费版",
+            expire_at=account.expire_at,
+
+            monthly_balance=account.monthly_balance,
+            permanent_balance=account.permanent_balance,
+            total_balance=total_balance,
+            unlocked_models=unlocked_models,
+            extra_privileges=extra_privileges
+        )
 
     @staticmethod
     async def grant_order_benefits(db, order):
@@ -36,8 +80,9 @@ class AccountService:
         account = await db.get(UserAccount, order.uid)
 
         if not account:
+            #  自动初始化
             logger.error(f"[权益] 用户账户不存在 uid={order.uid}")
-            raise ServiceWarning("用户账户不存在")
+            account = await AccountService.init_account(db, order.uid)
 
         # ==================== 2. 根据订单类型分发 ====================
 
@@ -172,21 +217,18 @@ class AccountService:
 
         account = UserAccount(
             uid=uid,
-            level_code="basic",  # 默认基础会员
+            level_code="free",  # 默认免费会员
             expire_at=None,
-
             monthly_balance=0,
             permanent_balance=0,
-
             total_consumed=0,
             last_reset_at=None,
-
             version=0,
             updated_at=datetime.utcnow()
         )
 
         db.add(account)
 
-        logger.info(f"[账户] 创建成功 uid={uid}")
+        logger.info(f"[账户权益] 创建成功 uid={uid}")
 
         return account
