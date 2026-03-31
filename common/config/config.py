@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     doubaoplus: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
     claude: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
     gemini: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
+    gpt: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
+    zhipu: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
 
     # 读取环境变量，设置默认值为空字符串
     ai_system_prompt: str = Field(default="", alias="AI_SYSTEM_PROMPT")
