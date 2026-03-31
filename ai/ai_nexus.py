@@ -7,8 +7,10 @@ from ai.adapters.deep_seek import DeepSeekAdapter
 from ai.adapters.doubao import DoubaoAdapter
 from ai.adapters.doubao_plus import DoubaoPlusAdapter
 from ai.adapters.enums import AIProvider
+from ai.adapters.gpt import GPTAdapter
 from ai.adapters.ollama import OllamaAdapter
 from ai.adapters.gemini import GeminiAdapter
+from ai.adapters.zhipu import ZhipuAdapter
 from common.config.config import settings
 
 
@@ -67,6 +69,8 @@ class AINexus:
             AIProvider.DOUBAOPLUS: DoubaoPlusAdapter(),
             AIProvider.CLAUDE: ClaudeAdapter(),
             AIProvider.GEMINI: GeminiAdapter(),
+            AIProvider.GPT: GPTAdapter(),
+            AIProvider.ZHIPU: ZhipuAdapter(),
         }
 
     # 建议使用忽略大小写的正则匹配

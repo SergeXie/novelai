@@ -11,11 +11,11 @@ from dao.ai_log_dao import AILogDAO
 from dao.ai_model_dao import AiModelDAO
 from service.usage_service import UsageService
 
+from service.ai_service import AIService
 
-class AIService:
-
+class WorkflowService(AIService):
     def __init__(self, db: AsyncSession):
-        self.db = db
+        super().__init__(db)
 
     async def list_models(self, only_enabled: bool = True):
         """
@@ -53,8 +53,11 @@ class AIService:
         request_id = uuid.uuid4().hex
         if correlation is None:
             correlation = []
+        # print(user_prompt)
+        # return request_id
 
         usage_service = UsageService(self.db)
+        # 1. 校验配额
         await usage_service.check_quota_or_raise(
             user_id=user_id,
             current_request_len=len(user_prompt)
@@ -63,6 +66,7 @@ class AIService:
         ai_provider = AIProvider.from_level(level)
         input_user_prompt = user_prompt
 
+        # 3. 初始存证（此时 output_content 为空）
         await usage_service.record(
             user_id=user_id,
             request_id=request_id,
@@ -70,16 +74,17 @@ class AIService:
             node_ids=correlation,
             bid=bid,
             origin_prompt=origin_prompt,
-            system_prompt="",
+            system_prompt="",  # 初始为空
             user_prompt=input_user_prompt,
             temperature=temperature,
             output_content="",
             action_type=action_type,
         )
 
+        # 4. 第二阶段：将耗时的 AI 生成丢入后台任务，不阻塞当前响应
         if background_tasks is not None:
             background_tasks.add_task(
-                async_generate_task,
+                async_generate_task,  # 具体的执行函数
                 ai_provider,
                 input_user_prompt,
                 temperature=temperature,
@@ -88,50 +93,24 @@ class AIService:
 
         return request_id
 
-
-def _should_retry_with_level2(error: Exception) -> bool:
-    """
-    命中特定 Gemini 渠道/模型不可用错误时，降级到 level=2 重试
-    """
-    error_text = str(error)
-    return (
-        "model_not_found" in error_text
-        and "No available channel for model" in error_text
-        and "gemini" in error_text.lower()
-    )
-
-
 async def async_generate_task(ai_provider, input_user_prompt, temperature, request_id):
     """后台异步执行 AI 调用并更新结果"""
     system_prompt, output_prompt = "", ""
     try:
+        # 真正的 AI 耗时操作
         nexus = get_ai_nexus()
-        try:
-            system_prompt, output_prompt = await nexus.generate_novel_text(
-                provider=ai_provider,
-                user_prompt=input_user_prompt,
-                temperature=temperature
-            )
-        except Exception as e:
-            if _should_retry_with_level2(e):
-                fallback_provider = AIProvider.from_level(2)
-                logger.warning(
-                    f"Request {request_id} 命中特定 Gemini 渠道错误，改用 level=2 重试。原始错误: {e}"
-                )
-                system_prompt, output_prompt = await nexus.generate_novel_text(
-                    provider=fallback_provider,
-                    user_prompt=input_user_prompt,
-                    temperature=temperature
-                )
-            else:
-                raise
-
-        status = 1  # 成功
+        system_prompt, output_prompt = await nexus.generate_novel_text(
+            provider=ai_provider,
+            user_prompt=input_user_prompt,
+            temperature=temperature
+        )
+        status = 1 # 成功
     except Exception as e:
         output_prompt = f"Error: {str(e)}"
-        status = 0  # 失败
+        status = 0 # 失败
         logger.error(f"Async Generation Error for {request_id}: {output_prompt}")
 
+    # 使用新的数据库上下文更新结果
     async with get_db_context() as db:
         usage_service = UsageService(db=db)
         await usage_service.update_output_content_by_request_id(request_id, output_prompt)
