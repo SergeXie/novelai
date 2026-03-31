@@ -90,9 +90,6 @@ async def register(
         "nickname": user.nickname
     }
 
-    # 初始化账户权益
-    account = await AccountService.init_account(db, user.pkId)
-
     return ResponseUtil.success(data=data)
 
 
@@ -113,18 +110,3 @@ async def change_password(
     )
 
     return ResponseUtil.success(msg="密码修改成功")
-
-
-@loginController.post("/initAccount")
-async def init_account(uid: str, db: AsyncSession = Depends(get_db)):
-    """
-    初始化用户账户（可手动触发）
-    """
-
-    async with db.begin():
-        account = await AccountService.init_account(db, uid)
-
-    return {
-        "uid": account.uid,
-        "level": account.level_code
-    }
