@@ -16,7 +16,7 @@ from urllib.parse import parse_qs
 productRouter = APIRouter(prefix="/order")
 
 
-@productRouter.get("/amounts")
+@productRouter.get("/amounts", name="我的资产")
 async def get_account_info(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_login_user),

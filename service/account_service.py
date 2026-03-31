@@ -28,7 +28,10 @@ class AccountService:
 
         if not account:
             #  自动初始化（推荐）
-            return dict()
+            return AccountInfoResponse(
+                level="free",
+                level_name="免费版",
+            )
 
         # ==================== 2. 获取会员配置 ====================
 
@@ -49,10 +52,9 @@ class AccountService:
 
         # ==================== 5. 返回 ====================
         return AccountInfoResponse(
-            level=account.level_code,
+            level=account.level_code if account else "free",
             level_name=membership.level_name if membership else "免费版",
-            expire_at=account.expire_at,
-
+            expire_at=account.expire_at if account else None,
             monthly_balance=account.monthly_balance,
             permanent_balance=account.permanent_balance,
             total_balance=total_balance,
