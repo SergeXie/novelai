@@ -31,8 +31,6 @@ class GPTAdapter(BaseAIAdapter):
             logger.error(info)
             raise Exception(info)
         
-        print('@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@')
-
         try:
             
             response = await asyncio.to_thread(
