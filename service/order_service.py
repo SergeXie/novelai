@@ -47,7 +47,7 @@ class OrderService:
 
         # ==================== 2. 查未支付订单 ====================
         pending_order = await OrderDAO.get_pending_order(
-            db, uid, order_type, target_code
+            db, uid, order_type, target_code, pay_method
         )
 
         now = datetime.datetime.utcnow()

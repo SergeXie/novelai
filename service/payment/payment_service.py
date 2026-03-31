@@ -54,14 +54,14 @@ class PaymentService:
         """
 
         logger.info("[回调] 开始处理支付宝回调")
-
+        logger.info(f"sign字段: {data.get('sign')}")
         # ==================== 1. 验签 ====================
         signature = data.pop("sign", None)
 
         service = self.payment_map["alipay"]
 
         success = service.alipay.verify(data, signature)
-
+        print("success:{}".format(success))
         if not success:
             logger.error("[回调] 验签失败")
             return False

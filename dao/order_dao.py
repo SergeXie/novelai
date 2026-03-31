@@ -15,7 +15,8 @@ class OrderDAO:
         db: AsyncSession,
         uid: str,
         order_type: str,
-        target_code: str
+        target_code: str,
+        pay_method:str
     ):
         """
         查询用户未支付订单（防重复用）
@@ -31,6 +32,7 @@ class OrderDAO:
                 Order.uid == uid,
                 Order.order_type == order_type,
                 Order.target_code == target_code,
+                Order.pay_method == pay_method,
                 Order.status == "PENDING"
             )
             .order_by(Order.created_at.desc())

@@ -52,7 +52,7 @@ async def create_order(
     - 支持会员/Token包
     """
 
-    return await OrderService.create_order(
+    result = await OrderService.create_order(
         db=db,
         uid=user.pkId,
         order_type=req.order_type,
@@ -60,28 +60,27 @@ async def create_order(
         pay_method=req.pay_method
     )
 
+    return ResponseUtil.success(data=result)
+
 
 @productRouter.post("/callback")
 async def alipay_callback(request: Request, db: AsyncSession = Depends(get_db)):
     """
     支付宝异步回调
     """
-    req_json = await request.json()
 
-    raw_body = req_json
+    async with db.begin():  #  事务开始
 
-    logger.info(f"🔥 raw_body: {raw_body}")
+        req_json = await request.json()
 
+        raw_body = req_json
 
-    # try:
-    service = PaymentService()
-    result = await service.handle_alipay_callback(db, raw_body)
+        logger.info(f"支付宝回调参数: {raw_body}")
 
-    if result:
-        return "success"
-    else:
-        return "fail"
+        service = PaymentService()
+        result = await service.handle_alipay_callback(db, raw_body)
 
-    # except Exception as e:
-    #     logger.error(f"[回调] 处理失败 err={e}")
-    #     return "fail"
+        if result:
+            return "success"
+        else:
+            return "fail"
