@@ -19,6 +19,7 @@ dist/
 build/
 .eggs/
 test
+keys
 *.whl
 demo/
 /novelai_envs

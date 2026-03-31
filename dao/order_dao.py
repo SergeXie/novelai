@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import select
+from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.entity.do.order_do import Order
@@ -9,13 +9,44 @@ class OrderDAO:
     """
     订单DAO层
     """
+    @staticmethod
+    async def list_orders(
+        db: AsyncSession,
+        uid: str,
+        page: int = 1,
+        page_size: int = 10
+    ):
+        """
+        查询订单列表（分页）
+        """
+
+        # ==================== 查询数据 ====================
+
+        stmt = (
+            select(Order)
+            .where(Order.uid == uid)
+            .order_by(desc(Order.created_at))
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+
+        result = await db.execute(stmt)
+        records = result.scalars().all()
+
+        # ==================== 查询总数 ====================
+
+        count_stmt = select(func.count()).where(Order.uid == uid)
+        total = (await db.execute(count_stmt)).scalar()
+
+        return records, total
 
     @staticmethod
     async def get_pending_order(
         db: AsyncSession,
         uid: str,
         order_type: str,
-        target_code: str
+        target_code: str,
+        pay_method:str
     ):
         """
         查询用户未支付订单（防重复用）
@@ -31,6 +62,7 @@ class OrderDAO:
                 Order.uid == uid,
                 Order.order_type == order_type,
                 Order.target_code == target_code,
+                Order.pay_method == pay_method,
                 Order.status == "PENDING"
             )
             .order_by(Order.created_at.desc())

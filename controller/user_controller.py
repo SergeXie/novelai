@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Mapped
+
 from common.config.config import settings
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_login_user
+from database.db_mysql import Base
 from service.usage_service import UsageService
 
 userController = APIRouter()

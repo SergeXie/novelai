@@ -1,4 +1,7 @@
-from pydantic import BaseModel
+from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel, field_serializer
 
 
 class CreateOrderRequest(BaseModel):
@@ -18,3 +21,34 @@ class CreateOrderResponse(BaseModel):
     pay_method: str
     amount: float
     pay_url: str
+
+
+class OrderListItem(BaseModel):
+    """
+    历史订单项
+    """
+
+    order_no: str
+    order_type: str
+    name: str
+    total_amount: float
+    pay_amount: float
+    status: str
+    paid_at: Optional[datetime] = None
+    pay_method:str
+
+    @field_serializer('paid_at')
+    def serialize_paid_at(self, paid_at: Optional[datetime], _info):
+        if paid_at is None:
+            return None
+        # 这里定义你想要的格式，例如：2026-03-31 11:05:22
+        return paid_at.strftime('%Y-%m-%d %H:%M:%S')
+
+
+class OrderListResponse(BaseModel):
+    """
+    订单列表返回
+    """
+
+    list: list[OrderListItem]
+    total: int

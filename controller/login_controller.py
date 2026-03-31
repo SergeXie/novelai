@@ -10,6 +10,7 @@ from core.deps.token_utils import TokenManager
 from core.entity.do.users_do import User
 from core.entity.vo.login_vo import UserLogin
 from core.entity.vo.user_schema import ChangePasswordReq
+from service.account_service import AccountService
 from service.user_service import UserService
 from pydantic import BaseModel, Field
 
@@ -82,12 +83,17 @@ async def register(
     await db.commit()
     await db.refresh(user)
 
-    return {
+    data =  {
         "pkId": user.pkId,
         "uuid": user.uuid,
         "account": user.account,
         "nickname": user.nickname
     }
+
+    # 初始化账户权益
+    account = await AccountService.init_account(db, user.pkId)
+
+    return ResponseUtil.success(data=data)
 
 
 @loginController.post("/user/changePwd", name="修改密码")
@@ -107,3 +113,18 @@ async def change_password(
     )
 
     return ResponseUtil.success(msg="密码修改成功")
+
+
+@loginController.post("/initAccount")
+async def init_account(uid: str, db: AsyncSession = Depends(get_db)):
+    """
+    初始化用户账户（可手动触发）
+    """
+
+    async with db.begin():
+        account = await AccountService.init_account(db, uid)
+
+    return {
+        "uid": account.uid,
+        "level": account.level_code
+    }

@@ -71,10 +71,10 @@ class UserService:
             expires_delta=access_token_expires,
         )
 
-        # 1️⃣ 更新在线状态
+        # 1️ 更新在线状态
         user.onlineStatus = OnlineStatus.ONLINE
 
-        # 3️⃣ 提交（和生成 token 在同一个事务里）
+        # 3️ 提交（和生成 token 在同一个事务里）
         await db.flush()
 
         # 登录成功（返回你需要的最小信息）

@@ -1,4 +1,6 @@
 from loguru import logger
+
+from common.utils.time_format_util import parse_and_format_date
 from dao.order_dao import OrderDAO
 from service.account_service import AccountService
 from service.payment.alipay_service import AlipayService
@@ -54,14 +56,13 @@ class PaymentService:
         """
 
         logger.info("[回调] 开始处理支付宝回调")
-
+        logger.info(f"sign字段: {data.get('sign')}")
         # ==================== 1. 验签 ====================
         signature = data.pop("sign", None)
-
         service = self.payment_map["alipay"]
 
         success = service.alipay.verify(data, signature)
-
+        print("success:{}".format(success))
         if not success:
             logger.error("[回调] 验签失败")
             return False
@@ -71,6 +72,8 @@ class PaymentService:
         # ==================== 2. 获取订单 ====================
         order_no = data.get("out_trade_no")
         trade_status = data.get("trade_status")
+        gmt_payment = data.get("gmt_payment")  # 用户付款成功时间
+        total_amount = data.get("total_amount")
 
         if trade_status not in ("TRADE_SUCCESS", "TRADE_FINISHED"):
             logger.warning(f"[回调] 非成功状态: {trade_status}")
@@ -87,12 +90,20 @@ class PaymentService:
             logger.info(f"[回调] 订单已处理 order_no={order_no}")
             return True
 
+        if float(total_amount) != float(order.pay_amount):
+            logger.error(f"[回调] 金额不一致 order_no={order.order_no}")
+            return False
+
         # ==================== 4. 更新订单 ====================
         order.status = "PAID"
         order.third_party_no = data.get("trade_no")
 
-        logger.info(f"[回调] 订单更新为已支付 order_no={order_no}")
+        if gmt_payment:
+            order.paid_at = parse_and_format_date(gmt_payment)
+        else:
+            order.paid_at = parse_and_format_date()
 
+        logger.info(f"[回调] 订单支付完成 order_no={order.order_no}, paid_at={order.paid_at}")
         # ==================== 5. 发放权益 ====================
         await AccountService.grant_order_benefits(db, order)
 

@@ -1,8 +1,7 @@
 from fastapi import APIRouter, Depends
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.requests import Request
-
+from fastapi import Request
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_login_user
@@ -11,9 +10,29 @@ from core.entity.vo.product_schema_vo import ProductListResponse
 from service.order_service import OrderService
 from service.payment.payment_service import PaymentService
 from service.product_service import ProductService
+from urllib.parse import parse_qs
 
 productRouter = APIRouter(prefix="/order")
 
+
+@productRouter.get("/history", name="历史订购")
+async def get_orders_history(
+    page: int = 1,
+    pageSize: int = 20,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_login_user),
+):
+    """
+    历史订单列表
+    """
+
+    data, total = await OrderService.get_order_list(db, user.pkId, page, pageSize)
+
+    return ResponseUtil.success(data=data, dict_content={
+            "page": page,
+            "pageSize": pageSize,
+            "total": total
+        })
 
 @productRouter.get("/plans", response_model=ProductListResponse, name="产品列表")
 async def get_product_list(
@@ -52,7 +71,7 @@ async def create_order(
     - 支持会员/Token包
     """
 
-    return await OrderService.create_order(
+    result = await OrderService.create_order(
         db=db,
         uid=user.pkId,
         order_type=req.order_type,
@@ -60,26 +79,27 @@ async def create_order(
         pay_method=req.pay_method
     )
 
+    return ResponseUtil.success(data=result)
+
 
 @productRouter.post("/callback")
 async def alipay_callback(request: Request, db: AsyncSession = Depends(get_db)):
     """
     支付宝异步回调
     """
-    data = await request.form()
-    data = dict(data)
 
-    logger.info(f"[回调] 支付宝回调数据: {data}")
+    async with db.begin():  #  事务开始
 
-    try:
+        req_json = await request.json()
+
+        raw_body = req_json
+
+        logger.info(f"支付宝回调参数: {raw_body}")
+
         service = PaymentService()
-        result = await service.handle_alipay_callback(db, data)
+        result = await service.handle_alipay_callback(db, raw_body)
 
         if result:
             return "success"
         else:
             return "fail"
-
-    except Exception as e:
-        logger.error(f"[回调] 处理失败 err={e}")
-        return "fail"
