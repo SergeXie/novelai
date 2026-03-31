@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.exception.lzsd_exception import ServiceWarning
 from core.entity.do.order_do import Order
-from core.entity.vo.order_schema_vo import CreateOrderResponse
+from core.entity.vo.order_schema_vo import CreateOrderResponse, OrderListItem
 from dao.order_dao import OrderDAO
 from dao.product_dao import ProductDAO
 from service.payment.payment_service import PaymentService
@@ -18,6 +18,32 @@ class OrderService:
     """
 
     ORDER_EXPIRE_MINUTES = 30  # 订单过期时间（分钟）
+
+    @staticmethod
+    async def get_order_list(db, uid: str, page: int, page_size: int):
+        """
+        获取订单列表
+        """
+
+        records, total = await OrderDAO.list_orders(db, uid, page, page_size)
+
+        result = []
+
+        for item in records:
+            result.append(
+                OrderListItem(
+                    order_no=item.order_no,
+                    order_type=item.order_type,
+                    name=item.snapshot_name,  #  用快照名称
+                    total_amount=item.total_amount,
+                    pay_amount=item.pay_amount,
+                    status=item.status,
+                    paid_at=item.paid_at,
+                    pay_method=item.pay_method
+                )
+            )
+
+        return result, total
 
     @staticmethod
     async def create_order(
@@ -128,6 +154,7 @@ class OrderService:
             pay_amount=amount,
             status="PENDING",
             pay_method=pay_method
+
         )
 
         await OrderDAO.create_order(db, order)

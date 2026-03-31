@@ -90,6 +90,9 @@ async def register(
         "nickname": user.nickname
     }
 
+    # 初始化账户权益
+    account = await AccountService.init_account(db, user.pkId)
+
     return ResponseUtil.success(data=data)
 
 

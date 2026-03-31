@@ -15,6 +15,25 @@ from urllib.parse import parse_qs
 productRouter = APIRouter(prefix="/order")
 
 
+@productRouter.get("/history", name="历史订购")
+async def get_orders_history(
+    page: int = 1,
+    pageSize: int = 20,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_login_user),
+):
+    """
+    历史订单列表
+    """
+
+    data, total = await OrderService.get_order_list(db, user.pkId, page, pageSize)
+
+    return ResponseUtil.success(data=data, dict_content={
+            "page": page,
+            "pageSize": pageSize,
+            "total": total
+        })
+
 @productRouter.get("/plans", response_model=ProductListResponse, name="产品列表")
 async def get_product_list(
     db: AsyncSession = Depends(get_db),

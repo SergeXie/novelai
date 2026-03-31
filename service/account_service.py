@@ -51,6 +51,8 @@ class AccountService:
             logger.error(f"[权益] 未知订单类型: {order.order_type}")
             raise ServiceWarning("未知订单类型")
 
+        logger.info(f"[DEBUG] before: m={account.monthly_balance}, p={account.permanent_balance}")
+        logger.info(f"[DEBUG] after: m={account.monthly_balance}, p={account.permanent_balance}")
         logger.info(f"[权益] 发放完成 order_no={order.order_no}")
 
     @staticmethod
@@ -100,6 +102,8 @@ class AccountService:
 
             db.add(log)
 
+            logger.info(f"[DEBUG] before: m={account.monthly_balance}, p={account.permanent_balance}")
+            logger.info(f"[DEBUG] after: m={account.monthly_balance}, p={account.permanent_balance}")
             logger.info(f"[会员] 月度Token +{membership.monthly_token_allowance}")
 
     @staticmethod
@@ -139,7 +143,7 @@ class AccountService:
         db.add(log)
 
     @staticmethod
-    async def init_account(db: AsyncSession, uid: str) -> UserAccount:
+    async def init_account(db: AsyncSession, uid: int) -> UserAccount:
         """
         初始化用户账户（幂等）
 

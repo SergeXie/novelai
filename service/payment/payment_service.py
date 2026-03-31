@@ -57,7 +57,6 @@ class PaymentService:
         logger.info(f"sign字段: {data.get('sign')}")
         # ==================== 1. 验签 ====================
         signature = data.pop("sign", None)
-
         service = self.payment_map["alipay"]
 
         success = service.alipay.verify(data, signature)
@@ -71,6 +70,7 @@ class PaymentService:
         # ==================== 2. 获取订单 ====================
         order_no = data.get("out_trade_no")
         trade_status = data.get("trade_status")
+        gmt_create = data.get("gmt_create")  # 用户付款成功时间
 
         if trade_status not in ("TRADE_SUCCESS", "TRADE_FINISHED"):
             logger.warning(f"[回调] 非成功状态: {trade_status}")
@@ -89,6 +89,7 @@ class PaymentService:
 
         # ==================== 4. 更新订单 ====================
         order.status = "PAID"
+        order.paid_at = gmt_create
         order.third_party_no = data.get("trade_no")
 
         logger.info(f"[回调] 订单更新为已支付 order_no={order_no}")
