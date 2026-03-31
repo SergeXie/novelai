@@ -22,4 +22,5 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "sqlalchemy>=2.0.48",
     "uvicorn>=0.40.0",
+    "zai-sdk>=0.2.2",
 ]
