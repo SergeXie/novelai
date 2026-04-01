@@ -31,7 +31,7 @@ class UserAccount(Base):
         String(32),
         default="basic",
         nullable=False,
-        comment="当前会员等级 basic/pro_monthly/pro_annual/enterprise"
+        comment="当前会员等级 /basic(标准)/pro_monthly(专业年会员)/pro_annual（专业版 ）"
     )
 
     expire_at: Mapped[Optional[datetime]] = mapped_column(
