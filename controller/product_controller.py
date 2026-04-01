@@ -96,7 +96,7 @@ async def create_order(
     return ResponseUtil.success(data=result)
 
 
-@productRouter.post("/callback")
+@productRouter.post("/callback", name="支付宝回调")
 async def alipay_callback(request: Request, db: AsyncSession = Depends(get_db)):
     """
     支付宝异步回调
@@ -117,3 +117,24 @@ async def alipay_callback(request: Request, db: AsyncSession = Depends(get_db)):
             return "success"
         else:
             return "fail"
+
+
+@productRouter.post("/wechatCallback", name="微信支付回调")
+async def wechat_callback(request: Request, db: AsyncSession = Depends(get_db)):
+    """
+    微信支付回调
+    """
+
+    body = await request.json()
+
+    logger.info(f"[微信回调] 原始数据: {body}")
+
+    service = PaymentService()
+
+    result = await service.handle_wechat_callback(db, body)
+
+    if result:
+        # 微信要求返回这个
+        return {"code": "SUCCESS", "message": "成功"}
+    else:
+        return {"code": "FAIL", "message": "失败"}

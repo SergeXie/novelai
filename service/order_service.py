@@ -89,7 +89,7 @@ class OrderService:
 
                 # 重新生成支付链接（关键点）
                 payment_service = PaymentService()
-                pay_url = payment_service.generate_pay_url(pending_order)
+                pay_url = await payment_service.generate_pay_url(pending_order)
 
                 # 未过期 → 直接返回旧订单（防重复）
                 return CreateOrderResponse(
@@ -163,7 +163,7 @@ class OrderService:
 
         # ==================== 生成支付链接 ====================
         payment_service = PaymentService()
-        pay_url = payment_service.generate_pay_url(order)
+        pay_url = await payment_service.generate_pay_url(order)
 
         return CreateOrderResponse(
             order_no=order_no,

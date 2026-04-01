@@ -1,5 +1,10 @@
+import json
+from datetime import datetime
+
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from loguru import logger
 
+from common.config.config import settings
 from common.utils.time_format_util import parse_and_format_date
 from dao.order_dao import OrderDAO
 from service.account_service import AccountService
@@ -23,7 +28,7 @@ class PaymentService:
             "wechat": WechatPayService(),
         }
 
-    def generate_pay_url(self, order) -> str:
+    async def generate_pay_url(self, order) -> str:
         """
         统一生成支付链接入口
 
@@ -40,7 +45,7 @@ class PaymentService:
 
         service = self.payment_map[pay_method]
 
-        pay_url = service.generate_pay_url(order)
+        pay_url = await service.generate_pay_url(order)
 
         logger.info(f"[支付调度] 支付链接生成完成 order_no={order.order_no}")
 
@@ -110,3 +115,103 @@ class PaymentService:
         logger.info(f"[回调] 权益发放完成 order_no={order_no}")
 
         return True
+
+
+    def _decrypt_wechat(self, ciphertext, nonce, associated_data):
+        """
+        微信支付 AES-GCM 解密
+        """
+
+        apiv3_key = settings.WECHATPAY_APIV3_KEY.encode()
+
+        aesgcm = AESGCM(apiv3_key)
+
+        decrypted = aesgcm.decrypt(
+            nonce.encode(),
+            bytes.fromhex(ciphertext) if isinstance(ciphertext, str) else ciphertext,
+            associated_data.encode()
+        )
+
+        return json.loads(decrypted.decode())
+
+    async def handle_wechat_callback(self, db, body: dict) -> bool:
+        """
+        微信支付回调处理
+        """
+
+        logger.info("[微信回调] 开始处理")
+
+        try:
+            # ==================== 1. 获取resource ====================
+
+            resource = body.get("resource")
+            if not resource:
+                logger.error("resource为空")
+                return False
+
+            ciphertext = resource.get("ciphertext")
+            nonce = resource.get("nonce")
+            associated_data = resource.get("associated_data")
+
+            # ==================== 2. 解密 ====================
+
+            data = self._decrypt_wechat(
+                ciphertext,
+                nonce,
+                associated_data
+            )
+
+            logger.info(f"[微信回调] 解密后数据: {data}")
+
+            # ==================== 3. 校验状态 ====================
+
+            if data.get("trade_state") != "SUCCESS":
+                logger.warning(f"[微信回调] 非成功状态: {data.get('trade_state')}")
+                return False
+
+            order_no = data.get("out_trade_no")
+
+            # ==================== 4. 查询订单 ====================
+
+            order = await OrderDAO.get_by_order_no(db, order_no)
+
+            if not order:
+                logger.error(f"[微信回调] 订单不存在: {order_no}")
+                return False
+
+            # ==================== 5. 幂等 ====================
+
+            if order.status == "PAID":
+                logger.info(f"[微信回调] 已处理: {order_no}")
+                return True
+
+            # ==================== 6. 金额校验 ====================
+
+            total = data.get("amount", {}).get("total")  # 分
+            if int(total) != int(order.pay_amount * 100):
+                logger.error("[微信回调] 金额不一致")
+                return False
+
+            # ==================== 7. 更新订单 ====================
+
+            order.status = "PAID"
+            order.third_party_no = data.get("transaction_id")
+
+            # 时间
+            success_time = data.get("success_time")
+            if success_time:
+                order.paid_at = datetime.fromisoformat(success_time.replace("Z", "+00:00"))
+
+            logger.info(f"[微信回调] 订单支付成功: {order_no}")
+
+            # ==================== 8. 发放权益 ====================
+
+            await AccountService.grant_order_benefits(db, order)
+
+            logger.info(f"[微信回调] 权益发放完成: {order_no}")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"[微信回调] 处理异常: {e}")
+            return False
