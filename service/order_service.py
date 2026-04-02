@@ -39,7 +39,8 @@ class OrderService:
                     pay_amount=item.pay_amount,
                     status=item.status,
                     paid_at=item.paid_at,
-                    pay_method=item.pay_method
+                    pay_method=item.pay_method,
+                    created_at=item.created_at,
                 )
             )
 

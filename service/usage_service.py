@@ -76,7 +76,7 @@ class UsageService:
 
         if usage > limit:
             logger.error(f"用户id:{user_id} 今日总额度已耗尽")
-            raise HTTPException(status_code=429, detail="您今日的生成额度已用完")
+            raise HTTPException(status_code=666, detail="您今日的生成额度已用完")
 
     async def record(
             self,

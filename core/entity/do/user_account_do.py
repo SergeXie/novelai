@@ -65,6 +65,13 @@ class UserAccount(Base):
         comment="累计消耗Token总量"
     )
 
+    total_amount: Mapped[int] = mapped_column(
+        BigInteger,
+        default=0,
+        nullable=False,
+        comment="总额度"
+    )
+
     last_reset_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime,
         nullable=True,

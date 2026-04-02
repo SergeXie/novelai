@@ -27,13 +27,10 @@ class AccountService:
         account: UserAccount = await db.get(UserAccount, uid)
 
         if not account:
-            # 每日的额度
-            user_daily_token_limit = settings.USER_DAILY_TOKEN_LIMIT
             #  自动初始化（推荐）
             return AccountInfoResponse(
                 level="free",
-                level_name="免费版",
-                total_amount=user_daily_token_limit
+                level_name="免费版"
 
             )
 
@@ -55,8 +52,8 @@ class AccountService:
             extra_privileges = membership.extra_privileges or {}
 
         # ==================== 5. 返回 ====================
-        # 每日的额度 + 总月度赠送额度 + 永久有效额度
-        user_daily_token_limit = settings.USER_DAILY_TOKEN_LIMIT + account.monthly_balance + account.permanent_balance
+        # 总月度赠送额度 + 永久有效额度
+        user_daily_token_limit = account.monthly_balance + account.permanent_balance
 
         return AccountInfoResponse(
             level=account.level_code,
