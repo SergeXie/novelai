@@ -55,13 +55,17 @@ async def generate(
     temperature = request.temperature
 
     prompt_service = PromptService(db=db)
+    # 用于拼接书籍的基本信息（书名、简介、章节）
     final_prompt = await prompt_service.generate_prompt_by_nodes(user_id=user.pkId, bid=bid, ids=correlation)
     ai_service = AIService(db=db)
+
+    combined_user_prompt = f"{final_prompt}\n{user_prompt}"
+    
     request_id = await ai_service.prepare_and_record_request(
         user_id=user.pkId,
         bid=bid,
         origin_prompt=user_prompt,
-        user_prompt=final_prompt,
+        user_prompt=combined_user_prompt,
         level=level,
         temperature=0.7,
         action_type="generate",

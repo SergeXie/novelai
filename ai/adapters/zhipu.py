@@ -2,7 +2,7 @@ from ai.adapters.base_adapter import BaseAIAdapter
 import asyncio
 
 from loguru import logger
-from zai import ZhipuAiClient
+from openai import OpenAI
 
 from common.config.config import settings
 
@@ -10,8 +10,9 @@ from common.config.config import settings
 class ZhipuAdapter(BaseAIAdapter):
     def __init__(self):
         try:
-            self.client = ZhipuAiClient(
-                api_key=settings.zhipu.api_key
+            self.client = OpenAI(
+                api_key=settings.zhipu.api_key,
+                base_url=settings.zhipu.base_url
             )
         except Exception:
             self.client = None
@@ -33,6 +34,14 @@ class ZhipuAdapter(BaseAIAdapter):
             logger.error(info)
             raise Exception(info)
 
+        system_prompt = (system_prompt or "").strip()
+        user_prompt = (user_prompt or "").strip()
+
+        if not user_prompt:
+            info = "智谱请求失败：user_prompt 不能为空。"
+            logger.error(info)
+            raise ValueError(info)
+
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -43,9 +52,8 @@ class ZhipuAdapter(BaseAIAdapter):
                 self.client.chat.completions.create,
                 model=self.model_name,
                 messages=messages,
-                thinking={"type": "enabled"},
-                max_tokens=max_tokens or self.max_tokens,
-                temperature=temperature or self.temperature,
+                max_tokens=max_tokens if max_tokens is not None else self.max_tokens,
+                temperature=temperature if temperature is not None else self.temperature,
             )
             return response.choices[0].message.content
         except Exception as e:
