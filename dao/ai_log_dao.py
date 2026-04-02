@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 from typing import List, Tuple
 from core.entity.do.generate_log import AiNovelGenerateLog
+from service.token_service import TokenService
 from .base import BaseDAO
 
 class AILogDAO(BaseDAO[AiNovelGenerateLog]):
@@ -72,10 +73,40 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
     ) -> bool:
         """
         根据 request_id 更新生成结果（适配驼峰命名字段）
+        更新生成结果 + 扣Token
         """
         try:
+
             # 计算长度，防止 content 为 None
             content_len = len(content) if content else 0
+
+            # # ==================== 1. 查询原记录 ====================
+            #
+            # stmt_select = select(AiNovelGenerateLog).where(
+            #     AiNovelGenerateLog.requestId == request_id
+            # )
+            # result_ = await self.db.execute(stmt_select)
+            # record = result_.scalars().first()
+            #
+            # if not record:
+            #     return False
+            #
+            # # ==================== 2. 计算token ====================
+            #
+            # input_len = record.requestInputLength or 0
+            # output_len = content_len
+            #
+            # token_amount = input_len + output_len
+            #
+            # # ==================== 3. 扣费 ====================
+            #
+            # if status == 1:  # 成功才扣
+            #     await TokenService.consume_tokens(
+            #         db=self.db,
+            #         uid=record.userId,
+            #         amount=token_amount,
+            #         request_id=request_id
+            #     )
 
             # 构建更新语句
             # 注意：这里的 key 必须与 AiNovelGenerateLog 类中的属性名完全一致

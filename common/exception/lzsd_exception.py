@@ -51,6 +51,16 @@ class ServiceWarning(Exception):
         self.message = message
 
 
+class ServiceWarningSpecial(Exception):
+    """
+    自定义特殊服务警告ServiceWarning
+    """
+
+    def __init__(self, data: Union[str, List[str], None] = None, message: str = None):
+        self.data = data
+        self.message = message
+
+
 class ModelValidatorException(Exception):
     """
     自定义模型校验异常ModelValidatorException

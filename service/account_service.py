@@ -4,6 +4,7 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.config.config import settings
 from common.exception.lzsd_exception import ServiceWarning
 from core.entity.do.token_usage_log_do import TokenUsageLog
 from core.entity.do.user_account_do import UserAccount, AccountLog
@@ -27,10 +28,12 @@ class AccountService:
         account: UserAccount = await db.get(UserAccount, uid)
 
         if not account:
+            # 每日的额度
             #  自动初始化（推荐）
             return AccountInfoResponse(
                 level="free",
                 level_name="免费版",
+
             )
 
         # ==================== 2. 获取会员配置 ====================
@@ -51,6 +54,9 @@ class AccountService:
             extra_privileges = membership.extra_privileges or {}
 
         # ==================== 5. 返回 ====================
+        # 每日的额度 + 总月度赠送额度 + 永久有效额度
+        user_daily_token_limit = account.monthly_balance + account.permanent_balance
+
         return AccountInfoResponse(
             level=account.level_code if account else "free",
             level_name=membership.level_name if membership else "免费版",
@@ -59,7 +65,9 @@ class AccountService:
             permanent_balance=account.permanent_balance,
             total_balance=total_balance,
             unlocked_models=unlocked_models,
-            extra_privileges=extra_privileges
+            extra_privileges=extra_privileges,
+            total_amount = user_daily_token_limit
+
         )
 
     @staticmethod
@@ -194,12 +202,12 @@ class AccountService:
         """
         初始化用户账户（幂等）
 
-        👉 场景：
+         场景：
         - 用户第一次进入系统
         - 用户第一次下单
         - 用户第一次使用AI
 
-        👉 特点：
+         特点：
         ✔ 幂等（多次调用不会重复创建）
         ✔ 默认创建 basic 账户
         ✔ 可扩展（注册送Token等）

@@ -71,11 +71,17 @@ class Settings(BaseSettings):
     ALIPAY_GATEWAY: str = Field(alias="ALIPAY_GATEWAY")
 
     # ==================== 支付配置：微信 ====================
-
-    WECHAT_APP_ID: str = Field(alias="WECHAT_APP_ID", default="")
-    WECHAT_MCH_ID: str = Field(alias="WECHAT_MCH_ID", default="")
-    WECHAT_API_KEY: str = Field(alias="WECHAT_API_KEY", default="")
-    WECHAT_NOTIFY_URL: str = Field(alias="WECHAT_NOTIFY_URL", default="")
+    WECHATPAY_MCHID: str = Field(alias="WECHATPAY_MCHID", default="")
+    WECHATPAY_PRIVATE_KEY_PATH: str = Field(alias="WECHATPAY_PRIVATE_KEY_PATH", default="")
+    WECHATPAY_CERT_SERIAL_NO: str = Field(alias="WECHATPAY_CERT_SERIAL_NO", default="")
+    WECHATPAY_APPID: str = Field(alias="WECHATPAY_APPID", default="")
+    WECHATPAY_APIV3_KEY: str = Field(alias="WECHATPAY_APIV3_KEY", default="")
+    WECHATPAY_NOTIFY_URL: str = Field(alias="WECHATPAY_NOTIFY_URL", default="")
+    WECHATPAY_CERT_DIR: str = Field(alias="WECHATPAY_CERT_DIR", default="")
+    WECHATPAY_PARTNER_MODE: str = Field(alias="WECHATPAY_PARTNER_MODE", default="False")
+    WECHATPAY_TYPE: str = Field(alias="WECHATPAY_TYPE", default="")
+    PUBLIC_KEY: str = Field(alias="PUBLIC_KEY", default="")
+    PUBLIC_KEY_ID: str = Field(alias="PUBLIC_KEY_ID", default="")
 
     @field_validator("ai_system_prompt", mode="after")
     @classmethod

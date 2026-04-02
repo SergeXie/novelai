@@ -4,6 +4,7 @@ import datetime
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.config.generate_order_number import generate_order_no
 from common.exception.lzsd_exception import ServiceWarning
 from core.entity.do.order_do import Order
 from core.entity.vo.order_schema_vo import CreateOrderResponse, OrderListItem
@@ -39,11 +40,44 @@ class OrderService:
                     pay_amount=item.pay_amount,
                     status=item.status,
                     paid_at=item.paid_at,
-                    pay_method=item.pay_method
+                    pay_method=item.pay_method,
+                    created_at=item.created_at,
                 )
             )
 
         return result, total
+
+    @staticmethod
+    async def query_order_status(db, order_no: str):
+        """
+        查询订单状态（带兜底）
+        """
+
+        order = await OrderDAO.get_by_order_no(db, order_no)
+
+        if not order:
+            return None
+
+        # ==================== 1. 已支付直接返回 ====================
+
+        if order.status == "PAID":
+            return {
+                "status": "PAID",
+                "paid": True
+            }
+
+        # ==================== 2. 可选：主动查询第三方（进阶） ====================
+
+        # 👉 后面可以加：
+        # if order.pay_method == "wechat":
+        #     调用微信 query API
+        # if order.pay_method == "alipay":
+        #     调用支付宝 query API
+
+        return {
+            "status": order.status,
+            "paid": False
+        }
 
     @staticmethod
     async def create_order(
@@ -89,7 +123,7 @@ class OrderService:
 
                 # 重新生成支付链接（关键点）
                 payment_service = PaymentService()
-                pay_url = payment_service.generate_pay_url(pending_order)
+                pay_url = await payment_service.generate_pay_url(pending_order)
 
                 # 未过期 → 直接返回旧订单（防重复）
                 return CreateOrderResponse(
@@ -141,7 +175,7 @@ class OrderService:
             raise ServiceWarning("非法订单类型")
 
         # ==================== 5. 创建订单 ====================
-        order_no = uuid.uuid4().hex
+        order_no = generate_order_no()
 
         order = Order(
             order_no=order_no,
@@ -163,7 +197,7 @@ class OrderService:
 
         # ==================== 生成支付链接 ====================
         payment_service = PaymentService()
-        pay_url = payment_service.generate_pay_url(order)
+        pay_url = await payment_service.generate_pay_url(order)
 
         return CreateOrderResponse(
             order_no=order_no,
