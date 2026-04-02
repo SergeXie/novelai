@@ -23,7 +23,6 @@ class AccountService:
         """
         获取用户资产信息
         """
-
         # ==================== 1. 获取账户 ====================
         account: UserAccount = await db.get(UserAccount, uid)
 
