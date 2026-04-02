@@ -8,7 +8,7 @@ from common.exception.lzsd_exception import (
     ModelValidatorException,
     PermissionException,
     ServiceException,
-    ServiceWarning,
+    ServiceWarning, ServiceWarningSpecial,
 )
 from common.response.response_util import jsonable_encoder, JSONResponse, ResponseUtil
 
@@ -56,6 +56,12 @@ def handle_exception(app: FastAPI):
     async def service_warning_handler(request: Request, exc: ServiceWarning):
         logger.warning(exc.message)
         return ResponseUtil.failure(data=exc.data, msg=exc.message)
+
+
+    @app.exception_handler(ServiceWarningSpecial)
+    async def service_warning_handler(request: Request, exc: ServiceWarning):
+        logger.warning(exc.message)
+        return ResponseUtil.special_failure(data=exc.data, msg=exc.message)
 
     # 处理其他http请求异常
     @app.exception_handler(HTTPException)

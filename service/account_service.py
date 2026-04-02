@@ -23,14 +23,16 @@ class AccountService:
         """
         获取用户资产信息
         """
+
         # ==================== 1. 获取账户 ====================
         account: UserAccount = await db.get(UserAccount, uid)
 
         if not account:
+            # 每日的额度
             #  自动初始化（推荐）
             return AccountInfoResponse(
                 level="free",
-                level_name="免费版"
+                level_name="免费版",
 
             )
 
@@ -52,12 +54,12 @@ class AccountService:
             extra_privileges = membership.extra_privileges or {}
 
         # ==================== 5. 返回 ====================
-        # 总月度赠送额度 + 永久有效额度
+        # 每日的额度 + 总月度赠送额度 + 永久有效额度
         user_daily_token_limit = account.monthly_balance + account.permanent_balance
 
         return AccountInfoResponse(
-            level=account.level_code,
-            level_name=membership.level_name,
+            level=account.level_code if account else "free",
+            level_name=membership.level_name if membership else "免费版",
             expire_at=account.expire_at if account else None,
             monthly_balance=account.monthly_balance,
             permanent_balance=account.permanent_balance,

@@ -5,6 +5,7 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.config.config import settings
+from common.exception.lzsd_exception import ServiceWarning, ServiceWarningSpecial
 from core.entity.do.generate_log import AiNovelGenerateLog
 from dao.ai_log_dao import AILogDAO
 from dao.ai_model_dao import AiModelDAO
@@ -55,7 +56,7 @@ class UsageService:
         """做三层额度校验：单次请求、平台日额度、用户日额度。"""
         # 1. 单次请求不能超过系统允许的最大长度。
         if current_request_len > settings.SINGLE_REQUEST_TOKEN_LIMIT:
-            raise HTTPException(status_code=400, detail="请求内容过长，请分段发送")
+            raise ServiceWarning(message="请求内容过长，请分段发送")
 
         start, end = get_today_range()
 
@@ -63,7 +64,7 @@ class UsageService:
         platform_total = await self.ai_log_dao.get_platform_usage_sum(start, end)
         if platform_total + current_request_len > settings.PLATFORM_DAILY_TOKEN_LIMIT:
             logger.error("平台今日总额度已耗尽")
-            raise HTTPException(status_code=503, detail="服务器繁忙，请明天再试")
+            raise ServiceWarning(message="服务器繁忙，请明天再试")
 
         # 3. 用户维度限制。
         #    这里会把今天输入+输出的累计值，再加上本次请求长度后乘倍率进行判断。
@@ -76,7 +77,7 @@ class UsageService:
 
         if usage > limit:
             logger.error(f"用户id:{user_id} 今日总额度已耗尽")
-            raise HTTPException(status_code=666, detail="您今日的生成额度已用完")
+            raise ServiceWarningSpecial(message="您今日的生成额度已用完")
 
     async def record(
             self,

@@ -4,6 +4,7 @@ import datetime
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.config.generate_order_number import generate_order_no
 from common.exception.lzsd_exception import ServiceWarning
 from core.entity.do.order_do import Order
 from core.entity.vo.order_schema_vo import CreateOrderResponse, OrderListItem
@@ -174,7 +175,7 @@ class OrderService:
             raise ServiceWarning("非法订单类型")
 
         # ==================== 5. 创建订单 ====================
-        order_no = uuid.uuid4().hex
+        order_no = generate_order_no()
 
         order = Order(
             order_no=order_no,
