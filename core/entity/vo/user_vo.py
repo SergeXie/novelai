@@ -43,7 +43,7 @@ class AccountInfoResponse(BaseModel):
     total_balance: Optional[int] = 0
     unlocked_models: Optional[List[str]] = []
     extra_privileges: Optional[Dict] = {}
-
+    total_amount: Optional[int] = 0  # 总量
 
     @field_serializer('expire_at')
     def serialize_paid_at(self, expire_at: Optional[datetime], _info):

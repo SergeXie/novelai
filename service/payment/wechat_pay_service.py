@@ -4,6 +4,7 @@ import logging
 from loguru import logger
 from wechatpayv3.async_ import AsyncWeChatPay, WeChatPayType
 from common.config.config import settings
+from common.exception.lzsd_exception import ServiceWarning
 from service.payment.base_payment import BasePayment
 
 
@@ -54,7 +55,7 @@ class WechatPayService(BasePayment):
 
             if code != 200:
                 logger.error(f"订单={order.order_no}[微信] 下单失败 code={code}, message={message}")
-                raise Exception("微信支付下单失败")
+                raise ServiceWarning("微信支付下单失败")
 
             result = json.loads(message)
 

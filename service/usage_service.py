@@ -11,13 +11,22 @@ from dao.ai_model_dao import AiModelDAO
 
 
 def get_today_range():
+    """返回今天 00:00:00 到 23:59:59.999999 的时间范围。"""
     today = datetime.now().date()
     return (
         datetime.combine(today, time.min),
         datetime.combine(today, time.max)
     )
 
+
 class UsageService:
+    """AI 使用量相关服务。
+
+    主要职责：
+    1. 统计用户和平台的用量。
+    2. 检查额度是否超限。
+    3. 记录生成日志并提供历史查询。
+    """
 
     def __init__(self, db: AsyncSession):
         self.ai_log_dao = AILogDAO(db)
@@ -25,61 +34,69 @@ class UsageService:
 
     @staticmethod
     def get_today_range():
+        """类内同名工具方法，作用和模块级 get_today_range 一样。"""
         today = datetime.now().date()
         start = datetime.combine(today, time.min)
         end = datetime.combine(today, time.max)
         return start, end
 
-
     async def get_user_daily_input_output(self, user_id: int) -> tuple[int, int]:
+        """获取用户今天累计的输入长度和输出长度。"""
         start, end = get_today_range()
         intput_count, output_count = await self.ai_log_dao.get_usage_sum(user_id, start, end)
         return intput_count, output_count
 
     async def get_user_total_input_output(self, user_id: int) -> tuple[int, int]:
+        """获取用户历史累计的输入长度和输出长度。"""
         intput_total_count, output_total_count = await self.ai_log_dao.get_usage_sum(user_id)
         return intput_total_count, output_total_count
 
     async def check_quota_or_raise(self, user_id: int, current_request_len: int):
-        """
-        三层限额校验：单次、个人每日、平台每日
-        """
-        # 1. 校验单次请求是否过大
+        """做三层额度校验：单次请求、平台日额度、用户日额度。"""
+        # 1. 单次请求不能超过系统允许的最大长度。
         if current_request_len > settings.SINGLE_REQUEST_TOKEN_LIMIT:
             raise HTTPException(status_code=400, detail="请求内容过长，请分段发送")
 
         start, end = get_today_range()
 
-        # 2. 校验全平台总额度
+        # 2. 平台维度限制，避免当天总消耗超过平台配置上限。
         platform_total = await self.ai_log_dao.get_platform_usage_sum(start, end)
         if platform_total + current_request_len > settings.PLATFORM_DAILY_TOKEN_LIMIT:
-            logger.error("平台今日总额度已耗尽！")
+            logger.error("平台今日总额度已耗尽")
             raise HTTPException(status_code=503, detail="服务器繁忙，请明天再试")
 
-        # 3. 校验个人每日额度
+        # 3. 用户维度限制。
+        #    这里会把今天输入+输出的累计值，再加上本次请求长度后乘倍率进行判断。
         input_daily_total, output_daily_total = await self.get_user_daily_input_output(user_id)
         total = input_daily_total + output_daily_total
         limit = settings.USER_DAILY_TOKEN_LIMIT
-        usage = float((total + current_request_len)) * settings.MULTIPLIER
+        usage = float(total + current_request_len) * settings.MULTIPLIER
 
-        logger.info(f"倍率:{settings.MULTIPLIER}  限额:{limit}  已用:{usage} 用户id：{user_id}")
+        logger.info(f"倍率:{settings.MULTIPLIER} 限额:{limit} 已用:{usage} 用户id:{user_id}")
 
         if usage > limit:
-            logger.error(f"用户id:{user_id} 今日总额度已耗尽！")
+            logger.error(f"用户id:{user_id} 今日总额度已耗尽")
             raise HTTPException(status_code=429, detail="您今日的生成额度已用完")
 
-    async def record(self, user_id: int,
-                     level: int,
-                     bid:str,
-                     node_ids,
-                     origin_prompt:str,
-                     request_id:str,
-                     system_prompt:str,
-                     user_prompt: str,
-                     temperature:float,
-                     output_content:str,
-                     action_type:str):
-        # 查 models
+    async def record(
+            self,
+            user_id: int,
+            level: int,
+            bid: str,
+            node_ids,
+            origin_prompt: str,
+            request_id: str,
+            system_prompt: str,
+            user_prompt: str,
+            temperature: float,
+            output_content: str,
+            action_type: str
+    ):
+        """记录一次 AI 生成日志。
+
+        会补充模型配置，并把输入、输出、估算 token、状态等信息一起入库。
+        """
+        # 根据等级找到对应模型，模型里通常带有倍率和 max_tokens 配置。
         ai_model_multiplier = 1
         max_tokens = 0
         model = await self.model_dao.get_model_by_level(level)
@@ -96,28 +113,26 @@ class UsageService:
             node_ids=node_ids,
             originPrompt=origin_prompt,
             multiplier=ai_model_multiplier,
-            # ===== 输入 =====
+            # 输入信息
             userPrompt=user_prompt,
             systemPrompt=system_prompt,
             requestInputLength=len(user_prompt),
             model=model_name,
             temperature=temperature,
             maxTokens=max_tokens,
-            # ===== 输出 =====
+            # 输出信息
             outputContent=output_content,
             outputLength=len(output_content),
+            # 这里只是粗略估算，不是严格 tokenizer 结果。
             tokenEstimate=len(output_content) // 2,
             actionType=action_type,
-            # ===== 状态 =====
+            # 状态：这里固定写 1，表示本次生成记录成功。
             status=1
         )
         await self.ai_log_dao.create_ai_generate_log(log_obj=log)
 
     async def poll_content_by_request_id(self, request_id: str):
-        """
-        根据 request_id 获取生成内容，并进行业务状态判定
-        """
-        # 1. 调用 DAO 获取记录
+        """根据 request_id 查询生成内容，常用于前端轮询结果。"""
         log_record = await self.ai_log_dao.get_log_by_request_id(request_id=request_id)
 
         if log_record:
@@ -130,9 +145,7 @@ class UsageService:
             request_id: str,
             content: str
     ):
-        """
-        异步更新 AI 生成结果及相关元数据
-        """
+        """根据 request_id 更新生成后的输出内容。"""
         if not request_id:
             return False
 
@@ -149,17 +162,17 @@ class UsageService:
         return success
 
     async def get_book_chat_history(self, bid: str, page: int, size: int):
-        # 调用 DAO
+        """分页获取某本书下的 AI 对话历史。"""
         logs, total = await self.ai_log_dao.get_logs_by_bid_paged(bid, page, size)
 
-        # 组装返回数据
+        # 组装成前端更容易消费的返回结构。
         list_data = []
         for log in logs:
             list_data.append({
                 "requestId": log["requestId"],
-                # 列表页只显示前 100 个字符预览，节省网络带宽和前端渲染压力
+                # 列表页只截取前 200 个字符作为预览，避免内容过长。
                 "prompt": log["originPrompt"][:200] + ("..." if len(log["originPrompt"]) > 200 else ""),
-                "status": log["status"],  # 1:成功, 0:失败, 2:进行中
+                "status": log["status"],  # 1: 成功, 0: 失败, 2: 进行中
                 "action": log["actionType"],  # generate / refine
                 "createdAt": log["createdAt"].strftime("%Y-%m-%d %H:%M:%S")
             })
@@ -170,5 +183,3 @@ class UsageService:
             "page": page,
             "size": size
         }
-
-

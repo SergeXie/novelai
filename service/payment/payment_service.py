@@ -116,11 +116,12 @@ class PaymentService:
 
         return True
 
-
     def _decrypt_wechat(self, ciphertext, nonce, associated_data):
         """
-        微信支付 AES-GCM 解密
+        微信支付 AES-GCM 解密（正确版）
         """
+        import base64
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
         apiv3_key = settings.WECHATPAY_APIV3_KEY.encode()
 
@@ -128,8 +129,8 @@ class PaymentService:
 
         decrypted = aesgcm.decrypt(
             nonce.encode(),
-            bytes.fromhex(ciphertext) if isinstance(ciphertext, str) else ciphertext,
-            associated_data.encode()
+            base64.b64decode(ciphertext),  #  关键修复
+            associated_data.encode() if associated_data else None
         )
 
         return json.loads(decrypted.decode())

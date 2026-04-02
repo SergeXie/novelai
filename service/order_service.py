@@ -46,6 +46,38 @@ class OrderService:
         return result, total
 
     @staticmethod
+    async def query_order_status(db, order_no: str):
+        """
+        查询订单状态（带兜底）
+        """
+
+        order = await OrderDAO.get_by_order_no(db, order_no)
+
+        if not order:
+            return None
+
+        # ==================== 1. 已支付直接返回 ====================
+
+        if order.status == "PAID":
+            return {
+                "status": "PAID",
+                "paid": True
+            }
+
+        # ==================== 2. 可选：主动查询第三方（进阶） ====================
+
+        # 👉 后面可以加：
+        # if order.pay_method == "wechat":
+        #     调用微信 query API
+        # if order.pay_method == "alipay":
+        #     调用支付宝 query API
+
+        return {
+            "status": order.status,
+            "paid": False
+        }
+
+    @staticmethod
     async def create_order(
         db: AsyncSession,
         uid: str,
