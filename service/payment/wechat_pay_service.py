@@ -13,7 +13,7 @@ class WechatPayService(BasePayment):
     微信支付实现（Native二维码）
     """
 
-    async def generate_pay_url(self, order):
+    async def generate_pay_url(self, order, return_url):
         """
         生成微信支付二维码链接
         """

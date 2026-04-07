@@ -40,3 +40,7 @@ class AssetType(enum.Enum):
             cls.MONTHLY: "月会员",
             cls.PERMANENT: "Token包"
         }
+
+
+if __name__ == '__main__':
+    print(ChargeType.RECHARGE.value)

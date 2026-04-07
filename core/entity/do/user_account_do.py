@@ -141,7 +141,7 @@ class AccountLog(Base):
 
     # ==================== 变动 ====================
 
-    charge_type: Mapped[str] = mapped_column(
+    change_type: Mapped[str] = mapped_column(
         String(32),
         nullable=False,
         comment="RECHARGE / CONSUME / REFUND / EXPIRE / ADJUST"
