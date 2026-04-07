@@ -69,3 +69,18 @@ class ModelValidatorException(Exception):
     def __init__(self, data: Union[str, List[str], None] = None, message: str = None):
         self.data = data
         self.message = message
+
+class BusinessException(Exception):
+    """所有业务异常的基类"""
+    def __init__(self, message: str, code: int):
+        self.message = message
+        self.code = code
+        super().__init__(self.message)
+
+class InsufficientTokenException(BusinessException):
+    def __init__(self, message: str = "余额不足请充值", code: int = 666):
+        super().__init__(message, code)
+
+class IllegalBookAccessException(BusinessException):
+    def __init__(self, message: str = "无权访问该书籍", code: int = 403):
+        super().__init__(message, code)

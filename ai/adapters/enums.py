@@ -1,4 +1,5 @@
-from enum import Enum
+from enum import Enum, IntEnum
+
 
 class AIProvider(str, Enum):
     FREE = "ollama"
@@ -33,3 +34,16 @@ class AIProvider(str, Enum):
 
         # 使用 dict.get() 实现“默认返回豆包”的逻辑
         return level_map.get(level, cls.DOUBAO)
+
+class AIAction(str, Enum):
+    Generate = "generate"
+    Render = "render"
+    WorkFlow = "workflow"
+
+class AIGenerateStatus(IntEnum):
+    PENDING = 0      # 待处理（任务已创建，等待进入队列）
+    PROCESSING = 1   # 生成中（AI 正在推理，此时 Token 已预冻结）
+    SUCCESS = 2      # 成功（内容已回填，Token 实际扣除）
+    FAILED = 3       # 失败（记录错误信息，触发自动退费/回滚）
+    TIMEOUT = 4      # 超时（长耗时任务超过 5 分钟未返回）
+    CANCELLED = 5    # 已取消（用户手动中止或客户端断开）

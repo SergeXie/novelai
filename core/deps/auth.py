@@ -1,41 +1,24 @@
 import jwt
-from fastapi import Depends, Header, Body, HTTPException
+from fastapi import Depends, Header
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette import status
 
 from common.config.config import settings
 from common.config.get_db import get_db
-from common.exception.lzsd_exception import AuthException
+from common.exception.lzsd_exception import AuthException, IllegalBookAccessException
 from core.deps.token_utils import TokenManager
-from core.entity.do.books import Book
-from core.entity.schemas import GenerateRequest
+from core.entity.do.users_do import User
 from core.entity.vo.user_vo import TokenData
 from dao.book_dao import BookDAO
 from dao.user_dao import UserDAO
 
+async def get_current_user(
+    authorization: str = Header(None),
+    dev: str = Header(None),
+    db: AsyncSession = Depends(get_db)  # 优先使用注入的 Session
+) -> User| None:
 
-# async def get_login_user(
-#     x_user_uuid: str = Header(None, alias="x-User-Uuid"),
-#     db: AsyncSession = Depends(get_db)
-# ):
-#     if not x_user_uuid:
-#         raise ServiceWarning(message='请登录！')
-#
-#     user = await UserDAO.get_by_uuid(db, x_user_uuid)
-#
-#     if not user:
-#         raise ServiceWarning(message='用户已停用')
-#
-#     if user.onlineStatus == OnlineStatus.OFFLINE:
-#         raise ServiceWarning(message="账户已离线请重新登录！")
-#
-#     return user
-
-async def get_login_user(authorization: str = Header(None, alias="authorization"),
-                         dev: str = Header(None, alias="dev"),
-                         query_db: AsyncSession = Depends(get_db)):
-
+    ### 根据header中token获取当前用户
     try:
         token = authorization
         if not token:
@@ -45,14 +28,17 @@ async def get_login_user(authorization: str = Header(None, alias="authorization"
         # 如果开启了调试模式，且 Token 不是以 Bearer 开头，尝试将其视作 account 直接查询
         if settings.ENV_MODE == "development":
             if dev:
-                # 调试时直接在 Header 填入用户账号，如 "test"
-                query_user = await UserDAO.get_by_account(query_db, account=dev)
-                if query_user:
-                    return query_user
+                print(f"{dev} is authenticated")
+                user = await UserDAO.get_by_account(db, account=dev)
+                if user:
+                    return user
+                else:
+                    raise AuthException(message='Not authorization')
+
         # ------------------
 
         if token.startswith('@Bearer'):
-            return
+            return None
         else:
             if token.startswith('Bearer'):
                 token = token.split(' ')[1]
@@ -66,40 +52,29 @@ async def get_login_user(authorization: str = Header(None, alias="authorization"
 
         token_data = TokenData(uuid=uuid)
 
-    except Exception as e:
+    except Exception as _:
         logger.warning('用户凭证已失效，请重新登录！')
         raise AuthException(data='', message='用户token已失效，请重新登录')
 
-    query_user = await UserDAO.get_by_uuid(query_db, user_uuid=token_data.uuid)
+    query_user = await UserDAO.get_by_uuid(db, user_uuid=token_data.uuid)
 
     if query_user is None:
         logger.warning('用户token不合法')
         raise AuthException(data='', message='用户token不合法')
 
     # 从缓存中拿出token
-    accessToken = TokenManager.get_account_by_token(query_user.account)
+    access_token = TokenManager.get_account_by_token(query_user.account)
 
-    if token == accessToken:
+    if token == access_token:
         return query_user
     else:
         logger.warning('用户凭证已失效，请重新登录')
         raise AuthException(data='', message='用户凭证已失效，请重新登录！')
 
 
-async def check_book_owner(
-    request: GenerateRequest,   # ✅ 直接拿整个请求体
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_login_user)
-) -> Book:
+async def check_book_owner( bid: str,  db: AsyncSession = Depends(get_db), user=Depends(get_current_user)) :
     book_dao = BookDAO(db)
-    book = await book_dao.get_book_by_bid(
-        user_id=user.pkId,
-        bid=request.bid
-    )
+    book = await book_dao.get_book_by_bid(user_id=user.pkId, bid=bid)
 
     if not book:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="书籍不存在或无权访问"
-        )
-    return book
+        raise IllegalBookAccessException()

@@ -4,7 +4,7 @@ import datetime
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.config.generate_order_number import generate_order_no
+from common.config.generator import LZSDGenerator
 from common.exception.lzsd_exception import ServiceWarning
 from core.entity.do.order_do import Order
 from core.entity.vo.order_schema_vo import CreateOrderResponse, OrderListItem
@@ -21,12 +21,12 @@ class OrderService:
     ORDER_EXPIRE_MINUTES = 30  # 订单过期时间（分钟）
 
     @staticmethod
-    async def get_order_list(db, uid: str, page: int, page_size: int):
+    async def get_order_list(db, user_id: int, page: int, page_size: int):
         """
         获取订单列表
         """
 
-        records, total = await OrderDAO.list_orders(db, uid, page, page_size)
+        records, total = await OrderDAO.list_orders(db, user_id=user_id, page=page, page_size=page_size)
 
         result = []
 
@@ -82,7 +82,7 @@ class OrderService:
     @staticmethod
     async def create_order(
         db: AsyncSession,
-        uid: str,
+        user_id: int,
         order_type: str,
         target_code: str,
         pay_method: str
@@ -98,7 +98,7 @@ class OrderService:
         5. 创建新订单
         """
 
-        logger.info(f"[下单] 开始创建订单 uid={uid}, type={order_type}, code={target_code}")
+        logger.info(f"[下单] 开始创建订单 user_id={user_id}, type={order_type}, code={target_code}")
 
 
         # ==================== 1. 校验支付方式 ====================
@@ -107,7 +107,7 @@ class OrderService:
 
         # ==================== 2. 查未支付订单 ====================
         pending_order = await OrderDAO.get_pending_order(
-            db, uid, order_type, target_code, pay_method
+            db, user_id, order_type, target_code, pay_method
         )
 
         now = datetime.datetime.utcnow()
@@ -175,11 +175,11 @@ class OrderService:
             raise ServiceWarning("非法订单类型")
 
         # ==================== 5. 创建订单 ====================
-        order_no = generate_order_no()
+        order_no = LZSDGenerator.generate_order_no()
 
         order = Order(
             order_no=order_no,
-            uid=uid,
+            user_id=user_id,
             order_type=order_type,
             target_code=target_code,
             snapshot_name=snapshot_name,
@@ -188,7 +188,6 @@ class OrderService:
             pay_amount=amount,
             status="PENDING",
             pay_method=pay_method
-
         )
 
         await OrderDAO.create_order(db, order)
@@ -203,5 +202,5 @@ class OrderService:
             order_no=order_no,
             pay_method=pay_method,
             amount=amount,
-            pay_url=pay_url
+            pay_url=pay_url,
         )

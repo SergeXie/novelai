@@ -5,6 +5,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import mapped_column, Mapped
 from sqlalchemy.sql import func
+from sqlalchemy import Enum as SqlEnum
+
+from core.enums.token_consume_source import TokenConsumeSource
 from database.db_mysql import Base
 
 
@@ -145,6 +148,42 @@ class AiNovelGenerateLog(Base):
         nullable=False,
         default=0,
         comment="逻辑删除 1 删除 0未删除"
+    )
+
+    # ========= 计费统计 =========
+
+    totalTokens: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        comment="模型返回的总Token数(Input+Output)"
+    )
+
+    actualAmount: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        comment="最终核减的计费Token数"
+    )
+
+    consumeSource: Mapped[TokenConsumeSource] = mapped_column(
+        SqlEnum(TokenConsumeSource),
+        nullable=False,
+        default=TokenConsumeSource.FREE,
+        comment="消耗来源：free(每日免费) / permanent(永久) / mixed(混合)"
+    )
+
+    # ========= 资产拆解统计 =========
+    freeDeduct: Mapped[int] = mapped_column(
+        Integer, default=0, comment="本次消耗的每日免费额度"
+    )
+
+    monthlyDeduct: Mapped[int] = mapped_column(
+        Integer, default=0, comment="本次消耗的会员月度额度"
+    )
+
+    permanentDeduct: Mapped[int] = mapped_column(
+        Integer, default=0, comment="本次消耗的永久充值额度"
     )
 
     # ========= 时间 =========

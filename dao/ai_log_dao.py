@@ -3,6 +3,8 @@ from sqlalchemy import select, func, update, desc, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 from typing import List, Tuple
+
+from ai.adapters.enums import AIGenerateStatus
 from core.entity.do.generate_log import AiNovelGenerateLog
 from service.token_service import TokenService
 from .base import BaseDAO
@@ -11,14 +13,17 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
     def __init__(self, db: AsyncSession):
         super().__init__(AiNovelGenerateLog, db)
 
-    async def get_usage_sum(self, user_id: int, start_time: datetime = None, end_time: datetime = None) -> tuple[int, int]:
+    async def get_usage_sum(self, user_id: int, start_time: datetime = None, end_time: datetime = None) -> tuple[int, int, int, int, int]:
         """
         核心查询下放：根据时间范围统计输入和输出字符数
         """
         # 构建基础查询
         stmt = select(
             func.coalesce(func.sum(self.model.requestInputLength), 0),
-            func.coalesce(func.sum(self.model.outputLength), 0)
+            func.coalesce(func.sum(self.model.outputLength), 0),
+            func.coalesce(func.sum(self.model.actualAmount), 0),
+            func.coalesce(func.sum(self.model.freeDeduct), 0),
+            func.coalesce(func.sum(self.model.permanentDeduct), 0),
         ).where(
             self.model.userId == user_id,
             self.model.status == 1
@@ -51,12 +56,12 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
         self.db.add(log_obj)
         await self.db.commit()  # 或者在 Service 层统一 commit
 
-    async def get_log_by_request_id(self, request_id: str) -> AiNovelGenerateLog:
+    async def get_log_by_request_id(self, user_id:int, request_id: str) -> AiNovelGenerateLog:
         """
         根据 requestId 查询生成日志记录
         """
         # 使用 select 语句构建查询
-        stmt = select(AiNovelGenerateLog).where(AiNovelGenerateLog.requestId == request_id)
+        stmt = select(AiNovelGenerateLog).where(AiNovelGenerateLog.requestId == request_id and AiNovelGenerateLog.userId == user_id)
 
         # 执行查询
         result = await self.db.execute(stmt)
@@ -230,3 +235,35 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
 
         await db.execute(stmt)
         await db.commit()
+
+    @staticmethod
+    async def sum_free_tokens(db: AsyncSession, user_id: int, start_time: datetime) -> int:
+        """
+        统计指定用户自 start_time 以来消耗的免费 Token 总数
+        """
+        # 构建查询语句
+        stmt = (
+            select(
+                # 使用 func.coalesce 确保没有记录时返回 0 而不是 None
+                func.coalesce(func.sum(AiNovelGenerateLog.freeDeduct), 0)
+            )
+            .where(
+                and_(
+                    AiNovelGenerateLog.userId == user_id,
+                    # 仅统计成功或处理中的记录（处理中代表已预扣）
+                    AiNovelGenerateLog.status.in_([
+                        AIGenerateStatus.SUCCESS,
+                        AIGenerateStatus.PROCESSING
+                    ]),
+                    # 时间范围过滤（通常是今日零点之后）
+                    AiNovelGenerateLog.createdAt >= start_time,
+                    # 逻辑删除过滤
+                    AiNovelGenerateLog.isDelete == 0
+                )
+            )
+        )
+
+        # 执行查询
+        result = await db.execute(stmt)
+        # scalar() 直接返回聚合后的单个数值
+        return result.scalar() or 0

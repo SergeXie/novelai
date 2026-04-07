@@ -1,16 +1,14 @@
-from typing import List, Optional, Any
-from jinja2 import Template, Environment
-from loguru import logger
+from typing import List, Optional
+
+from jinja2 import Environment
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.config.get_db import get_db_context
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
 from core.entity.do.prompt_register import PromptRegistry
 from core.enums.node_type import BookNodeCategory
 from dao.ai_prompt_registry_dao import PromptRegistryDAO
-from dao.book_dao import BookDAO
 
 jinja_env = Environment(enable_async=True)
 
@@ -57,7 +55,8 @@ class PromptService:
         nodes = result.all()
         return self._assemble_prompt(list(nodes))
 
-    async def generate_book_base_prompt(self, book:Book) -> str:
+    @staticmethod
+    async def generate_book_base_prompt(book:Book) -> str:
         prompt_segments = []
         # --- 第一部分：书籍全局背景 (置顶) ---
         if book.title:
@@ -78,7 +77,8 @@ class PromptService:
         nodes = node_result.all()
         return self._assemble_prompt(list(nodes))
 
-    def _assemble_prompt(self, nodes: List) -> str:
+    @staticmethod
+    def _assemble_prompt(nodes: List) -> str:
         """
         核心逻辑：基于枚举进行结构化拼装
         """

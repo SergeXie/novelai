@@ -5,7 +5,7 @@ from sqlalchemy.orm import Mapped
 from common.config.config import settings
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
-from core.deps.auth import get_login_user
+from core.deps.auth import get_current_user
 from database.db_mysql import Base
 from service.usage_service import UsageService
 
@@ -15,7 +15,7 @@ userController = APIRouter()
 @userController.get("/userInfo", name="用户信息")
 async def user_info(
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_login_user)
+    user=Depends(get_current_user)
 ):
     m = settings.MULTIPLIER
     usage_service = UsageService(db)

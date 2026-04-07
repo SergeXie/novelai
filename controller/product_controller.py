@@ -2,24 +2,24 @@ from fastapi import APIRouter, Depends
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Request
+
+from common.config.config import settings
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
-from core.deps.auth import get_login_user
+from core.deps.auth import get_current_user
 from core.entity.vo.order_schema_vo import CreateOrderRequest, CreateOrderResponse
 from core.entity.vo.product_schema_vo import ProductListResponse
 from service.account_service import AccountService
 from service.order_service import OrderService
 from service.payment.payment_service import PaymentService
 from service.product_service import ProductService
-from urllib.parse import parse_qs
 
 productRouter = APIRouter(prefix="/order")
 
-
 @productRouter.get("/amounts", name="我的资产")
-async def get_account_info(
+async def get_amounts(
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_login_user),
+    user=Depends(get_current_user),
 ):
     """
     我的资产信息
@@ -34,7 +34,7 @@ async def get_orders_history(
     page: int = 1,
     pageSize: int = 20,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_login_user),
+    user=Depends(get_current_user),
 ):
     """
     历史订单列表
@@ -50,8 +50,7 @@ async def get_orders_history(
 
 @productRouter.get("/plans", response_model=ProductListResponse, name="产品列表")
 async def get_product_list(
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_login_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     获取产品列表接口
@@ -73,8 +72,7 @@ async def get_product_list(
 async def create_order(
     req: CreateOrderRequest,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_login_user),
-
+    user=Depends(get_current_user),
 ):
     """
     创建订单接口
@@ -84,15 +82,17 @@ async def create_order(
     - 30分钟过期控制
     - 支持会员/Token包
     """
-
-    result = await OrderService.create_order(
-        db=db,
-        uid=user.pkId,
-        order_type=req.order_type,
-        target_code=req.target_code,
-        pay_method=req.pay_method
-    )
-
+    if settings.is_dev:
+        result = req
+        result.return_url = req.return_url + "&code=200"
+    else:
+        result = await OrderService.create_order(
+            db=db,
+            user_id=user.pkId,
+            order_type=req.order_type,
+            target_code=req.target_code,
+            pay_method=req.pay_method
+        )
     return ResponseUtil.success(data=result)
 
 

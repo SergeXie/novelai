@@ -1,12 +1,10 @@
-import os
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Iterable
-from openai import OpenAI
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
-from ai.adapters.base_adapter import BaseAIAdapter
 from ai.adapters.enums import AIProvider
 from ai.ai_nexus import get_ai_nexus
+from core.entity.vo.ai_response import AIWorkFlowResponse, AICompletionResponse, AIWorkFlowStepResponse
 
 
 @dataclass
@@ -33,11 +31,13 @@ class BaseWorkflow(ABC):
         """子类需实现此方法以定义具体的步骤链"""
         pass
 
-    async def run(self, initial_context: Dict[str, Any]) -> Dict[str, Any]:
+    async def run(self, initial_context: Dict[str, Any]) -> AIWorkFlowResponse:
         """执行完整工作流"""
         context = dict(initial_context)
         steps_history = []
         steps = self.get_steps()
+
+        last_ai_output: Optional[AICompletionResponse] = None
 
         for step in steps:
             try:
@@ -47,27 +47,32 @@ class BaseWorkflow(ABC):
                 print(formatted_prompt)
 
                 # 2. 调用 AI
-                system_prompt, output_content = await get_ai_nexus().generate_novel_text(provider=self.ai_provider,
+                ai_response: AICompletionResponse = await get_ai_nexus().generate_novel_text(provider=self.ai_provider,
                                                                           system_prompt=step.system_prompt,
                                                                           user_prompt=formatted_prompt,
                                                                           temperature=step.temperature)
 
-                print(system_prompt)
+                last_ai_output = ai_response
+                print(ai_response.content)
 
                 # 3. 更新上下文
                 storage_key = step.output_key or step.name
-                context[storage_key] = output_content
+                context[storage_key] = ai_response.content
 
                 # 4. 记录步骤详情
-                steps_history.append({
-                    "name": step.name,
-                    "output": output_content
-                })
+                steps_history.append(
+                    AIWorkFlowStepResponse(
+                        name=step.name,
+                        result=ai_response,
+                    )
+                )
 
             except Exception as e:
                 raise WorkflowError(f"步骤 '{step.name}' 执行失败: {str(e)}")
 
-        return {
-            "context": context,
-            "steps": steps_history
-        }
+        return AIWorkFlowResponse(
+            context=context,
+            steps=steps_history,
+            final_result=last_ai_output  # 将最后一个环节的 AI 响应作为最终 output
+        )
+

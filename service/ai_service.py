@@ -6,7 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.adapters.enums import AIProvider
 from ai.ai_nexus import get_ai_nexus
+from common.config.generator import LZSDGenerator
 from common.config.get_db import get_db_context
+from core.entity.do.users_do import User
 from dao.ai_log_dao import AILogDAO
 from dao.ai_model_dao import AiModelDAO
 from service.usage_service import UsageService
@@ -37,7 +39,7 @@ class AIService:
 
     async def prepare_and_record_request(
             self,
-            user_id: int,
+            user: User,
             bid: str,
             origin_prompt: str,
             user_prompt: str,
@@ -50,7 +52,10 @@ class AIService:
         """
         第一阶段：校验、记录、生成请求ID (同步执行，快速返回)
         """
-        request_id = uuid.uuid4().hex
+        user_id = user.pkId
+
+
+        request_id = LZSDGenerator.generate_request_id(sign=user.account)
         if correlation is None:
             correlation = []
 
