@@ -63,7 +63,7 @@ class WorkflowService(AIService):
         # 1. 校验配额
         await usage_service.check_quota_or_raise(
             user_info=user,
-            current_request_len=len(user_prompt)
+            frozen_token_length=len(user_prompt)
         )
 
         ai_provider = AIProvider.from_level(level)
