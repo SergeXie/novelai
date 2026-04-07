@@ -28,9 +28,10 @@ class AccountService:
         if not account:
             # 每日的额度
             #  自动初始化（推荐）
+
             return AccountInfoResponse(
                 level=UserLevel.FREE.value,
-                level_name=UserLevel.FREE.get_descriptions(),
+                level_name=UserLevel.get_descriptions()[UserLevel.FREE],
             )
 
         # ==================== 2. 获取会员配置 ====================
@@ -56,7 +57,7 @@ class AccountService:
 
         return AccountInfoResponse(
             level=account.level_code if account else "free",
-            level_name=membership.level_name if membership else "免费版",
+            level_name=membership.level_name if membership else "免费用户",
             expire_at=account.expire_at if account else None,
             monthly_balance=account.monthly_balance,
             permanent_balance=account.permanent_balance,
@@ -83,12 +84,12 @@ class AccountService:
 
         # ==================== 1. 获取用户账户 ====================
 
-        account = await db.get(UserAccount, order.uid)
+        account = await db.get(UserAccount, order.user_id)
 
         if not account:
             #  自动初始化
-            logger.error(f"[权益] 用户账户不存在 uid={order.uid}")
-            account = await AccountService.init_account(db, order.uid)
+            logger.error(f"[权益] 用户账户不存在 uid={order.user_id}")
+            account = await AccountService.init_account(db, order.user_id)
 
         # ==================== 2. 根据订单类型分发 ====================
 
@@ -120,9 +121,17 @@ class AccountService:
         duration = timedelta(days=membership.duration_days)
 
         # ==================== 1. 计算过期时间 ====================
+        if account.expire_at:
+            expire_at = account.expire_at
 
-        if account.expire_at and account.expire_at > now:
-            new_expire = account.expire_at + duration
+            # 如果是 naive → 强制变成 UTC aware
+            if expire_at.tzinfo is None:
+                expire_at = expire_at.replace(tzinfo=timezone.utc)
+        else:
+            expire_at = None
+
+        if expire_at and expire_at > now:
+            new_expire = expire_at + duration
         else:
             new_expire = now + duration
 
@@ -141,7 +150,7 @@ class AccountService:
                 user_id=account.user_id,
                 biz_id=order.order_no,
                 biz_type=BizType.ORDER.value,
-                charge_type=ChargeType.RECHARGE.value,
+                change_type=ChargeType.RECHARGE.value,
                 asset_type=AssetType.MONTHLY.value,
                 amount=membership.monthly_token_allowance,
                 balance_after=account.monthly_balance,
@@ -181,7 +190,7 @@ class AccountService:
             user_id=account.user_id,
             biz_id=order.order_no,
             biz_type=BizType.ORDER.value,
-            charge_type=ChargeType.RECHARGE.value,
+            change_type=ChargeType.RECHARGE.value,
             asset_type=AssetType.PERMANENT.value,
             amount=token_amount,
             balance_after=account.permanent_balance,
@@ -210,7 +219,7 @@ class AccountService:
         """
 
         # ==================== 1. 查询是否已存在 ====================
-        account = UserAccountDAO.get_active_account(db=db, user_id=user_id)
+        account = await UserAccountDAO.get_active_account(db=db, user_id=user_id)
         if account:
             logger.info(f"[账户] 已存在 uid={user_id}")
         else:

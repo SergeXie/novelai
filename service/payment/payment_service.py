@@ -140,79 +140,79 @@ class PaymentService:
         微信支付回调处理
         """
 
-        logger.info("[微信回调] 开始处理")
+        # logger.info("[微信回调] 开始处理")
 
-        try:
+        # try:
             # ==================== 1. 获取resource ====================
 
-            resource = body.get("resource")
-            if not resource:
-                logger.error("resource为空")
-                return False
+        resource = body.get("resource")
+        if not resource:
+            logger.error("resource为空")
+            return False
 
-            ciphertext = resource.get("ciphertext")
-            nonce = resource.get("nonce")
-            associated_data = resource.get("associated_data")
+        ciphertext = resource.get("ciphertext")
+        nonce = resource.get("nonce")
+        associated_data = resource.get("associated_data")
 
-            # ==================== 2. 解密 ====================
+        # ==================== 2. 解密 ====================
 
-            data = self._decrypt_wechat(
-                ciphertext,
-                nonce,
-                associated_data
-            )
+        data = self._decrypt_wechat(
+            ciphertext,
+            nonce,
+            associated_data
+        )
 
-            logger.info(f"[微信回调] 解密后数据: {data}")
+        logger.info(f"[微信回调] 解密后数据: {data}")
 
-            # ==================== 3. 校验状态 ====================
+        # ==================== 3. 校验状态 ====================
 
-            if data.get("trade_state") != "SUCCESS":
-                logger.warning(f"[微信回调] 非成功状态: {data.get('trade_state')}")
-                return False
+        if data.get("trade_state") != "SUCCESS":
+            logger.warning(f"[微信回调] 非成功状态: {data.get('trade_state')}")
+            return False
 
-            order_no = data.get("out_trade_no")
+        order_no = data.get("out_trade_no")
 
-            # ==================== 4. 查询订单 ====================
+        # ==================== 4. 查询订单 ====================
 
-            order = await OrderDAO.get_by_order_no(db, order_no)
+        order = await OrderDAO.get_by_order_no(db, order_no)
 
-            if not order:
-                logger.error(f"[微信回调] 订单不存在: {order_no}")
-                return False
+        if not order:
+            logger.error(f"[微信回调] 订单不存在: {order_no}")
+            return False
 
-            # ==================== 5. 幂等 ====================
+        # ==================== 5. 幂等 ====================
 
-            if order.status == "PAID":
-                logger.info(f"[微信回调] 已处理: {order_no}")
-                return True
-
-            # ==================== 6. 金额校验 ====================
-
-            total = data.get("amount", {}).get("total")  # 分
-            if int(total) != int(order.pay_amount * 100):
-                logger.error("[微信回调] 金额不一致")
-                return False
-
-            # ==================== 7. 更新订单 ====================
-
-            order.status = "PAID"
-            order.third_party_no = data.get("transaction_id")
-
-            # 时间
-            success_time = data.get("success_time")
-            if success_time:
-                order.paid_at = datetime.fromisoformat(success_time.replace("Z", "+00:00"))
-
-            logger.info(f"[微信回调] 订单支付成功: {order_no}")
-
-            # ==================== 8. 发放权益 ====================
-
-            await AccountService.grant_order_benefits(db, order)
-
-            logger.info(f"[微信回调] 权益发放完成: {order_no}")
-
+        if order.status == "PAID":
+            logger.info(f"[微信回调] 已处理: {order_no}")
             return True
 
-        except Exception as e:
-            logger.error(f"[微信回调] 处理异常: {e}")
+        # ==================== 6. 金额校验 ====================
+
+        total = data.get("amount", {}).get("total")  # 分
+        if int(total) != int(order.pay_amount * 100):
+            logger.error("[微信回调] 金额不一致")
             return False
+
+        # ==================== 7. 更新订单 ====================
+
+        order.status = "PAID"
+        order.third_party_no = data.get("transaction_id")
+
+        # 时间
+        success_time = data.get("success_time")
+        if success_time:
+            order.paid_at = datetime.fromisoformat(success_time.replace("Z", "+00:00"))
+
+        logger.info(f"[微信回调] 订单支付成功: {order_no}")
+
+        # ==================== 8. 发放权益 ====================
+
+        await AccountService.grant_order_benefits(db, order)
+
+        logger.info(f"[微信回调] 权益发放完成: {order_no}")
+
+        return True
+        #
+        # except Exception as e:
+        #     logger.error(f"[微信回调] 处理异常: {e}")
+        #     return False
