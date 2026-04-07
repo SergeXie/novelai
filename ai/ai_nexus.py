@@ -10,9 +10,15 @@ from ai.adapters.enums import AIProvider
 from ai.adapters.gpt import GPTAdapter
 from ai.adapters.ollama import OllamaAdapter
 from ai.adapters.gemini import GeminiAdapter
-from ai.adapters.zhipu import ZhipuAdapter
+from ai.adapters.glm import GLMAdapter
 from common.config.config import settings
+from common.exception.lzsd_exception import ServiceWarning
+from core.entity.vo.ai_response import AICompletionResponse
 
+def check_ai_input(prompt:str):
+    current_request_len = len(prompt)
+    if current_request_len > settings.SINGLE_REQUEST_TOKEN_LIMIT:
+        raise ServiceWarning(message="提示词过长")
 
 def ai_clean_json(raw_text: str):
     """
@@ -70,16 +76,15 @@ class AINexus:
             AIProvider.CLAUDE: ClaudeAdapter(),
             AIProvider.GEMINI: GeminiAdapter(),
             AIProvider.GPT: GPTAdapter(),
-            AIProvider.ZHIPU: ZhipuAdapter(),
+            AIProvider.ZHIPU: GLMAdapter(),
         }
 
     # 建议使用忽略大小写的正则匹配
+    def get_actual_tokens(self, provider: AIProvider, content:str)->int:
+        return len(content) if content else 0
 
-    async def generate_novel_text(self, provider: AIProvider, user_prompt: str, system_prompt:str = None, temperature:float = 0.7, max_tokens: int = None) -> tuple[str, str]:
-
-        sys_system_prompt = settings.ai_system_prompt
-
-        final_system_prompt = system_prompt or sys_system_prompt
+    async def generate_novel_text(self, provider: AIProvider, user_prompt: str, system_prompt:str, temperature:float = 0.7, max_tokens: int = None) \
+            -> AICompletionResponse:
 
         # 1. 根据传入的 provider 获取对应的适配器
         adapter = self._adapters.get(provider)
@@ -87,21 +92,19 @@ class AINexus:
             raise ValueError(f"未支持的模型提供商: {provider}")
 
         # 2. 调用适配器的统一接口
-        content = await adapter.generate_text(
-            system_prompt=final_system_prompt,
+        ai_rsp = await adapter.generate_text(
+            system_prompt=system_prompt,
             user_prompt=user_prompt,
             max_tokens=max_tokens,
             temperature=temperature
         )
         try:
             # 假设 filter_ai_content 是你的过滤逻辑
-            content = filter_ai_content(content)
+            ai_rsp.content = filter_ai_content(ai_rsp.content)
         except Exception as e:
-            # 记录错误原因，但不崩溃
             logger.error(f"AI内容过滤失败: {str(e)}", exc_info=True)
-            # 发生异常时的降级处理：清空内容或返回特定提示
 
-        return system_prompt, content
+        return ai_rsp
 
 _ai_nexus_instance = AINexus()
 

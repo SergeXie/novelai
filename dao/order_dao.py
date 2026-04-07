@@ -3,16 +3,17 @@ from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.entity.do.order_do import Order
+from dao.base import BaseDAO
 
 
-class OrderDAO:
+class OrderDAO(BaseDAO[Order]):
     """
     订单DAO层
     """
     @staticmethod
     async def list_orders(
         db: AsyncSession,
-        uid: str,
+        user_id: int,
         page: int = 1,
         page_size: int = 10
     ):
@@ -24,7 +25,7 @@ class OrderDAO:
 
         stmt = (
             select(Order)
-            .where(Order.uid == uid)
+            .where(Order.user_id == user_id)
             .order_by(desc(Order.created_at))
             .offset((page - 1) * page_size)
             .limit(page_size)
@@ -43,7 +44,7 @@ class OrderDAO:
     @staticmethod
     async def get_pending_order(
         db: AsyncSession,
-        uid: str,
+        user_id: int,
         order_type: str,
         target_code: str,
         pay_method:str
@@ -59,7 +60,7 @@ class OrderDAO:
         stmt = (
             select(Order)
             .where(
-                Order.uid == uid,
+                Order.user_id == user_id,
                 Order.order_type == order_type,
                 Order.target_code == target_code,
                 Order.pay_method == pay_method,

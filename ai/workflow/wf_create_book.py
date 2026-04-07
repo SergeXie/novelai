@@ -5,6 +5,8 @@ from ai.workflow.base import BaseWorkflow, WorkflowStep
 
 class CreateBookWorkflow(BaseWorkflow):
     """小说创作工作流实现"""
+    def init(self):
+        self.name = "一键成书工作流"
 
     def get_steps(self) -> List[WorkflowStep]:
         return [

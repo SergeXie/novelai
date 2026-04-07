@@ -1,16 +1,16 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.config.config import settings
 from common.exception.lzsd_exception import ServiceWarning
-from core.entity.do.token_usage_log_do import TokenUsageLog
 from core.entity.do.user_account_do import UserAccount, AccountLog
 from core.entity.vo.user_vo import AccountInfoResponse
+from core.enums.constants import UserLevel, BizType, ChargeType, AssetType
 from dao.membership_dao import MembershipDAO
 from dao.package_dao import PackageDAO
+from dao.user_account_dao import UserAccountDAO
 
 
 class AccountService:
@@ -19,21 +19,18 @@ class AccountService:
     """
 
     @staticmethod
-    async def get_account_info(db: AsyncSession, uid: int):
+    async def get_account_info(db: AsyncSession, user_id: int):
         """
         获取用户资产信息
         """
-
         # ==================== 1. 获取账户 ====================
-        account: UserAccount = await db.get(UserAccount, uid)
-
+        account = await UserAccountDAO.get_active_account(db=db, user_id=user_id)
         if not account:
             # 每日的额度
             #  自动初始化（推荐）
             return AccountInfoResponse(
-                level="free",
-                level_name="免费版",
-
+                level=UserLevel.FREE.value,
+                level_name=UserLevel.FREE.get_descriptions(),
             )
 
         # ==================== 2. 获取会员配置 ====================
@@ -67,7 +64,6 @@ class AccountService:
             unlocked_models=unlocked_models,
             extra_privileges=extra_privileges,
             total_amount = user_daily_token_limit
-
         )
 
     @staticmethod
@@ -120,7 +116,7 @@ class AccountService:
         if not membership:
             raise Exception("会员不存在")
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         duration = timedelta(days=membership.duration_days)
 
         # ==================== 1. 计算过期时间 ====================
@@ -142,11 +138,11 @@ class AccountService:
 
             # 写流水（MONTHLY）
             log = AccountLog(
-                uid=account.uid,
+                user_id=account.user_id,
                 biz_id=order.order_no,
-                biz_type="ORDER",
-                change_type="RECHARGE",
-                asset_type="MONTHLY",
+                biz_type=BizType.ORDER.value,
+                charge_type=ChargeType.RECHARGE.value,
+                asset_type=AssetType.MONTHLY.value,
                 amount=membership.monthly_token_allowance,
                 balance_after=account.monthly_balance,
                 extra={
@@ -182,11 +178,11 @@ class AccountService:
         # ==================== 2. 写流水 ====================
 
         log = AccountLog(
-            uid=account.uid,
+            user_id=account.user_id,
             biz_id=order.order_no,
-            biz_type="ORDER",
-            change_type="RECHARGE",
-            asset_type="PERMANENT",
+            biz_type=BizType.ORDER.value,
+            charge_type=ChargeType.RECHARGE.value,
+            asset_type=AssetType.PERMANENT.value,
             amount=token_amount,
             balance_after=account.permanent_balance,
             extra={
@@ -198,7 +194,7 @@ class AccountService:
         db.add(log)
 
     @staticmethod
-    async def init_account(db: AsyncSession, uid: int) -> UserAccount:
+    async def init_account(db: AsyncSession, user_id: int) -> UserAccount:
         """
         初始化用户账户（幂等）
 
@@ -214,31 +210,25 @@ class AccountService:
         """
 
         # ==================== 1. 查询是否已存在 ====================
-
-        stmt = select(UserAccount).where(UserAccount.uid == uid)
-        result = await db.execute(stmt)
-        account = result.scalars().first()
-
+        account = UserAccountDAO.get_active_account(db=db, user_id=user_id)
         if account:
-            logger.info(f"[账户] 已存在 uid={uid}")
-            return account
+            logger.info(f"[账户] 已存在 uid={user_id}")
+        else:
+            # ==================== 2. 创建账户 ====================
 
-        # ==================== 2. 创建账户 ====================
+            account = UserAccount(
+                user_id=user_id,
+                level_code=UserLevel.FREE.value,  # 默认免费会员
+                expire_at=None,
+                monthly_balance=0,
+                permanent_balance=0,
+                total_consumed=0,
+                last_reset_at=None,
+                version=0,
+                updated_at=datetime.utcnow()
+            )
 
-        account = UserAccount(
-            uid=uid,
-            level_code="free",  # 默认免费会员
-            expire_at=None,
-            monthly_balance=0,
-            permanent_balance=0,
-            total_consumed=0,
-            last_reset_at=None,
-            version=0,
-            updated_at=datetime.utcnow()
-        )
-
-        db.add(account)
-
-        logger.info(f"[账户权益] 创建成功 uid={uid}")
+            db.add(account)
+            logger.info(f"[账户权益] 创建成功 user_id={user_id}")
 
         return account

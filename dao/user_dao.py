@@ -61,12 +61,12 @@ class UserDAO:
     @staticmethod
     async def create_log(
             db,
-            uid,
-            request_id,
-            monthly_amount,
-            permanent_amount,
-            total_amount,
-            balance_snapshot,
+            user_id:int,
+            request_id:str,
+            monthly_amount:int,
+            permanent_amount:int,
+            total_amount:int,
+            balance_snapshot:int,
     ):
         """
         写账户流水
@@ -74,7 +74,7 @@ class UserDAO:
 
         # ==================== 写 usage_logs ====================
         usage_log = TokenUsageLog(
-            uid=uid,
+            user_id=user_id,
             request_id=request_id,
             action_type="CONSUME",
             monthly_amount=monthly_amount,

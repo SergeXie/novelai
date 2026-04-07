@@ -1,23 +1,19 @@
 from datetime import datetime, time
 
-from fastapi import HTTPException
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai.adapters.enums import AIAction, AIGenerateStatus
 from common.config.config import settings
 from common.exception.lzsd_exception import ServiceWarning, ServiceWarningSpecial
 from core.entity.do.generate_log import AiNovelGenerateLog
+from core.entity.do.users_do import User
+from core.entity.vo.ai_response import AICompletionResponse, AIUserAssets
+from core.enums.token_consume_source import TokenConsumeSource
 from dao.ai_log_dao import AILogDAO
 from dao.ai_model_dao import AiModelDAO
-
-
-def get_today_range():
-    """返回今天 00:00:00 到 23:59:59.999999 的时间范围。"""
-    today = datetime.now().date()
-    return (
-        datetime.combine(today, time.min),
-        datetime.combine(today, time.max)
-    )
+from dao.user_account_dao import UserAccountDAO
+from service.account_service import AccountService
 
 
 class UsageService:
@@ -32,6 +28,7 @@ class UsageService:
     def __init__(self, db: AsyncSession):
         self.ai_log_dao = AILogDAO(db)
         self.model_dao = AiModelDAO(db)
+        self.db = db
 
     @staticmethod
     def get_today_range():
@@ -43,55 +40,68 @@ class UsageService:
 
     async def get_user_daily_input_output(self, user_id: int) -> tuple[int, int]:
         """获取用户今天累计的输入长度和输出长度。"""
-        start, end = get_today_range()
-        intput_count, output_count = await self.ai_log_dao.get_usage_sum(user_id, start, end)
+        start, end = self.get_today_range()
+        intput_count, output_count, _, _, _ = await self.ai_log_dao.get_usage_sum(user_id, start, end)
         return intput_count, output_count
 
     async def get_user_total_input_output(self, user_id: int) -> tuple[int, int]:
         """获取用户历史累计的输入长度和输出长度。"""
-        intput_total_count, output_total_count = await self.ai_log_dao.get_usage_sum(user_id)
+        intput_total_count, output_total_count, actualAmount, freeDeduct, permanentDeduct = await self.ai_log_dao.get_usage_sum(user_id)
         return intput_total_count, output_total_count
 
-    async def check_quota_or_raise(self, user_id: int, current_request_len: int):
-        """做三层额度校验：单次请求、平台日额度、用户日额度。"""
-        # 1. 单次请求不能超过系统允许的最大长度。
-        if current_request_len > settings.SINGLE_REQUEST_TOKEN_LIMIT:
-            raise ServiceWarning(message="请求内容过长，请分段发送")
+    async def check_quota_or_raise(self,
+                                   frozen_token_length: int,
+                                   user_info: User):
 
-        start, end = get_today_range()
+        user_id = user_info.pkId
 
-        # 2. 平台维度限制，避免当天总消耗超过平台配置上限。
-        platform_total = await self.ai_log_dao.get_platform_usage_sum(start, end)
-        if platform_total + current_request_len > settings.PLATFORM_DAILY_TOKEN_LIMIT:
-            logger.error("平台今日总额度已耗尽")
-            raise ServiceWarning(message="服务器繁忙，请明天再试")
+        is_free_user = True
 
-        # 3. 用户维度限制。
-        #    这里会把今天输入+输出的累计值，再加上本次请求长度后乘倍率进行判断。
-        input_daily_total, output_daily_total = await self.get_user_daily_input_output(user_id)
-        total = input_daily_total + output_daily_total
-        limit = settings.USER_DAILY_TOKEN_LIMIT
-        usage = float(total + current_request_len) * settings.MULTIPLIER
+        user_account = await AccountService.get_account_info(db=self.db, user_id=user_id)
+        if user_account and user_account.total_amount > frozen_token_length:
+            is_free_user = False
 
-        logger.info(f"倍率:{settings.MULTIPLIER} 限额:{limit} 已用:{usage} 用户id:{user_id}")
+        if is_free_user:
+            # 免费用户受平台维度限制，避免当天总消耗超过平台配置上限。
+            start, end = self.get_today_range()
+            platform_total = await self.ai_log_dao.get_platform_usage_sum(start, end)
+            if platform_total + frozen_token_length > settings.PLATFORM_DAILY_TOKEN_LIMIT:
+                logger.error("平台今日总额度已耗尽")
+                raise ServiceWarning(message="服务器繁忙，请明天再试")
 
-        if usage > limit:
-            logger.error(f"用户id:{user_id} 今日总额度已耗尽")
-            raise ServiceWarningSpecial(message="您今日的生成额度已用完")
+            # 3. 用户维度限制。
+            #    这里会把今天输入+输出的累计值，再加上本次请求长度后乘倍率进行判断。
+            input_daily_total, output_daily_total = await self.get_user_daily_input_output(user_id)
+            total = input_daily_total + output_daily_total
+            limit = settings.USER_DAILY_TOKEN_LIMIT
+            usage = float(total + frozen_token_length) * settings.MULTIPLIER
+
+            logger.info(f"倍率:{settings.MULTIPLIER} 限额:{limit} 已用:{usage} 用户id:{user_id}")
+
+            if usage > limit:
+                logger.error(f"用户id:{user_id} 今日总额度已耗尽")
+                raise ServiceWarningSpecial(message="您今日的生成额度已用完")
 
     async def record(
             self,
             user_id: int,
             level: int,
             bid: str,
-            node_ids,
             origin_prompt: str,
             request_id: str,
             system_prompt: str,
             user_prompt: str,
             temperature: float,
             output_content: str,
-            action_type: str
+            node_ids : list = None,
+            action_type: AIAction = AIAction.Generate,
+            status=AIGenerateStatus.PENDING,
+            totalTokens:int = 0,
+            actualAmount:int = 0,
+            consumeSource:TokenConsumeSource = TokenConsumeSource.FREE,
+            freeDeduct:int = 0,
+            monthlyDeduct:int = 0,
+            permanentDeduct:int = 0
     ):
         """记录一次 AI 生成日志。
 
@@ -106,6 +116,8 @@ class UsageService:
             ai_model_multiplier = model.multiplier
             max_tokens = model.max_tokens
             model_name = model.model_identifier
+
+
 
         log = AiNovelGenerateLog(
             userId=user_id,
@@ -126,15 +138,14 @@ class UsageService:
             outputLength=len(output_content),
             # 这里只是粗略估算，不是严格 tokenizer 结果。
             tokenEstimate=len(output_content) // 2,
-            actionType=action_type,
-            # 状态：这里固定写 1，表示本次生成记录成功。
-            status=1
+            actionType=action_type.value,
+            status=status.value
         )
         await self.ai_log_dao.create_ai_generate_log(log_obj=log)
 
-    async def poll_content_by_request_id(self, request_id: str):
+    async def poll_content_by_request_id(self, request_id: str, user_id:int):
         """根据 request_id 查询生成内容，常用于前端轮询结果。"""
-        log_record = await self.ai_log_dao.get_log_by_request_id(request_id=request_id)
+        log_record = await self.ai_log_dao.get_log_by_request_id(request_id=request_id, user_id=user_id)
 
         if log_record:
             return log_record.outputContent
@@ -144,7 +155,7 @@ class UsageService:
     async def update_output_content_by_request_id(
             self,
             request_id: str,
-            content: str
+            ai_rsp: AICompletionResponse
     ):
         """根据 request_id 更新生成后的输出内容。"""
         if not request_id:
@@ -152,7 +163,7 @@ class UsageService:
 
         success = await self.ai_log_dao.update_output_by_request_id(
             request_id=request_id,
-            content=content,
+            content=ai_rsp.content,
         )
 
         if success:
@@ -184,3 +195,19 @@ class UsageService:
             "page": page,
             "size": size
         }
+
+    async def get_user_assets(self, user_id: int) -> AIUserAssets:
+        # 1. 从 DB 或 Redis 获取静态余额 (假设 account 是 UserAccount 对象)
+        account = await UserAccountDAO.get_active_account(db=self.db, user_id=user_id)
+
+        # 2. 调用之前的 LogDAO 统计今日消耗
+        today_start = datetime.combine(datetime.now().date(), time.min)
+        used_tokens = await AILogDAO.sum_free_tokens(self.db, user_id=user_id, start_time=today_start)
+
+        # 3. 转化为 BaseModel 返回
+        return AIUserAssets(
+            daily_limit=settings.USER_DAILY_TOKEN_LIMIT,
+            used_free=used_tokens,
+            monthly_balance=account.monthly_balance if account.monthly_balance else 0,
+            permanent_balance=account.permanent_balance if account.permanent_balance else 0,
+        )

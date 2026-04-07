@@ -13,7 +13,7 @@ class TokenService:
     @staticmethod
     async def consume_tokens(
         db: AsyncSession,
-        uid: str,
+        user_id: int,
         amount: int,
         request_id: str
     ):
@@ -26,11 +26,11 @@ class TokenService:
         :param request_id: 请求ID（用于幂等）
         """
 
-        logger.info(f"[扣费] uid={uid}, amount={amount}, request_id={request_id}")
+        logger.info(f"[扣费] user_id={user_id}, amount={amount}, request_id={request_id}")
 
         # ==================== 1. 查询账户（加锁） ====================
 
-        stmt = select(UserAccount).where(UserAccount.uid == uid).with_for_update()
+        stmt = select(UserAccount).where(UserAccount.user_id == user_id).with_for_update()
         result = await db.execute(stmt)
 
         account: UserAccount = result.scalars().first()
@@ -66,7 +66,7 @@ class TokenService:
         # ==================== 5. 写流水 ====================
         await UserDAO.create_log(
             db=db,
-            uid=uid,
+            user_id=user_id,
             request_id=request_id,
             monthly_amount=consume_monthly,
             permanent_amount=consume_permanent,
@@ -78,7 +78,7 @@ class TokenService:
         )
 
         logger.info(
-            f"[扣费] 成功 uid={uid}, monthly={consume_monthly}, permanent={consume_permanent}"
+            f"[扣费] 成功 uid={user_id}, monthly={consume_monthly}, permanent={consume_permanent}"
         )
 
         return True

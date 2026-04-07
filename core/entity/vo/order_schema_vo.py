@@ -11,6 +11,7 @@ class CreateOrderRequest(BaseModel):
     order_type: str          # MEMBERSHIP / TOKEN_PACKAGE
     target_code: str         # 商品编码
     pay_method: str          # alipay / wechat
+    return_url: str
 
 
 class CreateOrderResponse(BaseModel):
@@ -21,7 +22,7 @@ class CreateOrderResponse(BaseModel):
     pay_method: str
     amount: float
     pay_url: str
-
+    return_url:str
 
 class OrderListItem(BaseModel):
     """

@@ -8,13 +8,12 @@ class Settings(BaseSettings):
     # Uvicorn
     APP_ENV: str = 'dev'
     UVICORN_HOST: str = '0.0.0.0'
-    UVICORN_PORT: int = 8011
+    UVICORN_PORT: int = 8000
     UVICORN_RELOAD: bool = True
 
     # 中间件
     MIDDLEWARE_CORS: bool = True
     MIDDLEWARE_GZIP: bool = True
-    MIDDLEWARE_ACCESS: bool = False
 
     # FastAPI
     API_V1_STR: str = '/novelAI'
@@ -100,5 +99,14 @@ class Settings(BaseSettings):
         env_nested_delimiter='__',
         extra='ignore'
     )
+
+    # 封装判断逻辑
+    @property
+    def is_dev(self) -> bool:
+        return self.ENV_MODE.lower() in ("development", "dev", "local")
+
+    @property
+    def is_prod(self) -> bool:
+        return self.ENV_MODE.lower() in ("production", "prod")
 
 settings = Settings()

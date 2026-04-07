@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String, Enum, DECIMAL, JSON, TIMESTAMP, DateTime
+from sqlalchemy import String, Enum, DECIMAL, JSON, TIMESTAMP, DateTime, BigInteger
 from sqlalchemy.sql import func
 
 from database.db_mysql import Base
@@ -31,9 +31,9 @@ class Order(Base):
     )
 
     # 用户ID
-    uid: Mapped[str] = mapped_column(
-        String(64),
-        nullable=False,
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        index=True,
         comment="用户ID"
     )
 

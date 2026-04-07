@@ -6,7 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.adapters.enums import AIProvider
 from ai.ai_nexus import get_ai_nexus
+from common.config.config import settings
+from common.config.generator import LZSDGenerator
 from common.config.get_db import get_db_context
+from core.entity.do.users_do import User
 from dao.ai_log_dao import AILogDAO
 from dao.ai_model_dao import AiModelDAO
 from service.usage_service import UsageService
@@ -37,7 +40,7 @@ class WorkflowService(AIService):
 
     async def prepare_and_record_request(
             self,
-            user_id: int,
+            user: User,
             bid: str,
             origin_prompt: str,
             user_prompt: str,
@@ -50,16 +53,16 @@ class WorkflowService(AIService):
         """
         第一阶段：校验、记录、生成请求ID (同步执行，快速返回)
         """
-        request_id = uuid.uuid4().hex
+        user_id = user.pkId
+
+        request_id = LZSDGenerator.generate_request_id(sign=user.account)
         if correlation is None:
             correlation = []
-        # print(user_prompt)
-        # return request_id
 
         usage_service = UsageService(self.db)
         # 1. 校验配额
         await usage_service.check_quota_or_raise(
-            user_id=user_id,
+            user_info=user,
             current_request_len=len(user_prompt)
         )
 
@@ -99,7 +102,10 @@ async def async_generate_task(ai_provider, input_user_prompt, temperature, reque
     try:
         # 真正的 AI 耗时操作
         nexus = get_ai_nexus()
+        system_prompt = settings.ai_system_prompt
+
         system_prompt, output_prompt = await nexus.generate_novel_text(
+            system_prompt=system_prompt,
             provider=ai_provider,
             user_prompt=input_user_prompt,
             temperature=temperature

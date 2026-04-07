@@ -5,7 +5,7 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
-from core.deps.auth import get_login_user
+from core.deps.auth import get_current_user
 from core.entity.vo.book_node_schema import BookResp, CreateBookReq, BookNodeDetailResp, UpdateBookNodeReq, \
     EditBookNodeReq, EditBookNodeResp, AddChapterResp, AddBookNodeReq, DeleteBookNodeReq, OfflineBookReq, EditBookReq, \
     HardDeleteBookReq
@@ -19,7 +19,7 @@ bookController = APIRouter()
 async def get_book_nodes(bid: str,
                          max_depth: Optional[int] = Query(None, description="最大深度限制"), # 增加可选参数
                          db: AsyncSession = Depends(get_db),
-                         user=Depends(get_login_user)):
+                         user=Depends(get_current_user)):
     book_service = BookService(db)
     tree = await book_service.get_tree(bid, uid=user.pkId, max_depth=max_depth)
     return ResponseUtil.success(data=tree)
@@ -28,7 +28,7 @@ async def get_book_nodes(bid: str,
 async def get_book_children_nodes(bid: str,
                          root_id:int,
                          db: AsyncSession = Depends(get_db),
-                         user=Depends(get_login_user)):
+                         user=Depends(get_current_user)):
     book_service = BookService(db)
     tree = await book_service.get_sub_tree(bid, uid=user.pkId, root_id=root_id)
     return ResponseUtil.success(data=tree)
@@ -37,7 +37,7 @@ async def get_book_children_nodes(bid: str,
 async def add_chapter(
     req: AddBookNodeReq,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_login_user)
+    user=Depends(get_current_user)
 ):
     """
     新增章节接口
@@ -81,7 +81,7 @@ async def add_chapter(
 async def delete_book_node(
     req: DeleteBookNodeReq,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_login_user)
+    user=Depends(get_current_user)
 
 ):
     """
@@ -101,7 +101,7 @@ async def delete_book_node(
 async def edit_book_node(
     req: EditBookNodeReq,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_login_user)
+    user=Depends(get_current_user)
 ):
     """
     编辑章节 / 节点接口
@@ -133,7 +133,7 @@ async def get_book_node_detail(
     id: int = Query(..., description="mc_book_node 节点ID"),
     bid: str = Query(..., description="mc_book_node bidID"),
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_login_user)
+    user=Depends(get_current_user)
 ):
     """
     获取书籍节点详情接口
@@ -156,7 +156,7 @@ async def get_book_node_detail(
 async def edit_book_node(
     req: UpdateBookNodeReq,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_login_user)
+    user=Depends(get_current_user)
 
 ):
     """
@@ -183,7 +183,7 @@ async def edit_book_node(
 async def list_books(
     status: Optional[int] = Query(0, description="书籍状态"),
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_login_user)
+    user=Depends(get_current_user)
 ):
     """
     获取书籍列表接口
@@ -205,7 +205,7 @@ async def list_books(
 async def create_book(
     req: CreateBookReq,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_login_user)
+    user=Depends(get_current_user)
 
 ):
     """
@@ -228,7 +228,7 @@ async def create_book(
 async def create_book_auto(
     req: AutoCreateBookReq,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_login_user)
+    user=Depends(get_current_user)
 
 ):
     service = BookService(db)
@@ -243,7 +243,7 @@ async def create_book_auto(
 async def edit_book(
     req: EditBookReq,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_login_user)
+    user=Depends(get_current_user)
 
 ):
     """
@@ -270,7 +270,7 @@ async def edit_book(
 async def offline_book(
     req: OfflineBookReq,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_login_user)
+    user=Depends(get_current_user)
 ):
     """
     下架书籍（逻辑删除）
@@ -285,7 +285,7 @@ async def offline_book(
 async def hard_delete_book(
     req: HardDeleteBookReq,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_login_user)
+    user=Depends(get_current_user)
 
 ):
     """

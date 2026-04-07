@@ -19,8 +19,8 @@ class UserAccount(Base):
 
     # ==================== 主键 ====================
 
-    uid: Mapped[str] = mapped_column(
-        String(64),
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
         primary_key=True,
         comment="用户ID（关联用户中心）"
     )
@@ -97,6 +97,12 @@ class UserAccount(Base):
         comment="更新时间"
     )
 
+    @property
+    def is_expired(self) -> bool:
+        if not self.expire_at:
+            return False  # 或者根据业务逻辑返回 True
+        return self.expire_at < datetime.now()
+
 
 class AccountLog(Base):
     """
@@ -112,8 +118,8 @@ class AccountLog(Base):
         comment="流水ID"
     )
 
-    uid: Mapped[str] = mapped_column(
-        String(64),
+    user_id: Mapped[int] = mapped_column(
+        Integer,
         nullable=False,
         index=True,
         comment="用户ID"
@@ -135,7 +141,7 @@ class AccountLog(Base):
 
     # ==================== 变动 ====================
 
-    change_type: Mapped[str] = mapped_column(
+    charge_type: Mapped[str] = mapped_column(
         String(32),
         nullable=False,
         comment="RECHARGE / CONSUME / REFUND / EXPIRE / ADJUST"
