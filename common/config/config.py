@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     # Uvicorn
     APP_ENV: str = 'dev'
     UVICORN_HOST: str = '0.0.0.0'
-    UVICORN_PORT: int = 8000
+    UVICORN_PORT: int = 8011
     UVICORN_RELOAD: bool = True
 
     # 中间件

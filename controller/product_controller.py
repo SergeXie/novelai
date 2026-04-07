@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 from loguru import logger
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, result
 from fastapi import Request
 
 from common.config.config import settings
@@ -69,7 +69,7 @@ async def get_product_list(
 
 
 @productRouter.post("/pay", response_model=CreateOrderResponse, name="下单")
-async def create_order(
+async def create_order_(
     req: CreateOrderRequest,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
@@ -91,8 +91,10 @@ async def create_order(
             user_id=user.pkId,
             order_type=req.order_type,
             target_code=req.target_code,
-            pay_method=req.pay_method
+            pay_method=req.pay_method,
+            return_url=req.return_url,
         )
+
     return ResponseUtil.success(data=result)
 
 

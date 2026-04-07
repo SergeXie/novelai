@@ -20,7 +20,7 @@ class AlipayService(BasePayment):
             debug=True
         )
 
-    async def generate_pay_url(self, order) -> str:
+    async def generate_pay_url(self, order, return_url) -> str:
         """
         生成支付宝支付链接
         """

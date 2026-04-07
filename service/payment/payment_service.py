@@ -28,7 +28,7 @@ class PaymentService:
             "wechat": WechatPayService(),
         }
 
-    async def generate_pay_url(self, order) -> str:
+    async def generate_pay_url(self, order, return_url:str) -> str:
         """
         统一生成支付链接入口
 
@@ -45,7 +45,7 @@ class PaymentService:
 
         service = self.payment_map[pay_method]
 
-        pay_url = await service.generate_pay_url(order)
+        pay_url = await service.generate_pay_url(order, return_url)
 
         logger.info(f"[支付调度] 支付链接生成完成 order_no={order.order_no}")
 

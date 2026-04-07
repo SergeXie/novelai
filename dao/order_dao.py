@@ -36,7 +36,7 @@ class OrderDAO(BaseDAO[Order]):
 
         # ==================== 查询总数 ====================
 
-        count_stmt = select(func.count()).where(Order.uid == uid)
+        count_stmt = select(func.count()).where(Order.user_id == user_id)
         total = (await db.execute(count_stmt)).scalar()
 
         return records, total

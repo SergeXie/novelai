@@ -85,7 +85,8 @@ class OrderService:
         user_id: int,
         order_type: str,
         target_code: str,
-        pay_method: str
+        pay_method: str,
+        return_url: str,
     ) -> CreateOrderResponse:
         """
         创建订单（带防重复 + 过期机制）
@@ -119,18 +120,20 @@ class OrderService:
             )
 
             if now < expire_time:
+                return_url = return_url + "&order_no={}".format(pending_order.order_no) +"&code=200"
                 logger.info(f"[下单] 命中未过期订单 order_no={pending_order.order_no}")
 
                 # 重新生成支付链接（关键点）
                 payment_service = PaymentService()
-                pay_url = await payment_service.generate_pay_url(pending_order)
+                pay_url = await payment_service.generate_pay_url(pending_order, return_url)
 
                 # 未过期 → 直接返回旧订单（防重复）
                 return CreateOrderResponse(
                     order_no=pending_order.order_no,
                     pay_method=pending_order.pay_method,
                     amount=float(pending_order.pay_amount),
-                    pay_url=pay_url
+                    pay_url=pay_url,
+                    return_url=return_url
                 )
             else:
                 logger.info(f"[下单] 订单过期关闭 order_no={pending_order.order_no}")
@@ -195,12 +198,15 @@ class OrderService:
         logger.info(f"[下单] 订单创建成功 order_no={order_no}")
 
         # ==================== 生成支付链接 ====================
+        return_url = return_url + "&order_no={}".format(order_no) + "&code=200"
+
         payment_service = PaymentService()
-        pay_url = await payment_service.generate_pay_url(order)
+        pay_url = await payment_service.generate_pay_url(order, return_url)
 
         return CreateOrderResponse(
             order_no=order_no,
             pay_method=pay_method,
             amount=amount,
             pay_url=pay_url,
+            return_url=return_url
         )
