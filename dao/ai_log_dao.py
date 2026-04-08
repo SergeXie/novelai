@@ -1,42 +1,57 @@
-from loguru import logger
-from sqlalchemy import select, func, update, desc, and_
-from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 from typing import List, Tuple
 
+from loguru import logger
+from sqlalchemy import select, func, update, desc, and_
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from ai.adapters.enums import AIGenerateStatus
 from core.entity.do.generate_log import AiNovelGenerateLog
-from service.token_service import TokenService
+from core.entity.vo.ai_response import AICompletionResponse
 from .base import BaseDAO
+
 
 class AILogDAO(BaseDAO[AiNovelGenerateLog]):
     def __init__(self, db: AsyncSession):
         super().__init__(AiNovelGenerateLog, db)
 
-    async def get_usage_sum(self, user_id: int, start_time: datetime = None, end_time: datetime = None) -> tuple[int, int, int, int, int]:
+    async def get_usage_sum(self,
+                            user_id: int,
+                            start_time: datetime = None,
+                            end_time: datetime = None) -> Tuple[int, int, int, int, int]:
         """
-        核心查询下放：根据时间范围统计输入和输出字符数
+        高效统计：利用索引下推减少内存扫描，并处理空值。
         """
-        # 构建基础查询
-        stmt = select(
-            func.coalesce(func.sum(self.model.requestInputLength), 0),
-            func.coalesce(func.sum(self.model.outputLength), 0),
-            func.coalesce(func.sum(self.model.actualAmount), 0),
-            func.coalesce(func.sum(self.model.freeDeduct), 0),
-            func.coalesce(func.sum(self.model.permanentDeduct), 0),
-        ).where(
+        # 1. 预构建聚合列，增加别名方便调试
+        metrics = [
+            func.coalesce(func.sum(self.model.requestInputLength), 0).label("in_len"),
+            func.coalesce(func.sum(self.model.outputLength), 0).label("out_len"),
+            func.coalesce(func.sum(self.model.actualAmount), 0).label("total"),
+            func.coalesce(func.sum(self.model.freeDeduct), 0).label("free"),
+            func.coalesce(func.sum(self.model.permanentDeduct), 0).label("perm")
+        ]
+
+        # 2. 构造查询：务必确保 userId 和 createdAt 组合索引被激活
+        stmt = select(*metrics).where(
             self.model.userId == user_id,
-            self.model.status == 1
+            self.model.status == 1,
+            self.model.isDelete == 0  # 增加逻辑删除过滤，避免统计无效数据
         )
 
-        # 动态添加时间过滤（今日统计 vs 历史总计复用）
         if start_time:
             stmt = stmt.where(self.model.createdAt >= start_time)
         if end_time:
             stmt = stmt.where(self.model.createdAt <= end_time)
 
-        result = await self.db.execute(stmt)
-        return result.one()  # 返回 (input_sum, output_sum)
+        # 3. 使用 execute().one() 的安全解包
+        # 4G 服务器建议：使用 scalars 或 row 结果前先检查
+        try:
+            result = await self.db.execute(stmt)
+            row = result.one()
+            return tuple(row)
+        except Exception as e:
+            logger.error(f"Usage sum failed for user {user_id}: {e}")
+            return (0, 0, 0, 0, 0)
 
     async def get_platform_usage_sum(self, start_time: datetime, end_time: datetime) -> int:
         """
@@ -72,72 +87,39 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
     async def update_output_by_request_id(
             self,
             request_id: str,
-            content: str,
-            status: int = 1,
-            error_msg: str = None
+            ai_rsp: AICompletionResponse,
+            status: AIGenerateStatus = AIGenerateStatus.SUCCESS,
+            error_msg: str = ""
     ) -> bool:
         """
         根据 request_id 更新生成结果（适配驼峰命名字段）
         更新生成结果 + 扣Token
         """
         try:
-
-            # 计算长度，防止 content 为 None
-            content_len = len(content) if content else 0
-
-            # # ==================== 1. 查询原记录 ====================
-            #
-            # stmt_select = select(AiNovelGenerateLog).where(
-            #     AiNovelGenerateLog.requestId == request_id
-            # )
-            # result_ = await self.db.execute(stmt_select)
-            # record = result_.scalars().first()
-            #
-            # if not record:
-            #     return False
-            #
-            # # ==================== 2. 计算token ====================
-            #
-            # input_len = record.requestInputLength or 0
-            # output_len = content_len
-            #
-            # token_amount = input_len + output_len
-            #
-            # # ==================== 3. 扣费 ====================
-            #
-            # if status == 1:  # 成功才扣
-            #     await TokenService.consume_tokens(
-            #         db=self.db,
-            #         uid=record.userId,
-            #         amount=token_amount,
-            #         request_id=request_id
-            #     )
-
-            # 构建更新语句
-            # 注意：这里的 key 必须与 AiNovelGenerateLog 类中的属性名完全一致
             stmt = (
                 update(AiNovelGenerateLog)
                 .where(AiNovelGenerateLog.requestId == request_id)
                 .values({
-                    "outputContent": content,
-                    "outputLength": content_len,
+                    "outputContent": ai_rsp.content,
+                    "outputLength": ai_rsp.usage.completion_tokens,
+                    "requestInputLength": ai_rsp.usage.prompt_tokens,
+                    "totalTokens": ai_rsp.usage.total_tokens,
                     "status": status,
-                    "errorMsg": error_msg,
-                    "tokenEstimate": content_len // 2  # 按照你之前的逻辑：长度除以2
+                    "errorMsg": error_msg
                 })
             )
 
             result = await self.db.execute(stmt)
-            # 在异步环境下，确保该 session 之后有 commit 操作
-            # 如果你的 get_db_context() 不带自动 commit，这里需要手动调用：
-            await self.db.commit()
 
-            return result.rowcount > 0
+            if result.rowcount > 0:
+                await self.db.commit()
+                return True
 
         except Exception as e:
             # 这里的 logger 建议使用你项目配置好的
             logger.error(f"Update AiNovelGenerateLog Error: {e}")
-            return False
+
+        return False
 
     # 假设你的类名已统一为 AiNovelGenerateLog
     async def get_logs_by_bid(self, bid: str) -> List[dict]:

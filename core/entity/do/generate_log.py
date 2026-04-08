@@ -166,11 +166,18 @@ class AiNovelGenerateLog(Base):
         comment="最终核减的计费Token数"
     )
 
-    consumeSource: Mapped[TokenConsumeSource] = mapped_column(
-        SqlEnum(TokenConsumeSource),
+    # 在模型类中
+    consume_source: Mapped[TokenConsumeSource] = mapped_column(
+        "consumeSource",  # 必须显式指定数据库里的原始列名（驼峰）
+        SqlEnum(
+            TokenConsumeSource,
+            # 核心：告诉 SQLAlchemy 存取时使用 .value (即 "free")
+            values_callable=lambda x: [item.value for item in x],
+            native_enum=False
+        ),
         nullable=False,
         default=TokenConsumeSource.FREE,
-        comment="消耗来源：free(每日免费) / permanent(永久) / mixed(混合)"
+        server_default="free"
     )
 
     # ========= 资产拆解统计 =========

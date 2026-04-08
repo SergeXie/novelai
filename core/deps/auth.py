@@ -20,10 +20,6 @@ async def get_current_user(
 
     ### 根据header中token获取当前用户
     try:
-        token = authorization
-        if not token:
-            raise AuthException(message='Not authorization')
-
         # --- 调试模式后门 ---
         # 如果开启了调试模式，且 Token 不是以 Bearer 开头，尝试将其视作 account 直接查询
         if settings.ENV_MODE == "development":
@@ -35,7 +31,9 @@ async def get_current_user(
                 else:
                     raise AuthException(message='Not authorization')
 
-        # ------------------
+        token = authorization
+        if not token:
+            raise AuthException(message='Not authorization')
 
         if token.startswith('@Bearer'):
             return None

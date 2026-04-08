@@ -38,9 +38,6 @@ async def generate(
         db=Depends(get_db),
         user=Depends(get_current_user),
 ):
-    if settings.is_dev:
-        raise InsufficientTokenException()
-
     """
     根据设定生成小说片段（输入 / 输出全量留痕）
     """

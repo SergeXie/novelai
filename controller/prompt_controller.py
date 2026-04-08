@@ -8,7 +8,7 @@ from ai.adapters.enums import AIProvider, AIAction
 from ai.ai_nexus import check_ai_input, get_ai_nexus
 from ai.workflow.wf_create_book import CreateBookWorkflow
 from common.config.generator import LZSDGenerator
-from common.config.get_db import get_db
+from common.config.get_db import get_db, get_db_context
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user
 from core.entity.vo.prompt_register_vo import PromptRegistryResp
@@ -61,11 +61,11 @@ async def get_content_ai_tools(db: AsyncSession = Depends(get_db)):
 async def get_book_creation_ai_tool(db: AsyncSession = Depends(get_db)):
     prompt_service = PromptService(db)
     data = dict()
-    tool = await prompt_service.get_tool_by_key("FhaOjVZT456JWH3P")
+    tool = await prompt_service.get_tool_by_key("wenyuan_title_forge")
     if tool:
         data["title"] = PromptRegistryResp.model_validate(tool)
 
-    tool = await prompt_service.get_tool_by_key("kOtnrNg6CUm5IZfJ")
+    tool = await prompt_service.get_tool_by_key("wenyuan_blurb_forge")
     if tool:
         data["intro"] = PromptRegistryResp.model_validate(tool)
 
@@ -128,7 +128,7 @@ async def create_book_flow(
         nexus = get_ai_nexus()
 
         # 1. 校验配额-
-        async with get_db() as db:
+        async with get_db_context() as db:
             # 使用上下文管理器确保即使出错也能关闭
             usage_service = UsageService(db)
             await usage_service.check_quota_or_raise(
@@ -139,36 +139,45 @@ async def create_book_flow(
         workflow = CreateBookWorkflow(ai_provider=ai_provider)
 
         context = {"idea": idea}
-        workflow_rsp = await workflow.run(initial_context=context)
+
+        try:
+            print(">>> 准备进入工作流...")
+            # 传入副本，彻底隔离外部 context 受到污染的可能性
+            workflow_rsp = await workflow.run(initial_context=context.copy())
+            print(">>> 工作流执行成功，返回类型为:", type(workflow_rsp))
+
+        except Exception as e:
+            print("!!! 捕获到致命错误 !!!")
+            import traceback
+            traceback.print_exc()  # 这会打印出真实的、隐藏在 Pydantic 内部的报错行
+            raise e
 
         """
             解析文源 AI 创作流水线数据
         """
-        result = {
+        final_result_data = {
             "title": "",
             "summary": "",
             "characters": []
         }
 
         token_usage = 0
-
         # 遍历 steps 提取数据
         for step in workflow_rsp.steps:
-            result = step.result
+            current_step_obj = step.result
             step_name = step.name
-            token_usage += result.usage.total_tokens
+            token_usage += current_step_obj.usage.total_tokens
 
-            # 2. 二次解析内部的 output 字符串
-            output_data = json.loads(step.result.content)
+            output_data = json.loads(current_step_obj.content)
 
             if step_name == "title_and_blurb":
-                result["title"] = output_data.get("title")
-                result["summary"] = output_data.get("blurb")
+                final_result_data["title"] = output_data.get("title")
+                final_result_data["summary"] = output_data.get("blurb")
 
             elif step_name == "people":
-                result["characters"] = output_data.get("characters", [])
+                final_result_data["characters"] = output_data.get("characters", [])
 
-        async with get_db() as db:
+        async with get_db_context() as db:
             usage_service = UsageService(db)
             await usage_service.record(
                 user_id=user.pkId,
@@ -183,7 +192,7 @@ async def create_book_flow(
                 temperature=0.7
             )
 
-        return ResponseUtil.success(data=result)
+        return ResponseUtil.success(data=final_result_data)
 
     except Exception as e:
         return ResponseUtil.error(msg=f"执行失败: {str(e)}")
