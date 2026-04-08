@@ -229,7 +229,6 @@ async def create_book_auto(
     req: AutoCreateBookReq,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user)
-
 ):
     service = BookService(db)
     book = await service.auto_create_book(user_id=user.pkId, title=req.title, summary=req.summary, roles=req.characters)

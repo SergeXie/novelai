@@ -1,6 +1,12 @@
 ### Build Script
     python -m PyInstaller --hidden-import aiomysql -n "novelAI" .\main.py
 ---
+
+#### 20260408
+> 修正AI额度检查；  
+> 生成日志增加AI生成额度扣减记录  
+> 工作流数据转化错误bug修复
+
 #### 20260301
 > 聚合AI功能到AINexus单例模式  
 > 调整logger  

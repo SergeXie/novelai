@@ -4,7 +4,7 @@ from typing import Any
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai.adapters.enums import AIProvider
+from ai.adapters.enums import AIProvider, AIAction
 from ai.ai_nexus import get_ai_nexus
 from common.config.config import settings
 from common.config.generator import LZSDGenerator
@@ -59,16 +59,10 @@ class WorkflowService(AIService):
         if correlation is None:
             correlation = []
 
-        usage_service = UsageService(self.db)
-        # 1. 校验配额
-        await usage_service.check_quota_or_raise(
-            user_info=user,
-            frozen_token_length=len(user_prompt)
-        )
-
         ai_provider = AIProvider.from_level(level)
         input_user_prompt = user_prompt
 
+        usage_service = UsageService(self.db)
         # 3. 初始存证（此时 output_content 为空）
         await usage_service.record(
             user_id=user_id,
@@ -81,7 +75,7 @@ class WorkflowService(AIService):
             user_prompt=input_user_prompt,
             temperature=temperature,
             output_content="",
-            action_type=action_type,
+            action_type=AIAction(action_type),
         )
 
         # 4. 第二阶段：将耗时的 AI 生成丢入后台任务，不阻塞当前响应

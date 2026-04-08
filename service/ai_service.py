@@ -57,14 +57,8 @@ class AIService:
             correlation = []
 
         usage_service = UsageService(self.db)
-        await usage_service.check_quota_or_raise(
-            user_info=user,
-            frozen_token_length=len(user_prompt)
-        )
-
         ai_provider = AIProvider.from_level(level)
         input_user_prompt = user_prompt
-
         await usage_service.record(
             user_id=user_id,
             request_id=request_id,

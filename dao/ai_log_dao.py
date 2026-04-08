@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import List, Tuple
 
 from loguru import logger
-from sqlalchemy import select, func, update, desc, and_
+from sqlalchemy import select, func, update, desc, and_, Integer, cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.adapters.enums import AIGenerateStatus
@@ -24,11 +24,11 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
         """
         # 1. 预构建聚合列，增加别名方便调试
         metrics = [
-            func.coalesce(func.sum(self.model.requestInputLength), 0).label("in_len"),
-            func.coalesce(func.sum(self.model.outputLength), 0).label("out_len"),
-            func.coalesce(func.sum(self.model.actualAmount), 0).label("total"),
-            func.coalesce(func.sum(self.model.freeDeduct), 0).label("free"),
-            func.coalesce(func.sum(self.model.permanentDeduct), 0).label("perm")
+            func.coalesce(cast(func.sum(self.model.requestInputLength), Integer), 0).label("in_len"),
+            func.coalesce(cast(func.sum(self.model.outputLength), Integer), 0).label("out_len"),
+            func.coalesce(cast(func.sum(self.model.actualAmount), Integer), 0).label("total"),
+            func.coalesce(cast(func.sum(self.model.freeDeduct), Integer), 0).label("free"),
+            func.coalesce(cast(func.sum(self.model.permanentDeduct), Integer), 0).label("perm")
         ]
 
         # 2. 构造查询：务必确保 userId 和 createdAt 组合索引被激活
@@ -71,12 +71,12 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
         self.db.add(log_obj)
         await self.db.commit()  # 或者在 Service 层统一 commit
 
-    async def get_log_by_request_id(self, user_id:int, request_id: str) -> AiNovelGenerateLog:
+    async def get_log_by_request_id(self, request_id: str) -> AiNovelGenerateLog:
         """
         根据 requestId 查询生成日志记录
         """
         # 使用 select 语句构建查询
-        stmt = select(AiNovelGenerateLog).where(AiNovelGenerateLog.requestId == request_id and AiNovelGenerateLog.userId == user_id)
+        stmt = select(AiNovelGenerateLog).where(AiNovelGenerateLog.requestId == request_id)
 
         # 执行查询
         result = await self.db.execute(stmt)

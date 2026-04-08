@@ -5,13 +5,14 @@ from fastapi import APIRouter, Depends, Body, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.adapters.enums import AIProvider, AIAction
-from ai.ai_nexus import check_ai_input, get_ai_nexus
+from ai.ai_nexus import check_ai_input
 from ai.workflow.wf_create_book import CreateBookWorkflow
+from common.config.config import settings
 from common.config.generator import LZSDGenerator
 from common.config.get_db import get_db, get_db_context
 from common.response.response_util import ResponseUtil
-from core.deps.auth import get_current_user
-from core.entity.vo.ai_response import AICompletionResponse, TokenUsage
+from core.deps.auth import get_current_user, check_user_quota_or_raise
+from core.entity.vo.ai_response import TokenUsage
 from core.entity.vo.prompt_register_vo import PromptRegistryResp
 from dao.book_dao import BookDAO
 from service.ai_prompt_service import PromptService
@@ -82,6 +83,9 @@ async def render(
         db: AsyncSession = Depends(get_db),
         user=Depends(get_current_user)
 ):
+    # 检查用户额度
+    await check_user_quota_or_raise(frozen_token_length=3000, user_info=user)
+
     service = PromptService(db)
 
     book = None
@@ -124,23 +128,13 @@ async def create_book_flow(
 
     check_ai_input(idea)
 
+    # 1. 校验配额-
+    await check_user_quota_or_raise(frozen_token_length=3000, user_info=user)
+
     try:
         ai_provider = AIProvider.from_level(level)
-        nexus = get_ai_nexus()
-
-        # 1. 校验配额-
-        async with get_db_context() as db:
-            # 使用上下文管理器确保即使出错也能关闭
-            usage_service = UsageService(db)
-            await usage_service.check_quota_or_raise(
-                user_info=user,
-                frozen_token_length=nexus.get_actual_tokens(provider=ai_provider, content=idea)
-            )
-
         workflow = CreateBookWorkflow(ai_provider=ai_provider)
-
         context = {"idea": idea}
-
         try:
             print(">>> 准备进入工作流...")
             # 传入副本，彻底隔离外部 context 受到污染的可能性
@@ -148,9 +142,6 @@ async def create_book_flow(
             print(">>> 工作流执行成功，返回类型为:", type(workflow_rsp))
 
         except Exception as e:
-            print("!!! 捕获到致命错误 !!!")
-            import traceback
-            traceback.print_exc()  # 这会打印出真实的、隐藏在 Pydantic 内部的报错行
             raise e
 
         """
@@ -204,6 +195,7 @@ async def create_book_flow(
         is_dict = isinstance(final_obj, dict)
 
         async with get_db_context() as db:
+            request_id = LZSDGenerator.generate_request_id()
             usage_service = UsageService(db)
             await usage_service.record(
                 user_id=user.pkId,
@@ -211,7 +203,7 @@ async def create_book_flow(
                 bid="",
                 user_prompt="一键成书",
                 origin_prompt=idea,
-                request_id=LZSDGenerator.generate_request_id(),
+                request_id=request_id,
                 # 兼容字典和对象访问
                 system_prompt="",  # 如果 AICompletionResponse 没存 system_prompt，传空
                 output_content=final_obj.get("content", "") if is_dict else final_obj.content,
@@ -221,6 +213,8 @@ async def create_book_flow(
                 promptTokens=usage.prompt_tokens,
                 completionTokens=usage.completion_tokens,
             )
+
+            await usage_service.record_consumption(request_id=request_id, total_tokens=usage.total_tokens, multiplier=settings.MULTIPLIER)
 
         return ResponseUtil.success(data=final_result_data)
 
