@@ -1,5 +1,8 @@
+from dataclasses import dataclass
+
 from pydantic import BaseModel, Field, computed_field
-from typing import Optional
+from typing import Optional, Dict, List, Any
+
 
 class TokenUsage(BaseModel):
     """Token 消耗详情"""
@@ -18,10 +21,11 @@ class AIWorkFlowStepResponse(BaseModel):
     name:str = Field(..., description="步骤名称")
     result:AICompletionResponse = Field(..., description="生成结果")
 
-class AIWorkFlowResponse(BaseModel):
-    context:dict = Field(..., description="工作流上下文")
-    steps:list[AIWorkFlowStepResponse] = Field(..., description="工作流分步数据")
-    final_result:AICompletionResponse = Field(..., description="生成结果")
+@dataclass
+class AIWorkFlowResponse:
+    context: Dict[str, Any]
+    steps: List[Any]  # 这里的 Any 可以让你兼容对象或字典
+    final_result: Optional[Any] = None
 
 class AIUserAssets(BaseModel):
     """用户实时资产余额模型"""

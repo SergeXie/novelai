@@ -36,9 +36,23 @@ class AIProvider(str, Enum):
         return level_map.get(level, cls.DOUBAO)
 
 class AIAction(str, Enum):
+    Unknown = "unknown"
     Generate = "generate"
     Render = "render"
     WorkFlow = "workflow"
+
+    @classmethod
+    def _missing_(cls, value):
+        """
+        当传入的值不在定义范围内时（不区分大小写），默认返回 Unknown
+        """
+        if isinstance(value, str):
+            # 兼容性处理：转为小写后再匹配
+            normalized_value = value.lower()
+            for item in cls:
+                if item.value == normalized_value:
+                    return item
+        return cls.Unknown
 
 class AIGenerateStatus(IntEnum):
     PENDING = 0      # 待处理（任务已创建，等待进入队列）

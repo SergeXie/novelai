@@ -44,8 +44,6 @@ class BaseWorkflow(ABC):
                 # 1. 动态填充上下文变量
                 formatted_prompt = step.prompt.format(**context)
 
-                print(formatted_prompt)
-
                 # 2. 调用 AI
                 ai_response: AICompletionResponse = await get_ai_nexus().generate_novel_text(provider=self.ai_provider,
                                                                           system_prompt=step.system_prompt,
@@ -53,7 +51,6 @@ class BaseWorkflow(ABC):
                                                                           temperature=step.temperature)
 
                 last_ai_output = ai_response
-                print(ai_response.content)
 
                 # 3. 更新上下文
                 storage_key = step.output_key or step.name
@@ -70,9 +67,25 @@ class BaseWorkflow(ABC):
             except Exception as e:
                 raise WorkflowError(f"步骤 '{step.name}' 执行失败: {str(e)}")
 
-        return AIWorkFlowResponse(
+        print("workflow steps history:", steps_history)
+
+        # 1. 把对象转成纯字典
+        clean_final_result = last_ai_output.model_dump() if last_ai_output else {}
+
+        # 2. 同样的，把 steps_history 里的对象也转了
+        clean_steps = []
+        for s in steps_history:
+            clean_steps.append({
+                "name": s.name,
+                "result": s.result.model_dump() if hasattr(s.result, 'model_dump') else s.result
+            })
+
+        # 3. 此时再 return，Pydantic 拿到的是纯粹的 dict 数组，它会自己安全地创建新对象
+        ret = AIWorkFlowResponse(
             context=context,
-            steps=steps_history,
-            final_result=last_ai_output  # 将最后一个环节的 AI 响应作为最终 output
+            steps=clean_steps,
+            final_result=clean_final_result
         )
+
+        return ret
 

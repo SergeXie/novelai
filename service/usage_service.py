@@ -140,7 +140,13 @@ class UsageService:
             # 这里只是粗略估算，不是严格 tokenizer 结果。
             tokenEstimate=len(output_content) // 2,
             actionType=action_type,
-            status=status.value
+            status=status.value,
+            totalTokens=totalTokens,
+            actualAmount=actualAmount,
+            consume_source=consumeSource,
+            freeDeduct=freeDeduct,
+            monthlyDeduct=monthlyDeduct,
+            permanentDeduct=permanentDeduct,
         )
         await self.ai_log_dao.create_ai_generate_log(log_obj=log)
 
@@ -164,7 +170,7 @@ class UsageService:
 
         success = await self.ai_log_dao.update_output_by_request_id(
             request_id=request_id,
-            content=ai_rsp.content,
+            ai_rsp=ai_rsp,
         )
 
         if success:

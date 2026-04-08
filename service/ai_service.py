@@ -1,14 +1,13 @@
-import uuid
-from typing import Any
-
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai.adapters.enums import AIProvider
+from ai.adapters.enums import AIProvider, AIAction
 from ai.ai_nexus import get_ai_nexus
+from common.config.config import settings
 from common.config.generator import LZSDGenerator
 from common.config.get_db import get_db_context
 from core.entity.do.users_do import User
+from core.entity.vo.ai_response import AICompletionResponse
 from dao.ai_log_dao import AILogDAO
 from dao.ai_model_dao import AiModelDAO
 from service.usage_service import UsageService
@@ -53,8 +52,6 @@ class AIService:
         第一阶段：校验、记录、生成请求ID (同步执行，快速返回)
         """
         user_id = user.pkId
-
-
         request_id = LZSDGenerator.generate_request_id(sign=user.account)
         if correlation is None:
             correlation = []
@@ -79,7 +76,7 @@ class AIService:
             user_prompt=input_user_prompt,
             temperature=temperature,
             output_content="",
-            action_type=action_type,
+            action_type=AIAction(action_type)
         )
 
         if background_tasks is not None:
@@ -108,13 +105,16 @@ def _should_retry_with_level2(error: Exception) -> bool:
 
 async def async_generate_task(ai_provider, input_user_prompt, temperature, request_id):
     """后台异步执行 AI 调用并更新结果"""
-    system_prompt, output_prompt = "", ""
+    system_prompt = settings.ai_system_prompt
+    ai_rsp: AICompletionResponse | None = None
+
     try:
         nexus = get_ai_nexus()
         try:
-            system_prompt, output_prompt = await nexus.generate_novel_text(
+            ai_rsp = await nexus.generate_novel_text(
                 provider=ai_provider,
                 user_prompt=input_user_prompt,
+                system_prompt=system_prompt,
                 temperature=temperature
             )
         except Exception as e:
@@ -123,20 +123,20 @@ async def async_generate_task(ai_provider, input_user_prompt, temperature, reque
                 logger.warning(
                     f"Request {request_id} 命中特定 Gemini 渠道错误，改用 level=2 重试。原始错误: {e}"
                 )
-                system_prompt, output_prompt = await nexus.generate_novel_text(
+                ai_rsp = await nexus.generate_novel_text(
                     provider=fallback_provider,
                     user_prompt=input_user_prompt,
+                    system_prompt=system_prompt,
                     temperature=temperature
                 )
             else:
                 raise
 
-        status = 1  # 成功
     except Exception as e:
         output_prompt = f"Error: {str(e)}"
-        status = 0  # 失败
-        logger.error(f"Async Generation Error for {request_id}: {output_prompt}")
+        logger.error(f"generate_novel_text Error for {request_id}: {output_prompt}")
 
-    async with get_db_context() as db:
-        usage_service = UsageService(db=db)
-        await usage_service.update_output_content_by_request_id(request_id, output_prompt)
+    if ai_rsp is not None:
+        async with get_db_context() as db:
+            usage_service = UsageService(db=db)
+            await usage_service.update_output_content_by_request_id(request_id, ai_rsp)
