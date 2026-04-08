@@ -147,7 +147,7 @@ class UsageService:
     async def poll_content_by_request_id(self, request_id: str, user_id:int):
         """根据 request_id 查询生成内容，常用于前端轮询结果。"""
         log_record = await self.ai_log_dao.get_log_by_request_id(request_id=request_id, user_id=user_id)
-
+        print("log_record:", log_record)
         if log_record:
             return log_record.outputContent
 
