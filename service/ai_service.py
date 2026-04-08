@@ -61,8 +61,8 @@ class AIService:
 
         usage_service = UsageService(self.db)
         await usage_service.check_quota_or_raise(
-            user_id=user_id,
-            current_request_len=len(user_prompt)
+            user_info=user,
+            frozen_token_length=len(user_prompt)
         )
 
         ai_provider = AIProvider.from_level(level)

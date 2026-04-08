@@ -117,7 +117,8 @@ class UsageService:
             max_tokens = model.max_tokens
             model_name = model.model_identifier
 
-
+        if isinstance(action_type, str):
+            action_type = AIAction(action_type)
 
         log = AiNovelGenerateLog(
             userId=user_id,
@@ -138,7 +139,7 @@ class UsageService:
             outputLength=len(output_content),
             # 这里只是粗略估算，不是严格 tokenizer 结果。
             tokenEstimate=len(output_content) // 2,
-            actionType=action_type.value,
+            actionType=action_type,
             status=status.value
         )
         await self.ai_log_dao.create_ai_generate_log(log_obj=log)
