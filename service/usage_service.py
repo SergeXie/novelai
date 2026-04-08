@@ -96,6 +96,8 @@ class UsageService:
             node_ids : list = None,
             action_type: AIAction = AIAction.Generate,
             status=AIGenerateStatus.PENDING,
+            promptTokens:int = 0,
+            completionTokens:int = 0,
             totalTokens:int = 0,
             actualAmount:int = 0,
             consumeSource:TokenConsumeSource = TokenConsumeSource.FREE,
@@ -130,15 +132,15 @@ class UsageService:
             # 输入信息
             userPrompt=user_prompt,
             systemPrompt=system_prompt,
-            requestInputLength=len(user_prompt),
+            requestInputLength=promptTokens,
             model=model_name,
             temperature=temperature,
             maxTokens=max_tokens,
             # 输出信息
             outputContent=output_content,
-            outputLength=len(output_content),
+            outputLength=completionTokens,
             # 这里只是粗略估算，不是严格 tokenizer 结果。
-            tokenEstimate=len(output_content) // 2,
+            tokenEstimate=completionTokens*2,
             actionType=action_type,
             status=status.value,
             totalTokens=totalTokens,

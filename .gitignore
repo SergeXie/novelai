@@ -14,6 +14,7 @@ lztrader_envs/
 ENV/
 env.bak/
 venv.bak/
+.env
 *.egg-info/
 dist/
 build/

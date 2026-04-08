@@ -25,6 +25,7 @@ class BaseWorkflow(ABC):
 
     def __init__(self, ai_provider:AIProvider):
         self.ai_provider = ai_provider
+        self.name = "基础工作流"
 
     @abstractmethod
     def get_steps(self) -> List[WorkflowStep]:
@@ -58,10 +59,10 @@ class BaseWorkflow(ABC):
 
                 # 4. 记录步骤详情
                 steps_history.append(
-                    AIWorkFlowStepResponse(
-                        name=step.name,
-                        result=ai_response,
-                    )
+                    {
+                        "name": step.name,
+                        "result": ai_response.model_dump()  # 关键：直接 dump 成纯字典
+                    }
                 )
 
             except Exception as e:
@@ -69,21 +70,11 @@ class BaseWorkflow(ABC):
 
         print("workflow steps history:", steps_history)
 
-        # 1. 把对象转成纯字典
         clean_final_result = last_ai_output.model_dump() if last_ai_output else {}
 
-        # 2. 同样的，把 steps_history 里的对象也转了
-        clean_steps = []
-        for s in steps_history:
-            clean_steps.append({
-                "name": s.name,
-                "result": s.result.model_dump() if hasattr(s.result, 'model_dump') else s.result
-            })
-
-        # 3. 此时再 return，Pydantic 拿到的是纯粹的 dict 数组，它会自己安全地创建新对象
         ret = AIWorkFlowResponse(
             context=context,
-            steps=clean_steps,
+            steps=steps_history,
             final_result=clean_final_result
         )
 

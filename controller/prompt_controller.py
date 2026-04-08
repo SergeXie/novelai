@@ -11,6 +11,7 @@ from common.config.generator import LZSDGenerator
 from common.config.get_db import get_db, get_db_context
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user
+from core.entity.vo.ai_response import AICompletionResponse, TokenUsage
 from core.entity.vo.prompt_register_vo import PromptRegistryResp
 from dao.book_dao import BookDAO
 from service.ai_prompt_service import PromptService
@@ -155,27 +156,52 @@ async def create_book_flow(
         """
             解析文源 AI 创作流水线数据
         """
+
+        # --- 解析文源 AI 创作流水线数据 ---
         final_result_data = {
             "title": "",
             "summary": "",
-            "characters": []
+            "characters": [],
         }
 
-        token_usage = 0
+        usage = TokenUsage()
+
         # 遍历 steps 提取数据
-        for step in workflow_rsp.steps:
-            current_step_obj = step.result
-            step_name = step.name
-            token_usage += current_step_obj.usage.total_tokens
+        for step_data in workflow_rsp.steps:
+            # 注意：根据你之前的修改，step_data 现在很可能是一个 dict
+            # 如果 AIWorkFlowStepResponse 也是普通类，则用 .name；如果是 dict 用 ["name"]
+            # 建议统一检查一下
+            s_name = step_data.name if hasattr(step_data, 'name') else step_data["name"]
+            s_result = step_data.result if hasattr(step_data, 'result') else step_data["result"]
 
-            output_data = json.loads(current_step_obj.content)
+            # 提取 token (处理 dict 格式)
+            if isinstance(s_result, dict):
+                usage.total_tokens += s_result.get("usage", {}).get("total_tokens", 0)
+                usage.completion_tokens += s_result.get("usage", {}).get("completion_tokens", 0)
+                usage.prompt_tokens += s_result.get("usage", {}).get("prompt_tokens", 0)
+                content_str = s_result.get("content", "")
+            else:
+                usage.total_tokens += s_result.usage.total_tokens
+                usage.completion_tokens += s_result.usage.completion_tokens
+                usage.prompt_tokens += s_result.usage.prompt_tokens
+                content_str = s_result.content
 
-            if step_name == "title_and_blurb":
-                final_result_data["title"] = output_data.get("title")
-                final_result_data["summary"] = output_data.get("blurb")
+            # 解析内部 JSON
+            try:
+                output_data = json.loads(content_str)
+                if s_name == "title_and_blurb":
+                    final_result_data["title"] = output_data.get("title")
+                    final_result_data["summary"] = output_data.get("blurb")
+                elif s_name == "people":
+                    final_result_data["characters"] = output_data.get("characters", [])
+            except Exception as e:
+                print(f"解析步骤 {s_name} 失败: {e}")
 
-            elif step_name == "people":
-                final_result_data["characters"] = output_data.get("characters", [])
+        final_result_data["usage"] = usage.model_dump()
+
+        # 提取最终结果数据
+        final_obj = workflow_rsp.final_result
+        is_dict = isinstance(final_obj, dict)
 
         async with get_db_context() as db:
             usage_service = UsageService(db)
@@ -183,13 +209,17 @@ async def create_book_flow(
                 user_id=user.pkId,
                 level=level,
                 bid="",
-                user_prompt=workflow.name,
+                user_prompt="一键成书",
                 origin_prompt=idea,
                 request_id=LZSDGenerator.generate_request_id(),
-                system_prompt=workflow_rsp.final_result.system_prompt,
-                output_content=workflow_rsp.final_result.output_content,
+                # 兼容字典和对象访问
+                system_prompt="",  # 如果 AICompletionResponse 没存 system_prompt，传空
+                output_content=final_obj.get("content", "") if is_dict else final_obj.content,
                 action_type=AIAction.WorkFlow,
-                temperature=0.7
+                temperature=0.7,
+                totalTokens=usage.total_tokens,
+                promptTokens=usage.prompt_tokens,
+                completionTokens=usage.completion_tokens,
             )
 
         return ResponseUtil.success(data=final_result_data)
