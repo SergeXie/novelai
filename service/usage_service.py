@@ -248,6 +248,8 @@ class UsageService:
             account.total_consumed += monthly_deduct
             remaining_to_pay -= monthly_deduct
             logger.info("抵扣月度额度")
+            await self.consume_tokens(account, actual_amount, user_id, request_id)
+
 
         # C. 【最后】抵扣永久额度 (Permanent)
         if account.permanent_balance > 0 and remaining_to_pay > 0:
@@ -257,6 +259,7 @@ class UsageService:
             account.total_consumed += perm_deduct
             remaining_to_pay -= perm_deduct
             logger.info("抵扣永久额度")
+            await self.consume_tokens(account, actual_amount, user_id, request_id)
 
         # --- 3. 核心修正：判定 TokenConsumeSource ---
 
@@ -283,23 +286,25 @@ class UsageService:
         # 记得更新 account 表的相关余额
         await self.db.commit()
 
-        # 新增额外流水
-        if free_limit_remaining < 0 and remaining_to_pay < 0:
-            consume_monthly = min(account.monthly_balance, actual_amount)
-            consume_permanent = actual_amount - consume_monthly
-            await UserDAO.create_log(
-                db=self.db,
-                user_id=user_id,
-                request_id=request_id,
-                monthly_amount=consume_monthly,
-                permanent_amount=consume_permanent,
-                total_amount=actual_amount,
-                balance_snapshot={
-                    "monthly": account.monthly_balance,
-                    "permanent": account.permanent_balance
-                }
-            )
 
-            logger.info(
-                f"[扣费] 成功 user_id={user_id}, monthly={consume_monthly}, permanent={consume_permanent}"
-            )
+
+    async def consume_tokens(self, account, actual_amount, user_id, request_id):
+        # 新增额外流水
+        consume_monthly = min(account.monthly_balance, actual_amount)
+        consume_permanent = actual_amount - consume_monthly
+        await UserDAO.create_log(
+            db=self.db,
+            user_id=user_id,
+            request_id=request_id,
+            monthly_amount=consume_monthly,
+            permanent_amount=consume_permanent,
+            total_amount=actual_amount,
+            balance_snapshot={
+                "monthly": account.monthly_balance,
+                "permanent": account.permanent_balance
+            }
+        )
+
+        logger.info(
+            f"[扣费] 成功 user_id={user_id}, monthly={consume_monthly}, permanent={consume_permanent}"
+        )
