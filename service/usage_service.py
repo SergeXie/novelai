@@ -284,21 +284,22 @@ class UsageService:
         await self.db.commit()
 
         # 新增额外流水
-        consume_monthly = min(account.monthly_balance, actual_amount)
-        consume_permanent = actual_amount - consume_monthly
-        await UserDAO.create_log(
-            db=self.db,
-            user_id=user_id,
-            request_id=request_id,
-            monthly_amount=consume_monthly,
-            permanent_amount=consume_permanent,
-            total_amount=actual_amount,
-            balance_snapshot={
-                "monthly": account.monthly_balance,
-                "permanent": account.permanent_balance
-            }
-        )
+        if free_limit_remaining < 0 and remaining_to_pay < 0:
+            consume_monthly = min(account.monthly_balance, actual_amount)
+            consume_permanent = actual_amount - consume_monthly
+            await UserDAO.create_log(
+                db=self.db,
+                user_id=user_id,
+                request_id=request_id,
+                monthly_amount=consume_monthly,
+                permanent_amount=consume_permanent,
+                total_amount=actual_amount,
+                balance_snapshot={
+                    "monthly": account.monthly_balance,
+                    "permanent": account.permanent_balance
+                }
+            )
 
-        logger.info(
-            f"[扣费] 成功 user_id={user_id}, monthly={consume_monthly}, permanent={consume_permanent}"
-        )
+            logger.info(
+                f"[扣费] 成功 user_id={user_id}, monthly={consume_monthly}, permanent={consume_permanent}"
+            )
