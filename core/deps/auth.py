@@ -119,7 +119,7 @@ async def check_user_quota_or_raise(frozen_token_length: int, user_info: User):
         # 个人已消耗的加权额度 (假设数据库里存的是原始值)
         user_already_consumed_weighted = (input_total + output_total) * settings.MULTIPLIER
 
-        if (user_already_consumed_weighted + weighted_needed) > settings.USER_DAY_LIMIT:
+        if (user_already_consumed_weighted + weighted_needed) > settings.USER_DAILY_TOKEN_LIMIT:
             logger.info(
                 f"User limit reached: {user_info.account}, Total: {user_already_consumed_weighted + weighted_needed}")
             raise InsufficientTokenException("您的个人每日免费额度不足")
