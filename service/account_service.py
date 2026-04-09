@@ -145,7 +145,7 @@ class AccountService:
 
         if membership.monthly_token_allowance > 0:
             account.monthly_balance += membership.monthly_token_allowance
-            account.total_amount += membership.monthly_token_allowance
+            account.total_amount + membership.monthly_token_allowance
             # 写流水（MONTHLY）
             log = AccountLog(
                 user_id=account.user_id,
@@ -182,7 +182,7 @@ class AccountService:
         # ==================== 1. 增加余额 ====================
 
         account.permanent_balance += token_amount
-        account.total_amount += token_amount
+        account.total_amount + token_amount
 
         logger.info(f"[Token] permanent +{token_amount}")
 
@@ -234,6 +234,7 @@ class AccountService:
                 monthly_balance=0,
                 permanent_balance=0,
                 total_consumed=0,
+                total_amount=0,
                 last_reset_at=None,
                 version=0,
                 updated_at=datetime.utcnow()
