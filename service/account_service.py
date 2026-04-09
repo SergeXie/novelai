@@ -38,7 +38,7 @@ class AccountService:
 
         membership = await MembershipDAO.get_by_code(db, account.level_code)
 
-        # ==================== 3. 计算总余额 ====================
+        # ==================== 3. 计算总剩余余额 ====================
 
         total_balance = account.monthly_balance + account.permanent_balance
 
@@ -61,10 +61,11 @@ class AccountService:
             expire_at=account.expire_at if account else None,
             monthly_balance=account.monthly_balance,
             permanent_balance=account.permanent_balance,
-            total_balance=total_balance,
+            remaining_balance=total_balance,
             unlocked_models=unlocked_models,
             extra_privileges=extra_privileges,
-            total_amount = user_daily_token_limit
+            total_consumed=account.total_consumed,
+            total_amount = account.total_amount
         )
 
     @staticmethod
@@ -144,7 +145,7 @@ class AccountService:
 
         if membership.monthly_token_allowance > 0:
             account.monthly_balance += membership.monthly_token_allowance
-
+            account.total_amount += membership.monthly_token_allowance
             # 写流水（MONTHLY）
             log = AccountLog(
                 user_id=account.user_id,
@@ -181,6 +182,7 @@ class AccountService:
         # ==================== 1. 增加余额 ====================
 
         account.permanent_balance += token_amount
+        account.total_amount += token_amount
 
         logger.info(f"[Token] permanent +{token_amount}")
 

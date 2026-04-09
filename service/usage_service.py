@@ -11,6 +11,7 @@ from core.enums.token_consume_source import TokenConsumeSource
 from dao.ai_log_dao import AILogDAO
 from dao.ai_model_dao import AiModelDAO
 from dao.user_account_dao import UserAccountDAO
+from dao.user_dao import UserDAO
 from service.account_service import AccountService
 
 
@@ -216,7 +217,9 @@ class UsageService:
         log_entry.actualAmount = actual_amount
 
         # 2. 查询用户当前所有资产
-        account = await AccountService.get_account_info(self.db, user_id)
+        account = await UserAccountDAO.get_active_account(db=self.db, user_id=user_id)
+
+        print("account:{}".format(account))
         remaining_to_pay = actual_amount
 
         # --- 资产拆解扣减逻辑 (顺序调整) ---
@@ -229,48 +232,73 @@ class UsageService:
 
         # 计算今天剩余可用的免费额度
         free_limit_remaining = max(0, settings.USER_DAILY_TOKEN_LIMIT - user_already_used_weighted)
-
+        print("今日剩余可用额度：{}".format(remaining_to_pay))
         if free_limit_remaining > 0 and remaining_to_pay > 0:
             free_deduct = min(free_limit_remaining, remaining_to_pay)
             log_entry.freeDeduct = free_deduct
             remaining_to_pay -= free_deduct
             # 免费额度是虚拟限额，不需要在 account 表里减扣，只需记录在 log
+            logger.info("免费额度：{}".format(free_limit_remaining))
 
         # B. 【其次】抵扣月度额度 (Monthly)
         if account.monthly_balance > 0 and remaining_to_pay > 0:
             monthly_deduct = min(account.monthly_balance, remaining_to_pay)
             log_entry.monthlyDeduct = monthly_deduct
             account.monthly_balance -= monthly_deduct
+            account.total_consumed += monthly_deduct
             remaining_to_pay -= monthly_deduct
+            logger.info("抵扣月度额度")
 
         # C. 【最后】抵扣永久额度 (Permanent)
         if account.permanent_balance > 0 and remaining_to_pay > 0:
             perm_deduct = min(account.permanent_balance, remaining_to_pay)
             log_entry.permanentDeduct = perm_deduct
             account.permanent_balance -= perm_deduct
+            account.total_consumed += perm_deduct
             remaining_to_pay -= perm_deduct
+            logger.info("抵扣永久额度")
 
-            # --- 3. 核心修正：判定 TokenConsumeSource ---
+        # --- 3. 核心修正：判定 TokenConsumeSource ---
 
-            # 统计有多少种资产被动用了
-            used_sources_count = sum([
-                1 if log_entry.freeDeduct > 0 else 0,
-                1 if log_entry.monthlyDeduct > 0 else 0,
-                1 if log_entry.permanentDeduct > 0 else 0
-            ])
+        # 统计有多少种资产被动用了
+        used_sources_count = sum([
+            1 if log_entry.freeDeduct > 0 else 0,
+            1 if log_entry.monthlyDeduct > 0 else 0,
+            1 if log_entry.permanentDeduct > 0 else 0
+        ])
 
-            if used_sources_count > 1:
-                log_entry.consume_source = TokenConsumeSource.MIXED
-            elif log_entry.freeDeduct > 0:
-                log_entry.consume_source = TokenConsumeSource.FREE
-            elif log_entry.monthlyDeduct > 0:
-                log_entry.consume_source = TokenConsumeSource.MEMBER_MONTHLY
-            elif log_entry.permanentDeduct > 0:
-                log_entry.consume_source = TokenConsumeSource.PERMANENT
-            else:
-                # 兜底：如果产生 0 token 消耗或异常
-                log_entry.consume_source = TokenConsumeSource.FREE
+        if used_sources_count > 1:
+            log_entry.consume_source = TokenConsumeSource.MIXED
+        elif log_entry.freeDeduct > 0:
+            log_entry.consume_source = TokenConsumeSource.FREE
+        elif log_entry.monthlyDeduct > 0:
+            log_entry.consume_source = TokenConsumeSource.MEMBER_MONTHLY
+        elif log_entry.permanentDeduct > 0:
+            log_entry.consume_source = TokenConsumeSource.PERMANENT
+        else:
+            # 兜底：如果产生 0 token 消耗或异常
+            log_entry.consume_source = TokenConsumeSource.FREE
 
         # 4. 提交数据库
         # 记得更新 account 表的相关余额
         await self.db.commit()
+
+        # 新增额外流水
+        consume_monthly = min(account.monthly_balance, actual_amount)
+        consume_permanent = actual_amount - consume_monthly
+        await UserDAO.create_log(
+            db=self.db,
+            user_id=user_id,
+            request_id=request_id,
+            monthly_amount=consume_monthly,
+            permanent_amount=consume_permanent,
+            total_amount=actual_amount,
+            balance_snapshot={
+                "monthly": account.monthly_balance,
+                "permanent": account.permanent_balance
+            }
+        )
+
+        logger.info(
+            f"[扣费] 成功 user_id={user_id}, monthly={consume_monthly}, permanent={consume_permanent}"
+        )
