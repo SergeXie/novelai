@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from typing import Any
-
 from asgiref.sync import sync_to_async
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel

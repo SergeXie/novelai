@@ -5,14 +5,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.adapters.enums import AIAction, AIGenerateStatus
 from common.config.config import settings
-from common.exception.lzsd_exception import ServiceWarning, ServiceWarningSpecial
 from core.entity.do.generate_log import AiNovelGenerateLog
-from core.entity.do.users_do import User
 from core.entity.vo.ai_response import AICompletionResponse, AIUserAssets
 from core.enums.token_consume_source import TokenConsumeSource
 from dao.ai_log_dao import AILogDAO
 from dao.ai_model_dao import AiModelDAO
 from dao.user_account_dao import UserAccountDAO
+from dao.user_dao import UserDAO
 from service.account_service import AccountService
 
 
@@ -49,38 +48,9 @@ class UsageService:
         intput_total_count, output_total_count, actualAmount, freeDeduct, permanentDeduct = await self.ai_log_dao.get_usage_sum(user_id)
         return intput_total_count, output_total_count
 
-    async def check_quota_or_raise(self,
-                                   frozen_token_length: int,
-                                   user_info: User):
-
-        user_id = user_info.pkId
-
-        is_free_user = True
-
-        user_account = await AccountService.get_account_info(db=self.db, user_id=user_id)
-        if user_account and user_account.total_amount > frozen_token_length:
-            is_free_user = False
-
-        if is_free_user:
-            # 免费用户受平台维度限制，避免当天总消耗超过平台配置上限。
-            start, end = self.get_today_range()
-            platform_total = await self.ai_log_dao.get_platform_usage_sum(start, end)
-            if platform_total + frozen_token_length > settings.PLATFORM_DAILY_TOKEN_LIMIT:
-                logger.error("平台今日总额度已耗尽")
-                raise ServiceWarning(message="服务器繁忙，请明天再试")
-
-            # 3. 用户维度限制。
-            #    这里会把今天输入+输出的累计值，再加上本次请求长度后乘倍率进行判断。
-            input_daily_total, output_daily_total = await self.get_user_daily_input_output(user_id)
-            total = input_daily_total + output_daily_total
-            limit = settings.USER_DAILY_TOKEN_LIMIT
-            usage = float(total + frozen_token_length) * settings.MULTIPLIER
-
-            logger.info(f"倍率:{settings.MULTIPLIER} 限额:{limit} 已用:{usage} 用户id:{user_id}")
-
-            if usage > limit:
-                logger.error(f"用户id:{user_id} 今日总额度已耗尽")
-                raise ServiceWarningSpecial(message="您今日的生成额度已用完")
+    async def get_platform_daily_consumption(self):
+        start, end = self.get_today_range()
+        return await self.ai_log_dao.get_platform_usage_sum(start, end)
 
     async def record(
             self,
@@ -96,6 +66,8 @@ class UsageService:
             node_ids : list = None,
             action_type: AIAction = AIAction.Generate,
             status=AIGenerateStatus.PENDING,
+            promptTokens:int = 0,
+            completionTokens:int = 0,
             totalTokens:int = 0,
             actualAmount:int = 0,
             consumeSource:TokenConsumeSource = TokenConsumeSource.FREE,
@@ -130,15 +102,15 @@ class UsageService:
             # 输入信息
             userPrompt=user_prompt,
             systemPrompt=system_prompt,
-            requestInputLength=len(user_prompt),
+            requestInputLength=promptTokens,
             model=model_name,
             temperature=temperature,
             maxTokens=max_tokens,
             # 输出信息
             outputContent=output_content,
-            outputLength=len(output_content),
+            outputLength=completionTokens,
             # 这里只是粗略估算，不是严格 tokenizer 结果。
-            tokenEstimate=len(output_content) // 2,
+            tokenEstimate=completionTokens*2,
             actionType=action_type,
             status=status.value,
             totalTokens=totalTokens,
@@ -152,9 +124,9 @@ class UsageService:
 
     async def poll_content_by_request_id(self, request_id: str, user_id:int):
         """根据 request_id 查询生成内容，常用于前端轮询结果。"""
-        log_record = await self.ai_log_dao.get_log_by_request_id(request_id=request_id, user_id=user_id)
-        print("log_record:", log_record)
-        if log_record:
+        log_record = await self.ai_log_dao.get_log_by_request_id(request_id=request_id)
+
+        if log_record and log_record.userId == user_id:
             return log_record.outputContent
 
         return None
@@ -172,6 +144,8 @@ class UsageService:
             request_id=request_id,
             ai_rsp=ai_rsp,
         )
+
+        await self.record_consumption(request_id=request_id, total_tokens=ai_rsp.usage.total_tokens, multiplier=settings.MULTIPLIER)
 
         if success:
             logger.info(f"RequestId: {request_id} 内容更新成功")
@@ -217,4 +191,120 @@ class UsageService:
             used_free=used_tokens,
             monthly_balance=account.monthly_balance if account.monthly_balance else 0,
             permanent_balance=account.permanent_balance if account.permanent_balance else 0,
+        )
+
+    async def record_consumption(
+            self,
+            request_id: str,
+            total_tokens: int,
+            multiplier: float
+    ):
+        """
+        执行实际扣减并回填日志
+        优先级：免费额度 (Daily Free) -> 月度额度 (Monthly) -> 永久额度 (Permanent)
+        """
+        # 1. 获取日志对象
+        log_entry: AiNovelGenerateLog = await self.ai_log_dao.get_log_by_request_id(request_id=request_id)
+        if log_entry is None:
+            logger.error(f"未找到对应的请求日志: {request_id}")
+            return
+
+        user_id = log_entry.userId
+
+            # 计算总计费点数
+        actual_amount = int(total_tokens * multiplier)
+        log_entry.totalTokens = total_tokens
+        log_entry.actualAmount = actual_amount
+
+        # 2. 查询用户当前所有资产
+        account = await UserAccountDAO.get_active_account(db=self.db, user_id=user_id)
+
+        print("account:{}".format(account))
+        remaining_to_pay = actual_amount
+
+        # --- 资产拆解扣减逻辑 (顺序调整) ---
+
+        # A. 【首先】抵扣每日免费额度 (Free)
+        # 注意：免费额度通常由 settings.USER_DAY_LIMIT 减去 今日已用 算出
+        # 假设你的 check_quota 逻辑里已经算过了，这里我们需要知道用户今天还能免单多少
+        input_total, output_total = await self.get_user_daily_input_output(user_id)
+        user_already_used_weighted = int((input_total + output_total) * multiplier)
+
+        # 计算今天剩余可用的免费额度
+        free_limit_remaining = max(0, settings.USER_DAILY_TOKEN_LIMIT - user_already_used_weighted)
+        print("今日剩余可用额度：{}".format(remaining_to_pay))
+        if free_limit_remaining > 0 and remaining_to_pay > 0:
+            free_deduct = min(free_limit_remaining, remaining_to_pay)
+            log_entry.freeDeduct = free_deduct
+            remaining_to_pay -= free_deduct
+            # 免费额度是虚拟限额，不需要在 account 表里减扣，只需记录在 log
+            logger.info("免费额度：{}".format(free_limit_remaining))
+
+        # B. 【其次】抵扣月度额度 (Monthly)
+        if account.monthly_balance > 0 and remaining_to_pay > 0:
+            monthly_deduct = min(account.monthly_balance, remaining_to_pay)
+            log_entry.monthlyDeduct = monthly_deduct
+            account.monthly_balance -= monthly_deduct
+            account.total_consumed += monthly_deduct
+            remaining_to_pay -= monthly_deduct
+            logger.info("抵扣月度额度")
+            await self.consume_tokens(account, actual_amount, user_id, request_id)
+
+
+        # C. 【最后】抵扣永久额度 (Permanent)
+        if account.permanent_balance > 0 and remaining_to_pay > 0:
+            perm_deduct = min(account.permanent_balance, remaining_to_pay)
+            log_entry.permanentDeduct = perm_deduct
+            account.permanent_balance -= perm_deduct
+            account.total_consumed += perm_deduct
+            remaining_to_pay -= perm_deduct
+            logger.info("抵扣永久额度")
+            await self.consume_tokens(account, actual_amount, user_id, request_id)
+
+        # --- 3. 核心修正：判定 TokenConsumeSource ---
+
+        # 统计有多少种资产被动用了
+        used_sources_count = sum([
+            1 if log_entry.freeDeduct > 0 else 0,
+            1 if log_entry.monthlyDeduct > 0 else 0,
+            1 if log_entry.permanentDeduct > 0 else 0
+        ])
+
+        if used_sources_count > 1:
+            log_entry.consume_source = TokenConsumeSource.MIXED
+        elif log_entry.freeDeduct > 0:
+            log_entry.consume_source = TokenConsumeSource.FREE
+        elif log_entry.monthlyDeduct > 0:
+            log_entry.consume_source = TokenConsumeSource.MEMBER_MONTHLY
+        elif log_entry.permanentDeduct > 0:
+            log_entry.consume_source = TokenConsumeSource.PERMANENT
+        else:
+            # 兜底：如果产生 0 token 消耗或异常
+            log_entry.consume_source = TokenConsumeSource.FREE
+
+        # 4. 提交数据库
+        # 记得更新 account 表的相关余额
+        await self.db.commit()
+
+
+
+    async def consume_tokens(self, account, actual_amount, user_id, request_id):
+        # 新增额外流水
+        consume_monthly = min(account.monthly_balance, actual_amount)
+        consume_permanent = actual_amount - consume_monthly
+        await UserDAO.create_log(
+            db=self.db,
+            user_id=user_id,
+            request_id=request_id,
+            monthly_amount=consume_monthly,
+            permanent_amount=consume_permanent,
+            total_amount=actual_amount,
+            balance_snapshot={
+                "monthly": account.monthly_balance,
+                "permanent": account.permanent_balance
+            }
+        )
+
+        logger.info(
+            f"[扣费] 成功 user_id={user_id}, monthly={consume_monthly}, permanent={consume_permanent}"
         )

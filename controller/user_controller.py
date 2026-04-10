@@ -1,16 +1,39 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped
 
 from common.config.config import settings
 from common.config.get_db import get_db
+from common.response.response_schema import ResponseBase
 from common.response.response_util import ResponseUtil
-from core.deps.auth import get_current_user
+from core.deps.auth import get_current_user, check_user_quota_or_raise
+from core.entity.vo.user_vo import UpdateNicknameRequest
 from database.db_mysql import Base
 from service.usage_service import UsageService
+from service.user_service import UserService
 
 userController = APIRouter()
 
+
+@userController.post("/updateNickname")
+async def update_nickname(
+    req: UpdateNicknameRequest,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user)
+):
+    """
+    修改昵称
+    """
+
+    await UserService.update_nickname(
+        db=db,
+        user_id=user.pkId,
+        nickname=req.nickname
+    )
+
+    await db.commit()
+
+    return ResponseUtil.success(msg="修改成功")
 
 @userController.get("/userInfo", name="用户信息")
 async def user_info(
@@ -66,3 +89,12 @@ async def user_info(
     }
 
     return ResponseUtil.success(data=data)
+
+@userController.get("/checkQuote", name="检测token是否超标")
+async def user_quote_check(
+    frozen: int = Query(5000, description="预冻结/需检查的额度"), # 增加 frozen 参数
+    user=Depends(get_current_user),
+):
+    await check_user_quota_or_raise(frozen_token_length=frozen, user_info=user)
+
+    return ResponseUtil.success(data=frozen)

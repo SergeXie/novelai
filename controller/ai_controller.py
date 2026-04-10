@@ -5,7 +5,7 @@ from common.config.config import settings
 from common.config.get_db import get_db
 from common.exception.lzsd_exception import InsufficientTokenException
 from common.response.response_util import ResponseUtil
-from core.deps.auth import get_current_user, check_book_owner
+from core.deps.auth import get_current_user, check_book_owner, check_user_quota_or_raise
 from core.entity.vo.ai_model_vo import AiModelResp, DeleteHistoryReq
 from core.entity.schemas import GenerateRequest
 from service.ai_prompt_service import PromptService
@@ -46,6 +46,8 @@ async def generate(
     user_prompt = request.user_prompt
     if not user_prompt:
         return ResponseUtil.error(msg="提示词不能为空")
+
+    await check_user_quota_or_raise(frozen_token_length=(len(user_prompt) + 3000), user_info=user)
 
     correlation = request.correlation  # 章节ID
     bid = request.bid

@@ -63,10 +63,10 @@ class UserDAO:
             db,
             user_id:int,
             request_id:str,
-            monthly_amount:int,
+            monthly_amount,
             permanent_amount:int,
             total_amount:int,
-            balance_snapshot:int,
+            balance_snapshot:dict,
     ):
         """
         写账户流水
