@@ -122,7 +122,7 @@ async def delete_history(
     )
     return ResponseUtil.success(msg="删除成功")
 
-@aiController.get("/ai/logs")
+@aiController.get("/ai/log/list")
 async def get_log_list(
         page: int = Query(1, ge=1, description="页码"),
         size: int = Query(10, ge=1, le=50, description="每页数量"),
