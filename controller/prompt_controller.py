@@ -11,8 +11,9 @@ from common.config.get_db import get_db, get_db_context
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user, check_user_quota_or_raise
 from core.entity.vo.ai_response import TokenUsage
+from core.entity.vo.base_vo import PageMetaExtra
 from core.entity.vo.prompt_register_vo import PromptRegistryResp
-from core.entity.vo.prompt_square_vo import PromptSquareCreateReq, PromptSquareUpdateReq
+from core.entity.vo.prompt_square_vo import PromptSquareCreateReq, PromptSquareUpdateReq, PromptSquareDetailReq
 from dao.book_dao import BookDAO
 from service.ai_prompt_service import PromptService
 from service.ai_service import AIService
@@ -39,15 +40,13 @@ async def get_public_private_prompt_list(
         db,
         page,
         pageSize,
-        category
+        category,
+        user.pkId
     )
 
-    return ResponseUtil.success(data=data, dict_content={
-            "page": page,
-            "pageSize": pageSize,
-            "total": total,
-            "category": category
-        })
+    return ResponseUtil.success(data=data, dict_content=PageMetaExtra(
+        page=page,pageSize=pageSize,
+        total=total,category=category).model_dump())
 
 
 @promptController.get("/publicCategories", name="获取提示词分类")
@@ -62,7 +61,7 @@ async def get_public_prompt_categories(
     return ResponseUtil.success(data=data)
 
 
-@promptController.post("/promptSquare", name="创建用户提示词")
+@promptController.post("/createPromptSquare", name="创建用户提示词广场")
 async def create_user_prompt_square(
     req: PromptSquareCreateReq,
     db: AsyncSession = Depends(get_db),
@@ -75,7 +74,25 @@ async def create_user_prompt_square(
     return ResponseUtil.success(data=data)
 
 
-@promptController.put("/promptSquare", name="修改用户提示词")
+@promptController.get("/detail", name="获取用户提示词详情")
+async def get_user_prompt_detail(
+    template_key: str,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user)
+):
+    """
+    获取提示词详情（支持公开 / 官方 / 自己）
+    """
+
+    data = await PromptSquareService.get_user_prompt_detail(db, user.pkId, template_key)
+
+    if not data:
+        return ResponseUtil.failure(msg="提示词不存在或无权限查看")
+
+    return ResponseUtil.success(data=data)
+
+
+@promptController.post("/updatePromptSquare", name="修改用户提示词")
 async def update_user_prompt_square(
     req: PromptSquareUpdateReq,
     db: AsyncSession = Depends(get_db),
@@ -88,6 +105,28 @@ async def update_user_prompt_square(
     if not data:
         return ResponseUtil.failure(msg="提示词不存在或无权限修改")
     return ResponseUtil.success(data=data)
+
+
+@promptController.post("/deletePromptSquare", name="删除用户提示词")
+async def delete_user_prompt_square(
+    req: PromptSquareDetailReq,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user)
+):
+    """
+    删除用户自己的提示词（物理删除）
+    """
+
+    success = await PromptSquareService.delete_user_prompt(
+        db,
+        user.pkId,
+        req.template_key
+    )
+
+    if not success:
+        return ResponseUtil.failure(msg="提示词不存在或无权限删除")
+
+    return ResponseUtil.success()
 
 
 @promptController.get("/list", name="获取所有提示词模板")

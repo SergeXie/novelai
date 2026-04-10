@@ -7,6 +7,7 @@ from common.config.config import settings
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user
+from core.entity.vo.base_vo import PageMeta
 from core.entity.vo.order_schema_vo import CreateOrderRequest, CreateOrderResponse
 from core.entity.vo.product_schema_vo import ProductListResponse
 from service.account_service import AccountService
@@ -42,11 +43,8 @@ async def get_orders_history(
 
     data, total = await OrderService.get_order_list(db, user.pkId, page, pageSize)
 
-    return ResponseUtil.success(data=data, dict_content={
-            "page": page,
-            "pageSize": pageSize,
-            "total": total
-        })
+    return ResponseUtil.success(data=data, dict_content=PageMeta(
+        page=page,pageSize=pageSize,total=total).model_dump())
 
 @productRouter.get("/plans", response_model=ProductListResponse, name="产品列表")
 async def get_product_list(

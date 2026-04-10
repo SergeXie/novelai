@@ -1,7 +1,4 @@
 from pydantic import BaseModel, field_serializer, Field
-from typing import List, Optional
-
-
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 from datetime import datetime
@@ -11,8 +8,6 @@ class PromptItem(BaseModel):
     """
     提示词完整信息（全字段返回）
     """
-
-    id: int
 
     # 唯一标识
     template_key: str
@@ -55,6 +50,51 @@ class PromptItem(BaseModel):
             return value.strftime("%Y-%m-%d %H:%M:%S")
         return None
 
+class PromptListItemResp(PromptItem):
+    """
+    提示词列表项（带权限）
+    """
+    can_edit: bool
+
+class PromptItemDetail(BaseModel):
+    """
+    提示词完整信息（全字段返回）
+    """
+
+    # 唯一标识
+    template_key: str
+
+    # 基础信息
+    title: str
+    description: str
+
+    # 分类 & 标签
+    category: str
+
+    # 核心内容（前端编辑需要）
+    content: str
+
+    # 状态
+    status: int
+
+    # 时间
+    created_at: datetime
+    updated_at: datetime
+
+    # ==================== 时间格式化 ====================
+
+    @field_serializer("created_at", "updated_at")
+    def serialize_datetime(self, value: datetime):
+        """
+        将 datetime 转成字符串
+        """
+        if value:
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+        return None
+
+
+
+
 class PromptListResponse(BaseModel):
     """
     分页返回
@@ -77,13 +117,26 @@ class PromptSquareCreateReq(BaseModel):
     category: str
     content: str
     description: str = ""
-    status: int = 1
+    status: int = 0
 
 
 class PromptSquareUpdateReq(BaseModel):
-    id: int = Field(..., gt=0)
+    template_key: str
     title: str
     category: str
     content: str
     description: str = ""
-    status: int = 1
+    status: int = 0
+
+
+class PromptDetailResp(PromptItemDetail):
+    """
+    提示词详情（带权限信息）
+    """
+
+    can_edit: bool
+
+
+class PromptSquareDetailReq(BaseModel):
+    template_key: str
+

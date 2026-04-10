@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.config.generator import LZSDGenerator
 from common.exception.lzsd_exception import ServiceWarning
+from common.utils.time_format_util import parse_and_format_date
 from core.entity.do.order_do import Order
 from core.entity.vo.order_schema_vo import CreateOrderResponse, OrderListItem
 from dao.order_dao import OrderDAO
@@ -39,7 +40,7 @@ class OrderService:
                     total_amount=item.total_amount,
                     pay_amount=item.pay_amount,
                     status=item.status,
-                    paid_at=item.paid_at,
+                    paid_at=parse_and_format_date(item.paid_at),
                     pay_method=item.pay_method,
                     created_at=item.created_at,
                 )

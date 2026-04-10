@@ -35,16 +35,9 @@ class OrderListItem(BaseModel):
     total_amount: float
     pay_amount: float
     status: str
-    paid_at: Optional[datetime] = None
+    paid_at: Optional[str] = None
     pay_method:str
     created_at: Optional[datetime] = None
-
-    @field_serializer('paid_at')
-    def serialize_paid_at(self, paid_at: Optional[datetime], _info):
-        if paid_at is None:
-            return None
-        # 这里定义你想要的格式，例如：2026-03-31 11:05:22
-        return paid_at.strftime('%Y-%m-%d %H:%M:%S')
 
     @field_serializer('created_at')
     def serialize_created_at(self, created_at: datetime | None, _info):
