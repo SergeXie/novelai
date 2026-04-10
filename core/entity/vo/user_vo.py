@@ -1,9 +1,15 @@
 from datetime import datetime
 from typing import Union, Optional, List, Dict
-
-from pydantic import BaseModel, Field, ConfigDict, field_serializer
-
+from pydantic import ConfigDict, field_serializer
+from pydantic import BaseModel, Field
 from core.entity.do.users_do import OnlineStatus
+
+class UpdateNicknameRequest(BaseModel):
+    """
+    修改昵称请求
+    """
+
+    nickname: str = Field(..., min_length=1, max_length=20, description="用户昵称")
 
 
 class CurrentUserModel(BaseModel):

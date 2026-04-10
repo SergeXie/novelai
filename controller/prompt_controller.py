@@ -1,9 +1,7 @@
 import json
 from typing import Optional
-
-from fastapi import APIRouter, Depends, Body, BackgroundTasks
+from fastapi import APIRouter, Depends, Body, BackgroundTasks, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from ai.adapters.enums import AIProvider, AIAction
 from ai.ai_nexus import check_ai_input
 from ai.workflow.wf_create_book import CreateBookWorkflow
@@ -14,12 +12,83 @@ from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user, check_user_quota_or_raise
 from core.entity.vo.ai_response import TokenUsage
 from core.entity.vo.prompt_register_vo import PromptRegistryResp
+from core.entity.vo.prompt_square_vo import PromptSquareCreateReq, PromptSquareUpdateReq
 from dao.book_dao import BookDAO
 from service.ai_prompt_service import PromptService
 from service.ai_service import AIService
+from service.prompt_square_service import PromptSquareService
 from service.usage_service import UsageService
 
 promptController = APIRouter(prefix="/prompts", tags=["提示词管理"])
+
+
+
+@promptController.get("/publicPrivatePromptList", name="提示词广场模板库")
+async def get_public_private_prompt_list(
+    page: int = Query(1, ge=1),
+    pageSize: int = Query(10, le=50),
+    category: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user)
+):
+    """
+    获取公开提示词列表（分页）
+    """
+
+    data, total = await PromptSquareService.get_public_list(
+        db,
+        page,
+        pageSize,
+        category
+    )
+
+    return ResponseUtil.success(data=data, dict_content={
+            "page": page,
+            "pageSize": pageSize,
+            "total": total,
+            "category": category
+        })
+
+
+@promptController.get("/publicCategories", name="获取提示词分类")
+async def get_public_prompt_categories(
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user)
+):
+    """
+    获取提示词广场分类列表，按 category 去重
+    """
+    data = await PromptSquareService.get_public_categories(db)
+    return ResponseUtil.success(data=data)
+
+
+@promptController.post("/promptSquare", name="创建用户提示词")
+async def create_user_prompt_square(
+    req: PromptSquareCreateReq,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user)
+):
+    """
+    创建用户自己的提示词广场数据
+    """
+    data = await PromptSquareService.create_user_prompt(db, user.pkId, req)
+    return ResponseUtil.success(data=data)
+
+
+@promptController.put("/promptSquare", name="修改用户提示词")
+async def update_user_prompt_square(
+    req: PromptSquareUpdateReq,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user)
+):
+    """
+    修改用户自己的提示词广场数据
+    """
+    data = await PromptSquareService.update_user_prompt(db, user.pkId, req)
+    if not data:
+        return ResponseUtil.failure(msg="提示词不存在或无权限修改")
+    return ResponseUtil.success(data=data)
+
 
 @promptController.get("/list", name="获取所有提示词模板")
 async def list_all_prompts(db: AsyncSession = Depends(get_db)):
