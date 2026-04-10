@@ -34,17 +34,32 @@ async def get_amounts(
 async def get_orders_history(
     page: int = 1,
     pageSize: int = 20,
+    startTime: str | None = None,
+    endTime: str | None = None,
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
     """
-    历史订单列表
+    历史订单列表（支持时间筛选）
     """
 
-    data, total = await OrderService.get_order_list(db, user.pkId, page, pageSize)
+    data, total = await OrderService.get_order_list(
+        db,
+        user.pkId,
+        page,
+        pageSize,
+        startTime,
+        endTime
+    )
 
-    return ResponseUtil.success(data=data, dict_content=PageMeta(
-        page=page,pageSize=pageSize,total=total).model_dump())
+    return ResponseUtil.success(
+        data=data,
+        dict_content=PageMeta(
+            page=page,
+            pageSize=pageSize,
+            total=total
+        ).model_dump()
+    )
 
 @productRouter.get("/plans", response_model=ProductListResponse, name="产品列表")
 async def get_product_list(
