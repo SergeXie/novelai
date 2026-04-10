@@ -1,37 +1,57 @@
+import time
+from typing import List, Dict
+
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
-from core.entity.do.mc_ai_model import McAiModel
+from core.entity.do.ai_model import McAiModel
 
 
 class AiModelDAO:
+    _cache_models: List[McAiModel] = None
+    _cache_level_map: Dict[int, McAiModel] = {}
+    _cache_identifier_map: Dict[str, McAiModel] = {}
+    _last_update: float = 0
+    CACHE_TTL = 1800  # 10分钟过期
+
     def __init__(self, db: AsyncSession):
         self.db = db
 
     async def list_models(self, only_enabled: bool = True) -> list[McAiModel]:
-        try:
-            stmt = select(McAiModel)
-            if only_enabled:
-                stmt = stmt.where(McAiModel.status == 1)
-            stmt = stmt.order_by(McAiModel.level.asc())
+        """基础方法：获取并缓存所有模型"""
+        now = time.time()
+        if not self._cache_models or (now - self._last_update) > self.CACHE_TTL:
+            try:
+                # 从数据库拉取全量数据
+                stmt = select(McAiModel).order_by(McAiModel.level.asc())
+                result = await self.db.execute(stmt)
+                all_models = list(result.scalars().all())
 
-            result = await self.db.execute(stmt)
-            return result.scalars().all()
+                # 更新主列表缓存
+                self._cache_models = all_models
+                # 构建内存索引（Key-Value 映射）
+                self._cache_level_map = {m.level: m for m in all_models}
+                self._cache_identifier_map = {m.model_identifier: m for m in all_models}  # 假设字段名为 model
 
-        except Exception as e:
-            logger.error(f"获取模型列表失败: {e}")
-            return []
+                self._last_update = now
+                logger.info("AI模型内存索引已重建")
+            except Exception as e:
+                logger.error(f"刷新模型缓存失败: {e}")
+                return []
+
+        if only_enabled:
+            return [m for m in self._cache_models if m.status == 1]
+        return self._cache_models
 
     async def get_model_by_level(self, level: int) -> McAiModel:
-        stmt = select(McAiModel).where(McAiModel.level == level)
-        result = await self.db.execute(stmt)
-        model = result.scalars().first()
+        """通过 Level 极速查找"""
+        await self.list_models()  # 确保缓存有效
+        return self._cache_level_map.get(level)
 
-        if not model:
-            # 这里可以抛出一个自定义异常，方便全局异常处理器捕获
-            logger.warning(f"未找到 Level 为 {level} 的模型配置")
-            return None
-        return model
+    async def get_model_name_by_identifier(self, identifier: str) -> str:
+        """通过模型标识符（如 'gpt-4'）极速查找"""
+        await self.list_models()  # 确保缓存有效
+        model = self._cache_identifier_map.get(identifier)
+        return model.model_name if model else "默认模型"
 
 
