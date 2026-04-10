@@ -22,12 +22,26 @@ class OrderService:
     ORDER_EXPIRE_MINUTES = 30  # 订单过期时间（分钟）
 
     @staticmethod
-    async def get_order_list(db, user_id: int, page: int, page_size: int):
+    async def get_order_list(
+            db,
+            user_id: int,
+            page: int,
+            page_size: int,
+            start_time: str | None = None,
+            end_time: str | None = None
+    ):
         """
-        获取订单列表
+        获取订单列表（支持时间筛选）
         """
 
-        records, total = await OrderDAO.list_orders(db, user_id=user_id, page=page, page_size=page_size)
+        records, total = await OrderDAO.list_orders(
+            db,
+            user_id=user_id,
+            page=page,
+            page_size=page_size,
+            start_time=start_time,
+            end_time=end_time
+        )
 
         result = []
 
@@ -36,7 +50,7 @@ class OrderService:
                 OrderListItem(
                     order_no=item.order_no,
                     order_type=item.order_type,
-                    name=item.snapshot_name,  #  用快照名称
+                    name=item.snapshot_name,
                     total_amount=item.total_amount,
                     pay_amount=item.pay_amount,
                     status=item.status,
