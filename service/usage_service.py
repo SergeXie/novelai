@@ -6,13 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ai.adapters.enums import AIAction, AIGenerateStatus
 from common.config.config import settings
 from core.entity.do.generate_log import AiNovelGenerateLog
+from core.entity.vo.ai_model_vo import AIGenerateLogResp, AIGenerateLogDetailResp
 from core.entity.vo.ai_response import AICompletionResponse, AIUserAssets
+from core.entity.vo.base_vo import PageResult
 from core.enums.token_consume_source import TokenConsumeSource
 from dao.ai_log_dao import AILogDAO
 from dao.ai_model_dao import AiModelDAO
 from dao.user_account_dao import UserAccountDAO
 from dao.user_dao import UserDAO
-from service.account_service import AccountService
 
 
 class UsageService:
@@ -156,26 +157,43 @@ class UsageService:
 
     async def get_book_chat_history(self, bid: str, page: int, size: int):
         """分页获取某本书下的 AI 对话历史。"""
-        logs, total = await self.ai_log_dao.get_logs_by_bid_paged(bid, page, size)
+        logs, total = await self.ai_log_dao.get_logs_by_paged(bid=bid, page=page, size=size)
 
-        # 组装成前端更容易消费的返回结构。
-        list_data = []
-        for log in logs:
-            list_data.append({
-                "requestId": log["requestId"],
-                # 列表页只截取前 200 个字符作为预览，避免内容过长。
-                "prompt": log["originPrompt"][:200] + ("..." if len(log["originPrompt"]) > 200 else ""),
-                "status": log["status"],  # 1: 成功, 0: 失败, 2: 进行中
-                "action": log["actionType"],  # generate / refine
-                "createdAt": log["createdAt"].strftime("%Y-%m-%d %H:%M:%S")
-            })
+        list_data = [
+            await AIGenerateLogResp.from_orm_model(log, self.model_dao)
+            for log in logs
+        ]
 
-        return {
-            "list": list_data,
-            "total": total,
-            "page": page,
-            "size": size
-        }
+        return PageResult(
+            list=list_data,
+            total=total,
+            page=page,
+            size=size
+        )
+
+    async def get_logs_page(self, user_id:int, page:int, size:int):
+        logs, total = await self.ai_log_dao.get_logs_by_paged(
+            user_id=user_id,
+            page=page,
+            size=size
+        )
+
+        list_data = [
+            await AIGenerateLogResp.from_orm_model(log, self.model_dao)
+            for log in logs
+        ]
+
+        # 3. 返回标准分页模型
+        return PageResult(
+            list=list_data,
+            total=total,
+            page=page,
+            size=size
+        )
+
+    async def get_log_detail(self, request_id: str) -> AIGenerateLogDetailResp:
+        log = await self.ai_log_dao.get_log_by_request_id(request_id=request_id)
+        return await AIGenerateLogDetailResp.from_orm_model(log, self.model_dao) if log else None
 
     async def get_user_assets(self, user_id: int) -> AIUserAssets:
         # 1. 从 DB 或 Redis 获取静态余额 (假设 account 是 UserAccount 对象)
@@ -285,8 +303,6 @@ class UsageService:
         # 4. 提交数据库
         # 记得更新 account 表的相关余额
         await self.db.commit()
-
-
 
     async def consume_tokens(self, account, actual_amount, user_id, request_id):
         # 新增额外流水

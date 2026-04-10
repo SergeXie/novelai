@@ -1,9 +1,10 @@
 from datetime import datetime
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 from loguru import logger
 from sqlalchemy import select, func, update, desc, and_, Integer, cast
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import undefer
 
 from ai.adapters.enums import AIGenerateStatus
 from core.entity.do.generate_log import AiNovelGenerateLog
@@ -76,7 +77,12 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
         根据 requestId 查询生成日志记录
         """
         # 使用 select 语句构建查询
-        stmt = select(AiNovelGenerateLog).where(AiNovelGenerateLog.requestId == request_id)
+        stmt = select(AiNovelGenerateLog).where(AiNovelGenerateLog.requestId == request_id).options(
+            # 显式取消延迟加载，确保详情页能拿到完整内容
+            undefer(AiNovelGenerateLog.outputContent),
+            undefer(AiNovelGenerateLog.systemPrompt),
+            undefer(AiNovelGenerateLog.userPrompt)
+        )
 
         # 执行查询
         result = await self.db.execute(stmt)
@@ -150,52 +156,54 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             logger.error(f"Query AILog by bid error: {e}")
             return []
 
-    async def get_logs_by_bid_paged(
+    async def get_logs_by_paged(
             self,
-            bid: str,
+            user_id: Optional[int] = None,  # 修改为 int 类型提示
+            bid: Optional[str] = None,
             page: int = 1,
             size: int = 10
-    ) -> Tuple[List[dict], int]:
+    ) -> Tuple[list[AiNovelGenerateLog], int]:
         """
-        分页获取对话记录，仅查询轻量字段
-        返回: (记录列表, 总条数)
-        """
+            获取排除大字段后的模型对象列表，并返回总数
+            """
         try:
-            # 1. 计算偏移量
             offset = (page - 1) * size
 
-            # 2. 构建查询语句（只查询必要字段）
-            # 注意：此处 correlation 对应你之前的 bid 改名
+            # 1. 构造过滤条件
+            filters = [AiNovelGenerateLog.isDelete == 0]
+            if user_id is not None:
+                filters.append(AiNovelGenerateLog.userId == user_id)
+            if bid:
+                filters.append(AiNovelGenerateLog.bid == bid)
+
+            # 2. 查询对象列表（使用 defer 排除所有 LongText 字段）
+            # 这样加载到内存中的对象非常轻量
             stmt = (
-                select(
-                    AiNovelGenerateLog.requestId,
-                    AiNovelGenerateLog.originPrompt,
-                    AiNovelGenerateLog.status,
-                    AiNovelGenerateLog.createdAt,
-                    AiNovelGenerateLog.actionType
-                )
-                .where(and_(AiNovelGenerateLog.bid == bid, AiNovelGenerateLog.isDelete == 0))
+                select(AiNovelGenerateLog)
+                .where(and_(*filters))
                 .order_by(desc(AiNovelGenerateLog.createdAt))
                 .limit(size)
                 .offset(offset)
             )
 
-            # 3. 构建总数查询（用于前端分页插件）
+            # 3. 查询总数
             count_stmt = (
                 select(func.count(AiNovelGenerateLog.id))
-                .where(and_(AiNovelGenerateLog.bid == bid, AiNovelGenerateLog.isDelete == 0))
+                .where(and_(*filters))
             )
 
             # 4. 执行
+            # 执行对象查询
             result = await self.db.execute(stmt)
+            obj_list = result.scalars().all()  # 这里得到的是 List[AiNovelGenerateLog]
+
+            # 执行计数查询
             total_count = await self.db.scalar(count_stmt)
 
-            # 转换为字典列表
-            logs = result.mappings().all()
-            return logs, total_count or 0
+            return obj_list, total_count or 0
 
         except Exception as e:
-            logger.error(f"分页查询 AI 日志失败: {e}")
+            logger.error(f"分页查询 AI 日志失败 (user_id={user_id}, bid={bid}): {e}")
             return [], 0
 
     @staticmethod
