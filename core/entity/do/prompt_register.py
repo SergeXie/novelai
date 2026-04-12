@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
-from sqlalchemy import Integer, String, Text, JSON, DateTime, TIMESTAMP, func, text
+from sqlalchemy import Integer, String, Text, JSON, DateTime, TIMESTAMP, func
 from sqlalchemy.orm import Mapped, mapped_column
+
+from core.enums.prompt_sys_var import PromptEngineType
 from database.db_mysql import Base
 
 
@@ -28,8 +30,8 @@ class PromptRegistry(Base):
     # 渲染引擎
     engine_type: Mapped[str] = mapped_column(
         String(20),
-        server_default="jinja2",
-        default="jinja2",
+        server_default=PromptEngineType.JINJA2.value,
+        default=PromptEngineType.JINJA2.value,
         comment="渲染引擎"
     )
 

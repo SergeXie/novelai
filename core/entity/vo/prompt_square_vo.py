@@ -1,7 +1,8 @@
-from pydantic import BaseModel, field_serializer, Field
-from pydantic import BaseModel
-from typing import List, Optional, Dict
 from datetime import datetime
+from typing import List, Optional, Dict
+
+from pydantic import BaseModel
+from pydantic import field_serializer
 
 
 class PromptItem(BaseModel):
@@ -22,8 +23,6 @@ class PromptItem(BaseModel):
     tags: Optional[List[str]]
 
     # 核心内容（前端编辑需要）
-    content: str
-    engine_type: str
     input_schema: Dict
 
     # 作者信息

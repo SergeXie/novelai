@@ -52,7 +52,7 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             return tuple(row)
         except Exception as e:
             logger.error(f"Usage sum failed for user {user_id}: {e}")
-            return (0, 0, 0, 0, 0)
+            return 0, 0, 0, 0, 0
 
     async def get_platform_usage_sum(self, start_time: datetime, end_time: datetime) -> int:
         """

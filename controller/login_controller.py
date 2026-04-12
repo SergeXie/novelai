@@ -1,10 +1,10 @@
-import uuid
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.config.generator import LZSDGenerator
+from common.utils.generator import LZSDGenerator
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user
@@ -12,9 +12,7 @@ from core.deps.token_utils import TokenManager
 from core.entity.do.users_do import User
 from core.entity.vo.login_vo import UserLogin
 from core.entity.vo.user_schema import ChangePasswordReq
-from service.account_service import AccountService
 from service.user_service import UserService
-from pydantic import BaseModel, Field
 
 loginController = APIRouter()
 
@@ -30,7 +28,7 @@ async def login(user_login: UserLogin,
                 query_db: AsyncSession = Depends(get_db)):
     """
     用户注册services
-    :param request: 请求对象
+    :param user_login: 请求对象
     :param query_db: orm对象
     :param user_login: 登录用户对象
     :return:

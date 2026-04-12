@@ -1,12 +1,16 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.exception.errors import NotFoundError, ServerError
+from core.entity.do.users_do import User
 from core.entity.vo.prompt_square_vo import (
     PromptItem,
-    PromptCategoryItem,
     PromptSquareCreateReq,
     PromptSquareUpdateReq, PromptItemDetail, PromptDetailResp, PromptListItemResp,
 )
+from core.enums.prompt_sys_var import PromptEngineType
 from dao.prompt_square_dao import PromptSquareDAO
+from service.ai_prompt_service import PromptService
+from service.ai_service import AIService
 
 
 class PromptSquareService:
@@ -81,7 +85,7 @@ class PromptSquareService:
         更新提示词（只能更新自己的）
         """
 
-        prompt = await PromptSquareDAO.get_by_id(db, req.template_key)
+        prompt = await PromptSquareDAO.get_template_by_key(db, req.template_key)
 
         if not prompt:
             return None
@@ -136,7 +140,7 @@ class PromptSquareService:
         删除提示词（只能删除自己的）
         """
 
-        prompt = await PromptSquareDAO.get_by_id(db, template_key)
+        prompt = await PromptSquareDAO.get_template_by_key(db, template_key)
 
         if not prompt:
             return False
@@ -153,3 +157,50 @@ class PromptSquareService:
         await PromptSquareDAO.delete(db, prompt)
 
         return True
+
+    @staticmethod
+    async def execute_by_template(db: AsyncSession,
+                      level:int,
+                      user: User,
+                      template_key: str,
+                      user_prompt: str,
+                      inputs:dict,
+                      temperature:float | None = None,
+                      max_tokens:float | None = None) -> str:
+        tpl = await PromptSquareDAO.get_template_by_key(db, template_key)
+        if not tpl or tpl.status != 1:
+            raise NotFoundError(msg="提示词模版不存在")
+
+        try:
+            prompt = await PromptService.render_prompt_with_params(
+                prompt=tpl.content,
+                inputs=inputs,
+                engine_type=PromptEngineType.from_str(tpl.engine_type))
+
+            frozen_tokens = tpl.freeze_tokens
+
+            final_user_prompt = "\n".join(filter(None, [prompt, user_prompt]))
+
+            ai_service = AIService(db)
+            request_id = await ai_service.prepare_and_record_request(
+                user=user,
+                bid=None,
+                origin_prompt=f"【模版】{tpl.title} 【提示词】{user_prompt}",
+                user_prompt=final_user_prompt,
+                level=level,
+                temperature=temperature,
+                correlation=[template_key],
+                max_tokens=max_tokens,
+                tokenEstimate=frozen_tokens,
+            )
+            return request_id
+
+        except Exception as e:
+            raise ServerError(msg = "AI生成失败")
+
+
+
+
+
+
+

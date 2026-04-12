@@ -1,6 +1,4 @@
 import json
-import logging
-
 from loguru import logger
 from wechatpayv3.async_ import AsyncWeChatPay, WeChatPayType
 from common.config.config import settings

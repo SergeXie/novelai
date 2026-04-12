@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String, Integer, Enum, DECIMAL, JSON, TIMESTAMP
+from sqlalchemy import String, Enum, DECIMAL, JSON, TIMESTAMP
 from sqlalchemy.sql import func
 
 from database.db_mysql import Base

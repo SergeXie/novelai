@@ -8,7 +8,7 @@ from common.config.config import settings
 from core.entity.do.generate_log import AiNovelGenerateLog
 from core.entity.vo.ai_model_vo import AIGenerateLogResp, AIGenerateLogDetailResp
 from core.entity.vo.ai_response import AICompletionResponse, AIUserAssets
-from core.entity.vo.base_vo import PageResult
+from core.entity.vo.base_vo import PageResp
 from core.enums.token_consume_source import TokenConsumeSource
 from dao.ai_log_dao import AILogDAO
 from dao.ai_model_dao import AiModelDAO
@@ -74,7 +74,8 @@ class UsageService:
             consumeSource:TokenConsumeSource = TokenConsumeSource.FREE,
             freeDeduct:int = 0,
             monthlyDeduct:int = 0,
-            permanentDeduct:int = 0
+            permanentDeduct:int = 0,
+            tokenEstimate: int = 0,
     ):
         """记录一次 AI 生成日志。
 
@@ -111,7 +112,7 @@ class UsageService:
             outputContent=output_content,
             outputLength=completionTokens,
             # 这里只是粗略估算，不是严格 tokenizer 结果。
-            tokenEstimate=completionTokens*2,
+            tokenEstimate=tokenEstimate,
             actionType=action_type,
             status=status.value,
             totalTokens=totalTokens,
@@ -155,7 +156,7 @@ class UsageService:
 
         return success
 
-    async def get_book_chat_history(self, bid: str, page: int, size: int):
+    async def get_book_chat_history(self, bid: str, page: int, size: int) -> PageResp:
         """分页获取某本书下的 AI 对话历史。"""
         logs, total = await self.ai_log_dao.get_logs_by_paged(bid=bid, page=page, size=size)
 
@@ -164,11 +165,11 @@ class UsageService:
             for log in logs
         ]
 
-        return PageResult(
+        return PageResp(
             list=list_data,
             total=total,
             page=page,
-            size=size
+            pageSize=size
         )
 
     async def get_logs_page(self, user_id:int, page:int, size:int):
@@ -184,11 +185,11 @@ class UsageService:
         ]
 
         # 3. 返回标准分页模型
-        return PageResult(
+        return PageResp(
             list=list_data,
             total=total,
             page=page,
-            size=size
+            pageSize=size
         )
 
     async def get_log_detail(self, request_id: str) -> AIGenerateLogDetailResp:

@@ -11,7 +11,7 @@ from controller.ai_controller import aiController
 from controller.book_controller import bookController
 from controller.login_controller import loginController
 from controller.product_controller import productRouter
-from controller.prompt_controller import promptController
+from controller.ai_prompt_controller import promptController
 from controller.template_controller import templateController
 from controller.user_controller import userController
 

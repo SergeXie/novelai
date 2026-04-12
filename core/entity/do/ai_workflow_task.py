@@ -28,7 +28,7 @@ class AiWorkflowTask(Base):
     )
 
     id: Mapped[int] = mapped_column(
-        BigInteger(unsigned=True),
+        BigInteger(),
         primary_key=True,
         autoincrement=True,
         comment="主键ID",
