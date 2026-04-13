@@ -8,6 +8,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from common.config.config import settings
 from common.exception.handle import handle_exception
 from controller.ai_controller import aiController
+from controller.ai_template_controller import aiTemplateController
 from controller.book_controller import bookController
 from controller.login_controller import loginController
 from controller.product_controller import productRouter
@@ -74,6 +75,7 @@ def register_router(app: FastAPI):
         {'router': loginController, 'tags': ['登录接口']},
         {'router': aiController, 'tags': ['AI']},
         {'router': promptController, 'tags': ['提示词']},
+        {'router': aiTemplateController, 'tags': ['提示词广场模板']},
         {'router': bookController, 'tags': ['作品服务接口']},
         {'router': userController, 'tags': ['用户相关接口']},
         {'router': templateController, 'tags': ['书籍模板类型（作品类型）']},

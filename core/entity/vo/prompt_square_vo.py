@@ -38,6 +38,7 @@ class PromptItem(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
     # ==================== 时间格式化 ====================
 
     @field_serializer("created_at", "updated_at")
@@ -54,6 +55,8 @@ class PromptListItemResp(PromptItem):
     提示词列表项（带权限）
     """
     can_edit: bool
+    favor_count: int = 0
+    is_favorited: bool = False
 
 class PromptItemDetail(BaseModel):
     """
