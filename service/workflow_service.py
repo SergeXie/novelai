@@ -1,13 +1,10 @@
-import uuid
-from typing import Any
-
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.adapters.enums import AIProvider, AIAction
 from ai.ai_nexus import get_ai_nexus
 from common.config.config import settings
-from common.config.generator import LZSDGenerator
+from common.utils.generator import LZSDGenerator
 from common.config.get_db import get_db_context
 from core.entity.do.users_do import User
 from dao.ai_log_dao import AILogDAO

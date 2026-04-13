@@ -1,13 +1,13 @@
 from datetime import datetime, timedelta, timezone
 
 from loguru import logger
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.exception.lzsd_exception import ServiceWarning
 from core.entity.do.user_account_do import UserAccount, AccountLog
 from core.entity.vo.user_vo import AccountInfoResponse
 from core.enums.constants import UserLevel, BizType, ChargeType, AssetType
+from core.enums.token_consume_source import TokenConsumeSource
 from dao.membership_dao import MembershipDAO
 from dao.package_dao import PackageDAO
 from dao.user_account_dao import UserAccountDAO
@@ -56,7 +56,7 @@ class AccountService:
         user_daily_token_limit = account.monthly_balance + account.permanent_balance
 
         return AccountInfoResponse(
-            level=account.level_code if account else "free",
+            level=account.level_code if account else TokenConsumeSource.FREE.value,
             level_name=membership.level_name if membership else "免费用户",
             expire_at=account.expire_at if account else None,
             monthly_balance=account.monthly_balance,

@@ -1,10 +1,9 @@
-import uuid
 from typing import List, Optional
 
 from sqlalchemy import select, and_, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.config.generator import LZSDGenerator
+from common.utils.generator import LZSDGenerator
 from common.utils.text_util import strip_html_tags
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book

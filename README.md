@@ -2,6 +2,12 @@
     python -m PyInstaller --hidden-import aiomysql -n "novelAI" .\main.py
 ---
 
+#### 20260412
+> 增加ai生成日志分页；  
+> 增加基于提示词模版生成接口；  
+> 优化部分数据结构和类型定义；  
+> 合并主分支代码。
+
 #### 20260408
 > 修正AI额度检查；  
 > 生成日志增加AI生成额度扣减记录  

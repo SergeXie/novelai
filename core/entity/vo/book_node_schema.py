@@ -4,8 +4,6 @@ from typing import List, Optional, Dict, Any
 
 from fastapi import Query
 from pydantic import BaseModel, Field, field_serializer, ConfigDict, field_validator
-from sqlalchemy import JSON
-
 
 class NodeTreeSchema(BaseModel):
     id: int

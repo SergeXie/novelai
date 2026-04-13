@@ -4,10 +4,12 @@ from jinja2 import Environment
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.exception.errors import NotFoundError
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
 from core.entity.do.prompt_register import PromptRegistry
 from core.enums.node_type import BookNodeCategory
+from core.enums.prompt_sys_var import PromptEngineType
 from dao.ai_prompt_registry_dao import PromptRegistryDAO
 
 jinja_env = Environment(enable_async=True)
@@ -126,31 +128,41 @@ class PromptService:
 
         return "\n\n".join(prompt_segments)
 
-    async def render_prompt_content(self, book:Optional[Book], tool_key: str, inputs: dict) -> str:
+    async def render_prompt_tool(self, book:Optional[Book], tool_key: str, inputs: dict) -> str:
         # 1. 获取模板配置
         config = await self.dao.get_active_by_key(tool_key)
         if not config:
-            raise ValueError(f"Template [{tool_key}] 未找到或已禁用")
+            raise NotFoundError(msg=f"Template [{tool_key}] 未找到或已禁用")
 
-        # 2. 核心渲染逻辑
-        final_content = config.template_content
         try:
-            if config.engine_type == "jinja2":
-                template = jinja_env.from_string(final_content)
-                final_content = await template.render_async(**inputs)
-            elif config.engine_type == "fstring":
-                # 使用 format 的安全变体，防止 inputs 缺少 key 时崩溃
-                final_content = final_content.format_map(inputs)
-        except Exception as e:
-            raise ValueError(f"模板变量替换出错，请检查输入参数")
+            final_content = await self.render_prompt_with_params(prompt=config.template_content,
+            inputs=inputs,
+            engine_type=PromptEngineType.from_str(config.engine_type))
+            final_content = final_content.strip()
 
-        # 3. 关联背景信息拼接 (优化点：将基本信息与节点信息合并)
-        if config.isRelated:
-            if book:
+            # 3. 关联背景信息拼接 (优化点：将基本信息与节点信息合并)
+            if config.isRelated and book is not None:
                 book_basic_prompt = await self.generate_book_base_prompt(book=book)
                 book_global_prompt = await self.generate_book_global_prompt(book=book)
                 # 拼接顺序：背景设定 -> 前情提要 -> 当前任务指令(渲染后的 template_str)
-                final_content = f"{book_basic_prompt}\n\n{book_global_prompt}\n\n{final_content}"
+                final_content = f"{book_basic_prompt.strip()}\n\n{book_global_prompt.strip()}\n\n{final_content}"
 
-        final_content = final_content.strip()
-        return final_content
+            return final_content
+
+        except Exception as e:
+            raise e
+
+    @staticmethod
+    async def render_prompt_with_params(prompt:str, inputs: dict, engine_type:PromptEngineType = PromptEngineType.JINJA2) -> str:
+        final_content = ""
+        try:
+            if engine_type == PromptEngineType.JINJA2:
+                template = jinja_env.from_string(prompt)
+                final_content = await template.render_async(**inputs)
+            elif engine_type == PromptEngineType.FSTRING:
+                # 使用 format 的安全变体，防止 inputs 缺少 key 时崩溃
+                final_content = prompt.format_map(inputs)
+
+            return final_content.strip()
+        except Exception as _:
+            raise ValueError(f"模板变量替换出错，请检查输入参数")

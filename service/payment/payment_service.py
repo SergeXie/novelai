@@ -1,9 +1,6 @@
 import json
 from datetime import datetime
-
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from loguru import logger
-
 from common.config.config import settings
 from common.utils.time_format_util import parse_and_format_date
 from dao.order_dao import OrderDAO
@@ -31,9 +28,8 @@ class PaymentService:
     async def generate_pay_url(self, order, return_url:str) -> str:
         """
         统一生成支付链接入口
-
         :param order: 订单对象
-        :return: pay_url
+        :param return_url 返回url
         """
         pay_method = order.pay_method
 

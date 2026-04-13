@@ -1,4 +1,4 @@
-from typing import Union, List, Optional
+from typing import Union, List
 
 
 class LoginException(Exception):

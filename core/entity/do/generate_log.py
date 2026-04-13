@@ -1,3 +1,4 @@
+import datetime
 from typing import Optional, Union, List, Dict, Any
 
 from sqlalchemy import (
@@ -61,6 +62,8 @@ class AiNovelGenerateLog(Base):
     userPrompt: Mapped[str] = mapped_column(
         Text,
         nullable=False,
+        deferred=True,  # 默认不查询此字段
+        default=None,
         comment="用户输入的提示词"
     )
 
@@ -74,6 +77,7 @@ class AiNovelGenerateLog(Base):
     systemPrompt: Mapped[str] = mapped_column(
         Text,
         nullable=False,
+        deferred=True,  # 默认不查询此字段
         comment="系统拼装后的提示词"
     )
 
@@ -106,6 +110,7 @@ class AiNovelGenerateLog(Base):
     outputContent: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
+        deferred=True,  # 默认不查询此字段
         comment="模型生成的内容全文"
     )
 
@@ -194,7 +199,7 @@ class AiNovelGenerateLog(Base):
     )
 
     # ========= 时间 =========
-    createdAt: Mapped[str] = mapped_column(
+    createdAt: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
         server_default=func.now(),

@@ -2,7 +2,6 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.entity.do.token_usage_log_do import TokenUsageLog
-from core.entity.do.user_account_do import AccountLog
 from core.entity.do.users_do import User
 
 

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional, Dict
 
 from sqlalchemy import (
-    String, Text, DateTime, BigInteger, Integer, DECIMAL, JSON
+    String, Text, DateTime, BigInteger, Integer, JSON
 )
 from sqlalchemy.orm import mapped_column, Mapped
 from database.db_mysql import Base

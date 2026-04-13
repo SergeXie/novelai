@@ -2,6 +2,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import String, Text, Integer, BigInteger, JSON, DateTime
 from datetime import datetime
 
+from core.enums.prompt_sys_var import PromptEngineType
 from database.db_mysql import Base
 
 
@@ -38,6 +39,12 @@ class PromptSquare(Base):
         comment="模板描述/简介"
     )
 
+    freeze_tokens: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        comment="预冻结token数量"
+    )
+
     cover_img: Mapped[str] = mapped_column(
         String(255),
         default="",
@@ -64,7 +71,7 @@ class PromptSquare(Base):
 
     engine_type: Mapped[str] = mapped_column(
         String(16),
-        default="jinja2",
+        default=PromptEngineType.JINJA2.value,
         comment="渲染引擎类型"
     )
 

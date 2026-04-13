@@ -6,12 +6,12 @@ from ai.adapters.enums import AIProvider, AIAction
 from ai.ai_nexus import check_ai_input
 from ai.workflow.wf_create_book import CreateBookWorkflow
 from common.config.config import settings
-from common.config.generator import LZSDGenerator
+from common.utils.generator import LZSDGenerator
 from common.config.get_db import get_db, get_db_context
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user, check_user_quota_or_raise
 from core.entity.vo.ai_response import TokenUsage
-from core.entity.vo.base_vo import PageMetaExtra
+from core.entity.vo.base_vo import PageResp
 from core.entity.vo.prompt_register_vo import PromptRegistryResp
 from core.entity.vo.prompt_square_vo import PromptSquareCreateReq, PromptSquareUpdateReq, PromptSquareDetailReq
 from dao.book_dao import BookDAO
@@ -43,16 +43,13 @@ async def get_public_private_prompt_list(
         category,
         user.pkId
     )
-
-    return ResponseUtil.success(data=data, dict_content=PageMetaExtra(
-        page=page,pageSize=pageSize,
-        total=total,category=category).model_dump())
+    rsp_data = PageResp(list=data, total=total, pageSize=pageSize, page=page)
+    return ResponseUtil.success(data=rsp_data)
 
 
 @promptController.get("/publicCategories", name="获取提示词分类")
 async def get_public_prompt_categories(
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
+    db: AsyncSession = Depends(get_db)
 ):
     """
     获取提示词广场分类列表，按 category 去重
@@ -203,7 +200,10 @@ async def render(
 
     try:
         # 整理提示词
-        final_prompt = await service.render_prompt_content(book=book, tool_key=tool_key, inputs=inputs)
+        final_prompt = await service.render_prompt_tool(
+            tool_key=tool_key,
+            book=book,
+            inputs=inputs)
         ai_service = AIService(db)
         payload = {
             "tool_key": tool_key,

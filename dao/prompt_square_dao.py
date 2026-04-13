@@ -2,9 +2,10 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import or_
 
-from common.config.generator import LZSDGenerator
+from common.utils.generator import LZSDGenerator
 from core.entity.do.prompt_square_do import PromptSquare
 from core.entity.vo.prompt_square_vo import PromptSquareCreateReq, PromptSquareUpdateReq
+from core.enums.prompt_sys_var import PromptEngineType
 
 
 class PromptSquareDAO:
@@ -12,8 +13,8 @@ class PromptSquareDAO:
     @staticmethod
     def _public_condition(category: str | None = None, user_id: int = None):
         condition = (
-            (PromptSquare.author_id == 0) &
-            (PromptSquare.status == 1)
+                (PromptSquare.author_id == 0) &
+                (PromptSquare.status == 1)
         )
         if category:
             condition = condition & (PromptSquare.category == category)
@@ -81,13 +82,13 @@ class PromptSquareDAO:
 
     @staticmethod
     async def create_user_prompt(
-        db: AsyncSession,
-        user_id: int,
-        req: PromptSquareCreateReq
+            db: AsyncSession,
+            user_id: int,
+            req: PromptSquareCreateReq
     ) -> PromptSquare:
 
         prompt = PromptSquare(
-            template_key=LZSDGenerator.generate_request_id(),
+            template_key=LZSDGenerator.generate_template_id(),
             title=req.title,
             category=req.category,
             content=req.content,
@@ -95,7 +96,7 @@ class PromptSquareDAO:
             status=req.status,
             author_id=user_id,
             cover_img="",
-            engine_type="jinja2",
+            engine_type=PromptEngineType.JINJA2.value,
             input_schema={},
             use_count=0
         )
@@ -107,9 +108,9 @@ class PromptSquareDAO:
 
     @staticmethod
     async def get_user_prompt_by_id(
-        db: AsyncSession,
-        template_key: str,
-        user_id: int
+            db: AsyncSession,
+            template_key: str,
+            user_id: int
     ) -> PromptSquare | None:
         stmt = select(PromptSquare).where(
             PromptSquare.template_key == template_key,
@@ -120,7 +121,7 @@ class PromptSquareDAO:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def get_by_id(
+    async def get_template_by_key(
             db: AsyncSession,
             template_key: str
     ) -> PromptSquare | None:
@@ -155,9 +156,9 @@ class PromptSquareDAO:
 
     @staticmethod
     async def update_user_prompt(
-        db: AsyncSession,
-        prompt: PromptSquare,
-        req: PromptSquareUpdateReq
+            db: AsyncSession,
+            prompt: PromptSquare,
+            req: PromptSquareUpdateReq
     ) -> PromptSquare:
         prompt.title = req.title
         prompt.category = req.category

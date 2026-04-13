@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict, field_validator
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from datetime import datetime
 
 # 1. 基础属性

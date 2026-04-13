@@ -79,10 +79,6 @@ class AINexus:
             AIProvider.ZHIPU: GLMAdapter(),
         }
 
-    # 建议使用忽略大小写的正则匹配
-    def get_actual_tokens(self, provider: AIProvider, content:str)->int:
-        return len(content) if content else 0
-
     async def generate_novel_text(self, provider: AIProvider, user_prompt: str, system_prompt:str, temperature:float = 0.7, max_tokens: int = None) \
             -> AICompletionResponse:
 
@@ -91,15 +87,16 @@ class AINexus:
         if not adapter:
             raise ValueError(f"未支持的模型提供商: {provider}")
 
+        safe_temperature = max(0.0, min(temperature, 1.2))
+
         # 2. 调用适配器的统一接口
         ai_rsp = await adapter.generate_text(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             max_tokens=max_tokens,
-            temperature=temperature
+            temperature=safe_temperature
         )
         try:
-            # 假设 filter_ai_content 是你的过滤逻辑
             ai_rsp.content = filter_ai_content(ai_rsp.content)
         except Exception as e:
             logger.error(f"AI内容过滤失败: {str(e)}", exc_info=True)

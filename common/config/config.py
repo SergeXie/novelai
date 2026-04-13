@@ -52,6 +52,8 @@ class Settings(BaseSettings):
 
     # 读取环境变量，设置默认值为空字符串
     ai_system_prompt: str = Field(default="", alias="AI_SYSTEM_PROMPT")
+    ai_temperature: float = Field(default=0.7, alias="AI_DEFAULT_TEMPERATURE")
+    ai_max_tokens: int = Field(default=4096, alias="AI_MAX_TOKENS")
 
     # Jwt配置
     jwt_secret_key: str = 'b01c66dc2c58dc6a0aabfe2144256be36226de378bf87f72c0c795dda67f4d55'
