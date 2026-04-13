@@ -19,6 +19,7 @@ class PromptSquareService:
     def _to_prompt_item(prompt) -> PromptItem:
         return PromptItem.model_validate(prompt, from_attributes=True)
 
+    @staticmethod
     def _to_promp_detail_item(prompt) -> PromptItemDetail:
         return PromptItemDetail.model_validate(prompt, from_attributes=True)
 
@@ -28,7 +29,9 @@ class PromptSquareService:
         page: int,
         pageSize: int,
         category: str | None = None,
-        user_id: int = None
+        user_id: int = None,
+        promptType: str = "public"   # 新增
+
     ):
         """
         获取公开提示词列表
@@ -39,18 +42,22 @@ class PromptSquareService:
             page,
             pageSize,
             category,
-            user_id
+            user_id,
+            promptType
         )
 
         items = []
 
-        for prompt in data:
+        for prompt, favor_count, is_favorited in data:
             base = PromptSquareService._to_prompt_item(prompt)
 
             item = PromptListItemResp(
                 **base.model_dump(),
                 # 权限
                 can_edit=(prompt.author_id == user_id),
+                # 新增
+                favor_count=favor_count or 0,
+                is_favorited=(is_favorited > 0)
             )
 
             items.append(item)
@@ -198,9 +205,66 @@ class PromptSquareService:
         except Exception as e:
             raise ServerError(msg = "AI生成失败")
 
+    @staticmethod
+    async def get_my_favor_list(
+            db: AsyncSession,
+            user_id: int,
+            page: int,
+            page_size: int
+    ):
+        """
+        我的收藏列表
+        """
+
+        records, total = await PromptSquareDAO.list_my_favor(
+            db,
+            user_id,
+            page,
+            page_size
+        )
+
+        result = []
+
+        for favor, prompt, favor_count in records:
+            result.append(
+                PromptListItemResp(
+                    **PromptSquareService._to_prompt_item(prompt).model_dump(),
+                    # 权限
+                    can_edit=(prompt.author_id == user_id),
+                    # 新增
+                    favor_count=favor_count or 0,
+                    is_favorited=True  # 永远 true
+                )
+            )
+
+        return result, total
 
 
+    @staticmethod
+    async def favor(db: AsyncSession, user_id: int, template_key: str) -> bool:
+        """
+        收藏（幂等）
+        """
 
+        # 是否已收藏
+        exist = await PromptSquareDAO.get_by_user_and_key(db, user_id, template_key)
+
+        if exist:
+            return True  # 已收藏，直接返回（幂等）
+
+        await PromptSquareDAO.create(db, user_id, template_key)
+
+        return True
+
+    @staticmethod
+    async def unfavor(db: AsyncSession, user_id: int, template_key: str) -> bool:
+        """
+        取消收藏（幂等）
+        """
+
+        await PromptSquareDAO.delete_by_user_and_key(db, user_id, template_key)
+
+        return True
 
 
 

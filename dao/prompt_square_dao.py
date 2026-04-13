@@ -1,9 +1,12 @@
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import or_
+from sqlalchemy.sql.expression import delete, desc
 
 from common.utils.generator import LZSDGenerator
-from core.entity.do.prompt_square_do import PromptSquare
+from core.entity.do.prompt_square_do import PromptSquare, UserTemplateFavor
 from core.entity.vo.prompt_square_vo import PromptSquareCreateReq, PromptSquareUpdateReq
 from core.enums.prompt_sys_var import PromptEngineType
 
@@ -26,34 +29,50 @@ class PromptSquareDAO:
             page: int,
             pageSize: int,
             category: str | None = None,
-            user_id: int | None = None
+            user_id: int | None = None,
+            promptType:str = "public"
     ):
+
         """
-        查询：公开 + 自己的
+        查询：公开 + 自己的 + 收藏信息
         """
 
-        # ==================== 条件 ====================
+        FavorAlias = aliased(UserTemplateFavor)
 
-        condition = or_(
-            PromptSquare.author_id == user_id,  # 自己的
-            PromptSquare.status == 1  # 所有公开（包括别人）
-        )
+        if promptType == "mine":
+            # 我的发布
+            condition = (PromptSquare.author_id == user_id)
+
+        else:
+            # 公开广场
+            condition = (PromptSquare.status == 1)
 
         if category:
             condition = condition & (PromptSquare.category == category)
 
-        # ==================== 总数 ====================
-
-        total_stmt = select(func.count()).where(condition)
-        total = (await db.execute(total_stmt)).scalar()
-
-        # ==================== 分页 ====================
+        # ==================== 主查询 ====================
 
         stmt = (
-            select(PromptSquare)
+            select(
+                PromptSquare,
+                func.count(UserTemplateFavor.id).label("favor_count"),
+                func.count(FavorAlias.id).label("is_favorited")  # 是否收藏
+            )
+            # 收藏总数
+            .outerjoin(
+                UserTemplateFavor,
+                UserTemplateFavor.template_key == PromptSquare.template_key
+            )
+            # 当前用户收藏
+            .outerjoin(
+                FavorAlias,
+                (FavorAlias.template_key == PromptSquare.template_key) &
+                (FavorAlias.user_id == user_id)
+            )
             .where(condition)
+            .group_by(PromptSquare.id)
             .order_by(
-                (PromptSquare.author_id == user_id).desc(),  # 我的优先
+                (PromptSquare.author_id == user_id).desc(),
                 PromptSquare.created_at.desc()
             )
             .offset((page - 1) * pageSize)
@@ -61,9 +80,14 @@ class PromptSquareDAO:
         )
 
         result = await db.execute(stmt)
-        data = result.scalars().all()
+        rows = result.all()
 
-        return data, total
+        # ==================== 总数 ====================
+
+        total_stmt = select(func.count()).where(condition)
+        total = (await db.execute(total_stmt)).scalar()
+
+        return rows, total
 
     @staticmethod
     async def get_public_categories(db: AsyncSession):
@@ -178,3 +202,99 @@ class PromptSquareDAO:
     ):
         await db.delete(prompt)
         await db.commit()
+
+    @staticmethod
+    async def get_by_user_and_key(
+            db: AsyncSession,
+            user_id: int,
+            template_key: str
+    ) -> UserTemplateFavor | None:
+
+        stmt = select(UserTemplateFavor).where(
+            UserTemplateFavor.user_id == user_id,
+            UserTemplateFavor.template_key == template_key
+        )
+
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def list_my_favor(
+            db: AsyncSession,
+            user_id: int,
+            page: int,
+            page_size: int
+    ):
+        """
+        查询我的收藏（带收藏数）
+        """
+
+        FavorAlias = aliased(UserTemplateFavor)
+
+        stmt = (
+            select(
+                UserTemplateFavor,
+                PromptSquare,
+                func.count(FavorAlias.id).label("favor_count")
+            )
+            # 当前用户收藏
+            .join(
+                PromptSquare,
+                UserTemplateFavor.template_key == PromptSquare.template_key
+            )
+            # 所有用户收藏（统计）
+            .outerjoin(
+                FavorAlias,
+                FavorAlias.template_key == PromptSquare.template_key
+            )
+            .where(UserTemplateFavor.user_id == user_id)
+            .group_by(UserTemplateFavor.id, PromptSquare.id)
+            .order_by(desc(UserTemplateFavor.created_at))
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+
+        result = await db.execute(stmt)
+        rows = result.all()
+
+        # ==================== 总数 ====================
+
+        count_stmt = select(func.count()).where(
+            UserTemplateFavor.user_id == user_id
+        )
+        total = (await db.execute(count_stmt)).scalar()
+
+        return rows, total
+
+    @staticmethod
+    async def create(
+            db: AsyncSession,
+            user_id: int,
+            template_key: str
+    ):
+        favor = UserTemplateFavor(
+            user_id=user_id,
+            template_key=template_key
+        )
+
+        db.add(favor)
+
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()  # 防止唯一索引冲突
+
+    @staticmethod
+    async def delete_by_user_and_key(
+            db: AsyncSession,
+            user_id: int,
+            template_key: str
+    ):
+        stmt = delete(UserTemplateFavor).where(
+            UserTemplateFavor.user_id == user_id,
+            UserTemplateFavor.template_key == template_key
+        )
+
+        await db.execute(stmt)
+        await db.commit()
+

@@ -1,5 +1,5 @@
-from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String, Text, Integer, BigInteger, JSON, DateTime
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import String, Text, Integer, BigInteger, JSON, DateTime, UniqueConstraint, func
 from datetime import datetime
 
 from core.enums.prompt_sys_var import PromptEngineType
@@ -110,4 +110,50 @@ class PromptSquare(Base):
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
         comment="更新时间"
+    )
+
+class UserTemplateFavor(Base):
+    """
+    用户模板收藏表（mc_user_template_favor）
+    """
+
+    __tablename__ = "mc_user_template_favor"
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "template_key", name="uk_user_tpl"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger,
+        primary_key=True,
+        autoincrement=True,
+        comment="主键ID"
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        index=True,
+        comment="用户ID"
+    )
+
+    template_key: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        index=True,
+        comment="关联 ai_prompt_square 的 template_key"
+    )
+
+    created_at: Mapped[DateTime] = mapped_column(
+        DateTime,
+        nullable=False,
+        server_default=func.now(),
+        comment="收藏时间"
+    )
+
+    prompt = relationship(
+        "PromptSquare",
+        primaryjoin="UserTemplateFavor.template_key == foreign(PromptSquare.template_key)",
+        uselist=False,  # 关键
+        lazy="joined"
     )
