@@ -11,7 +11,7 @@ from service.prompt_square_service import PromptSquareService
 
 aiTemplateController = APIRouter(prefix="/ai/template")
 
-@aiTemplateController.post("/execute")
+@aiTemplateController.post("/execute", name="广场模板提示词生成推理")
 async def execute(
         templateKey:str = Body(...),
         level:int = Body(...),
@@ -43,6 +43,7 @@ async def get_public_private_prompt_list(
     pageSize: int = Query(10, le=50),
     category: Optional[str] = Query(None),
     promptType: str = Query("public"),
+    title: Optional[str] = Query(None),  # 新增
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user)
 ):
@@ -56,7 +57,8 @@ async def get_public_private_prompt_list(
         pageSize,
         category,
         user.pkId,
-        promptType
+        promptType,
+        title
     )
     rsp_data = PageResp(list=data, total=total, pageSize=pageSize, page=page)
     return ResponseUtil.success(data=rsp_data)
@@ -145,6 +147,7 @@ async def delete_user_prompt_square(
 async def get_my_favor_list(
     page: int = Query(1, ge=1),
     pageSize: int = Query(20, le=50),
+    title: Optional[str] = Query(None),  # 新增
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user)
 ):
@@ -152,7 +155,8 @@ async def get_my_favor_list(
         db,
         user.pkId,
         page,
-        pageSize
+        pageSize,
+        title
     )
 
     rsp_data = PageResp(list=data, total=total, pageSize=pageSize, page=page)
