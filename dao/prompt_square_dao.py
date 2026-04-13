@@ -30,7 +30,8 @@ class PromptSquareDAO:
             pageSize: int,
             category: str | None = None,
             user_id: int | None = None,
-            promptType:str = "public"
+            promptType:str = "public",
+            title: str | None = None,
     ):
 
         """
@@ -50,6 +51,8 @@ class PromptSquareDAO:
         if category:
             condition = condition & (PromptSquare.category == category)
 
+        if title:
+            condition = condition & (PromptSquare.title.ilike(f"%{title}%"))
         # ==================== 主查询 ====================
 
         stmt = (
@@ -223,11 +226,18 @@ class PromptSquareDAO:
             db: AsyncSession,
             user_id: int,
             page: int,
-            page_size: int
+            page_size: int,
+            title:str
     ):
         """
         查询我的收藏（带收藏数）
         """
+
+        conditions = [UserTemplateFavor.user_id == user_id]
+
+        if title:
+            print("title:{}".format(title))
+            conditions.append(PromptSquare.title.ilike(f"%{title}%"))
 
         FavorAlias = aliased(UserTemplateFavor)
 
@@ -246,7 +256,7 @@ class PromptSquareDAO:
             .outerjoin(
                 FavorAlias,
                 FavorAlias.template_key == PromptSquare.template_key
-            )
+            ).where(*conditions)
             .where(UserTemplateFavor.user_id == user_id)
             .group_by(UserTemplateFavor.id, PromptSquare.id)
             .order_by(desc(UserTemplateFavor.created_at))

@@ -30,7 +30,8 @@ class PromptSquareService:
         pageSize: int,
         category: str | None = None,
         user_id: int = None,
-        promptType: str = "public"   # 新增
+        promptType: str = "public",   # 新增
+        title: str | None = None,
 
     ):
         """
@@ -43,7 +44,8 @@ class PromptSquareService:
             pageSize,
             category,
             user_id,
-            promptType
+            promptType,
+            title
         )
 
         items = []
@@ -210,7 +212,8 @@ class PromptSquareService:
             db: AsyncSession,
             user_id: int,
             page: int,
-            page_size: int
+            page_size: int,
+            title: str | None = None,
     ):
         """
         我的收藏列表
@@ -220,7 +223,8 @@ class PromptSquareService:
             db,
             user_id,
             page,
-            page_size
+            page_size,
+            title
         )
 
         result = []
