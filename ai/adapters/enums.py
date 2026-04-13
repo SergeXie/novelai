@@ -12,7 +12,7 @@ class AIProvider(str, Enum):
     ZHIPU = "zhipu"
 
     @classmethod
-    def from_level(cls, level: int) -> "AIProvider":
+    def from_level(cls, level: int | None) -> "AIProvider":
         """
         根据用户等级或推理等级返回对应的供应商
         1: 基础模型 (豆包)
@@ -33,7 +33,7 @@ class AIProvider(str, Enum):
         }
 
         # 使用 dict.get() 实现“默认返回豆包”的逻辑
-        return level_map.get(level, cls.DOUBAO)
+        return level_map.get(level or 2, cls.DOUBAO)
 
 class AIAction(str, Enum):
     Unknown = "unknown"

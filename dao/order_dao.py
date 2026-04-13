@@ -1,4 +1,3 @@
-import datetime
 from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import and_

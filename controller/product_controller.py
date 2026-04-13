@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from loguru import logger
+from openai.types.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession, result
 from fastapi import Request
 
@@ -7,9 +8,8 @@ from common.config.config import settings
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user
-from core.entity.vo.base_vo import PageMeta
+from core.entity.vo.base_vo import PageResp
 from core.entity.vo.order_schema_vo import CreateOrderRequest, CreateOrderResponse
-from core.entity.vo.product_schema_vo import ProductListResponse
 from service.account_service import AccountService
 from service.order_service import OrderService
 from service.payment.payment_service import PaymentService
@@ -52,16 +52,16 @@ async def get_orders_history(
         endTime
     )
 
-    return ResponseUtil.success(
-        data=data,
-        dict_content=PageMeta(
+    rsp_data = PageResp(
             page=page,
             pageSize=pageSize,
-            total=total
-        ).model_dump()
-    )
+            total=total,
+            list=data
+        )
 
-@productRouter.get("/plans", response_model=ProductListResponse, name="产品列表")
+    return ResponseUtil.success(data=rsp_data)
+
+@productRouter.get("/plans", response_model=Response, name="产品列表")
 async def get_product_list(
     db: AsyncSession = Depends(get_db)
 ):
@@ -81,7 +81,7 @@ async def get_product_list(
     return ResponseUtil.success(data=result)
 
 
-@productRouter.post("/pay", response_model=CreateOrderResponse, name="下单")
+@productRouter.post("/pay", name="下单")
 async def create_order_(
     req: CreateOrderRequest,
     db: AsyncSession = Depends(get_db),

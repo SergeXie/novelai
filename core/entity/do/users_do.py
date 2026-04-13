@@ -1,6 +1,8 @@
-from sqlalchemy import BigInteger, String, Enum, DateTime, func, Float, Integer, DECIMAL, text
-from sqlalchemy.orm import Mapped, mapped_column
 import enum
+
+from sqlalchemy import BigInteger, String, Enum, DateTime, func
+from sqlalchemy.orm import Mapped, mapped_column
+
 from database.db_mysql import Base
 
 

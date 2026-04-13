@@ -60,8 +60,25 @@ class LZSDGenerator:
 
         return f"BID{timestamp}{random_suffix}"
 
+    @staticmethod
+    def generate_template_id(length:int=16)->str:
+        """
+                        生成全大写字母的提示词模板 ID
+                        :param length: 随机字母的长度（不含前缀）
+                        :return: 示例: TPLABCDE...
+                        """
+        # 定义前缀
+        prefix = "PRMT"
+
+        # 从 A-Z 中随机挑选指定数量的字符
+        # secrets.choice 比 random.choice 更适用于生成唯一标识
+        letters = string.ascii_uppercase
+        random_str = ''.join(secrets.choice(letters) for _ in range(length))
+
+        return f"{prefix}{random_str}"
+
 
 # 测试生成
 if __name__ == "__main__":
-    for _ in range(18):
-        print(LZSDGenerator.generate_user_uid())
+    for _ in range(20):
+        print(LZSDGenerator.generate_template_id())

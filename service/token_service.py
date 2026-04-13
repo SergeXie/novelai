@@ -21,7 +21,7 @@ class TokenService:
         Token扣费核心逻辑（生产级）
 
         :param db:
-        :param uid:
+        :param user_id:
         :param amount: 本次消耗
         :param request_id: 请求ID（用于幂等）
         """

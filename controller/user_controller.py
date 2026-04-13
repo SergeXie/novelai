@@ -1,14 +1,11 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped
 
 from common.config.config import settings
 from common.config.get_db import get_db
-from common.response.response_schema import ResponseBase
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user, check_user_quota_or_raise
 from core.entity.vo.user_vo import UpdateNicknameRequest
-from database.db_mysql import Base
 from service.usage_service import UsageService
 from service.user_service import UserService
 

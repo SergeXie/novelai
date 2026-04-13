@@ -1,13 +1,12 @@
 from fastapi import APIRouter, Depends, BackgroundTasks, Query
 
 from ai.adapters.enums import AIAction
-from common.config.config import settings
 from common.config.get_db import get_db
-from common.exception.lzsd_exception import InsufficientTokenException
+from common.exception.errors import NotFoundError
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user, check_book_owner, check_user_quota_or_raise
-from core.entity.vo.ai_model_vo import AiModelResp, DeleteHistoryReq
 from core.entity.schemas import GenerateRequest
+from core.entity.vo.ai_model_vo import AiModelResp, DeleteHistoryReq
 from service.ai_prompt_service import PromptService
 from service.ai_service import AIService
 from service.usage_service import UsageService
@@ -121,5 +120,24 @@ async def delete_history(
         uid=user.pkId,
         request_ids=req.requestIds
     )
-
     return ResponseUtil.success(msg="删除成功")
+
+@aiController.get("/ai/log/list")
+async def get_log_list(
+        page: int = Query(1, ge=1, description="页码"),
+        size: int = Query(10, ge=1, le=50, description="每页数量"),
+        user=Depends(get_current_user),
+        db=Depends(get_db)
+):
+    service = UsageService(db=db)
+    result = await service.get_logs_page(user_id=user.pkId, page=page, size=size)
+    return ResponseUtil.success(data=result)
+
+@aiController.get("/ai/log/detail")
+async def get_log_detail(requestId: str, db=Depends(get_db), _=Depends(get_current_user)):
+    service = UsageService(db=db)
+    rsp = await service.get_log_detail(request_id=requestId)
+    if rsp is None:
+        return NotFoundError
+
+    return ResponseUtil.success(data=rsp)

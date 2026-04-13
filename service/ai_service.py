@@ -4,10 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ai.adapters.enums import AIProvider, AIAction
 from ai.ai_nexus import get_ai_nexus
 from common.config.config import settings
-from common.config.generator import LZSDGenerator
+from common.utils.generator import LZSDGenerator
 from common.config.get_db import get_db_context
 from core.entity.do.users_do import User
-from core.entity.vo.ai_response import AICompletionResponse
 from dao.ai_log_dao import AILogDAO
 from dao.ai_model_dao import AiModelDAO
 from service.usage_service import UsageService
@@ -39,14 +38,18 @@ class AIService:
     async def prepare_and_record_request(
             self,
             user: User,
-            bid: str,
             origin_prompt: str,
             user_prompt: str,
             level: int,
-            temperature: float,
-            action_type:str,
+            action_type: str,
+            bid: str | None = None,
+            temperature: float | None = None,
+            max_tokens: int | None = None,
+            tokenEstimate : int | None = 0,
+            system_prompt: str | None = None,
             correlation=None,
-            background_tasks=None
+            background_tasks=None,
+
     )->str:
         """
         第一阶段：校验、记录、生成请求ID (同步执行，快速返回)
@@ -56,8 +59,14 @@ class AIService:
         if correlation is None:
             correlation = []
 
-        usage_service = UsageService(self.db)
         ai_provider = AIProvider.from_level(level)
+
+        final_system_prompt = system_prompt or settings.ai_system_prompt
+        final_temperature = temperature or settings.ai_temperature
+        final_max_tokens = max_tokens or settings.ai_max_tokens
+
+        usage_service = UsageService(self.db)
+
         input_user_prompt = user_prompt
         await usage_service.record(
             user_id=user_id,
@@ -66,20 +75,23 @@ class AIService:
             node_ids=correlation,
             bid=bid,
             origin_prompt=origin_prompt,
-            system_prompt="",
+            system_prompt=final_system_prompt,
             user_prompt=input_user_prompt,
-            temperature=temperature,
+            temperature=final_temperature,
             output_content="",
-            action_type=AIAction(action_type)
+            action_type=AIAction(action_type),
+
         )
 
         if background_tasks is not None:
             background_tasks.add_task(
                 async_generate_task,
-                ai_provider,
-                input_user_prompt,
-                temperature=temperature,
                 request_id=request_id,
+                ai_provider=ai_provider,
+                input_user_prompt=input_user_prompt,
+                system_prompt=final_system_prompt,
+                temperature=final_temperature,
+                max_tokens=final_max_tokens,
             )
 
         return request_id
@@ -97,40 +109,42 @@ def _should_retry_with_level2(error: Exception) -> bool:
     )
 
 
-async def async_generate_task(ai_provider, input_user_prompt, temperature, request_id):
+async def async_generate_task(
+        request_id: str,
+        ai_provider: AIProvider,
+        input_user_prompt: str,
+        system_prompt: str,
+        temperature: float,
+        max_tokens: int,
+):
     """后台异步执行 AI 调用并更新结果"""
-    system_prompt = settings.ai_system_prompt
-    ai_rsp: AICompletionResponse | None = None
+    nexus = get_ai_nexus()
+    # 构造待尝试的 provider 序列
+    providers_to_try = [ai_provider]
+    ai_rsp = None
 
-    try:
-        nexus = get_ai_nexus()
+    for i, current_provider in enumerate(providers_to_try):
         try:
             ai_rsp = await nexus.generate_novel_text(
-                provider=ai_provider,
+                provider=current_provider,
                 user_prompt=input_user_prompt,
                 system_prompt=system_prompt,
-                temperature=temperature
+                temperature=temperature,
+                max_tokens=max_tokens,
             )
+            break  # 成功则跳出循环
         except Exception as e:
-            if _should_retry_with_level2(e):
-                fallback_provider = AIProvider.from_level(2)
-                logger.warning(
-                    f"Request {request_id} 命中特定 Gemini 渠道错误，改用 level=2 重试。原始错误: {e}"
-                )
-                ai_rsp = await nexus.generate_novel_text(
-                    provider=fallback_provider,
-                    user_prompt=input_user_prompt,
-                    system_prompt=system_prompt,
-                    temperature=temperature
-                )
-            else:
-                raise
+            # 如果还有重试机会，且符合降级条件
+            if i == 0 and _should_retry_with_level2(e):
+                fallback = AIProvider.from_level(2)
+                providers_to_try.append(fallback)
+                logger.warning(f"Req {request_id}: 命中特定错误，准备降级至 {fallback}")
+                continue
 
-    except Exception as e:
-        output_prompt = f"Error: {str(e)}"
-        logger.error(f"generate_novel_text Error for {request_id}: {output_prompt}")
+            # 否则记录错误并彻底结束
+            logger.error(f"Generate Error for {request_id}: {e}")
+            break
 
-    if ai_rsp is not None:
+    if ai_rsp:
         async with get_db_context() as db:
-            usage_service = UsageService(db=db)
-            await usage_service.update_output_content_by_request_id(request_id, ai_rsp)
+            await UsageService(db).update_output_content_by_request_id(request_id, ai_rsp)

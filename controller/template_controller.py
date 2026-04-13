@@ -1,11 +1,10 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
-from core.deps.auth import get_current_user
 from core.entity.vo.template_vo import TemplateListResp
 from service.template_service import TemplateService
-
 
 templateController = APIRouter()
 
