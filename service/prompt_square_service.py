@@ -1,6 +1,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai.adapters.enums import AIAction
 from common.exception.errors import NotFoundError, ServerError
+from common.modules.book_exporter import BookExporter
 from core.entity.do.users_do import User
 from core.entity.vo.prompt_square_vo import (
     PromptItem,
@@ -11,6 +13,7 @@ from core.enums.prompt_sys_var import PromptEngineType
 from dao.prompt_square_dao import PromptSquareDAO
 from service.ai_prompt_service import PromptService
 from service.ai_service import AIService
+from service.book_service import BookService
 
 
 class PromptSquareService:
@@ -24,11 +27,11 @@ class PromptSquareService:
 
     @staticmethod
     async def get_public_list(
-        db: AsyncSession,
-        page: int,
-        pageSize: int,
-        category: str | None = None,
-        user_id: int = None
+            db: AsyncSession,
+            page: int,
+            pageSize: int,
+            category: str | None = None,
+            user_id: int = None
     ):
         """
         获取公开提示词列表
@@ -68,9 +71,9 @@ class PromptSquareService:
 
     @staticmethod
     async def create_user_prompt(
-        db: AsyncSession,
-        user_id: int,
-        req: PromptSquareCreateReq
+            db: AsyncSession,
+            user_id: int,
+            req: PromptSquareCreateReq
     ) -> PromptItem:
         prompt = await PromptSquareDAO.create_user_prompt(db, user_id, req)
         return PromptSquareService._to_prompt_item(prompt)
@@ -160,47 +163,61 @@ class PromptSquareService:
 
     @staticmethod
     async def execute_by_template(db: AsyncSession,
-                      level:int,
-                      user: User,
-                      template_key: str,
-                      user_prompt: str,
-                      inputs:dict,
-                      temperature:float | None = None,
-                      max_tokens:float | None = None) -> str:
+                                  level: int,
+                                  user: User,
+                                  template_key: str,
+                                  user_prompt: str,
+                                  background_tasks,
+                                  inputs: dict | None = None,
+                                  bid: str | None = None,
+                                  temperature: float | None = None,
+                                  max_tokens: float | None = None) -> str:
         tpl = await PromptSquareDAO.get_template_by_key(db, template_key)
         if not tpl or tpl.status != 1:
             raise NotFoundError(msg="提示词模版不存在")
 
+        final_inputs = inputs if inputs else {}
+
+        book_service = BookService(db)
+        book = await book_service.get_book_by_bid(bid=bid, user_id=user.pkId)
+        if not book:
+            raise NotFoundError(msg=f"书籍[{bid}]不存在")
+
+        final_inputs = inputs or {}
+
+        book_prompt = ""
+
+        key = "sys_book_info"
+        if key in final_inputs:
+            nodes = await book_service.get_basic_nodes(bid=bid, user_id=user.pkId) or []
+            leaf_ids = [node.id for node in nodes]
+            exporter = BookExporter(db)
+            book_prompt = await exporter.export_to_markdown(book=book, leaf_node_ids=leaf_ids)
+            final_inputs[key] = book_prompt
+
         try:
             prompt = await PromptService.render_prompt_with_params(
                 prompt=tpl.content,
-                inputs=inputs,
+                inputs=final_inputs,
                 engine_type=PromptEngineType.from_str(tpl.engine_type))
-
             frozen_tokens = tpl.freeze_tokens
-
             final_user_prompt = "\n".join(filter(None, [prompt, user_prompt]))
 
             ai_service = AIService(db)
             request_id = await ai_service.prepare_and_record_request(
                 user=user,
-                bid=None,
+                bid=bid,
                 origin_prompt=f"【模版】{tpl.title} 【提示词】{user_prompt}",
                 user_prompt=final_user_prompt,
                 level=level,
+                action_type=AIAction.Execute,
                 temperature=temperature,
                 correlation=[template_key],
                 max_tokens=max_tokens,
                 tokenEstimate=frozen_tokens,
+                background_tasks=background_tasks
             )
             return request_id
 
-        except Exception as e:
-            raise ServerError(msg = "AI生成失败")
-
-
-
-
-
-
-
+        except Exception as _:
+            raise ServerError(msg="AI生成失败")

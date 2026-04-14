@@ -1,3 +1,5 @@
+import textwrap
+
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -125,6 +127,7 @@ async def async_generate_task(
 
     for i, current_provider in enumerate(providers_to_try):
         try:
+            logger.info(f"【{current_provider.name}】req:{request_id} 开始生成 提示词:{textwrap.shorten(input_user_prompt, width=20, placeholder="...")} temperature:{temperature} max_tokens:{max_tokens}")
             ai_rsp = await nexus.generate_novel_text(
                 provider=current_provider,
                 user_prompt=input_user_prompt,
@@ -132,8 +135,10 @@ async def async_generate_task(
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
+            logger.info(f"【{current_provider.name}】req:{request_id} 生成结束 返回:{textwrap.shorten(ai_rsp.content, width=20, placeholder="...")}")
             break  # 成功则跳出循环
         except Exception as e:
+            logger.info(f"【{current_provider.name}】req:{request_id} 生成异常 {e}")
             # 如果还有重试机会，且符合降级条件
             if i == 0 and _should_retry_with_level2(e):
                 fallback = AIProvider.from_level(2)
