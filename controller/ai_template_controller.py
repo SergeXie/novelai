@@ -148,6 +148,7 @@ async def get_my_favor_list(
     page: int = Query(1, ge=1),
     pageSize: int = Query(20, le=50),
     title: Optional[str] = Query(None),  # 新增
+    category: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user)
 ):
@@ -156,7 +157,8 @@ async def get_my_favor_list(
         user.pkId,
         page,
         pageSize,
-        title
+        title,
+        category
     )
 
     rsp_data = PageResp(list=data, total=total, pageSize=pageSize, page=page)

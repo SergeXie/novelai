@@ -173,14 +173,16 @@ class PromptSquareService:
                       user: User,
                       template_key: str,
                       user_prompt: str,
-                      inputs:dict,
+                      inputs:dict | None = None,
                       temperature:float | None = None,
                       max_tokens:float | None = None) -> str:
+
         tpl = await PromptSquareDAO.get_template_by_key(db, template_key)
         if not tpl or tpl.status != 1:
             raise NotFoundError(msg="提示词模版不存在")
 
         try:
+
             prompt = await PromptService.render_prompt_with_params(
                 prompt=tpl.content,
                 inputs=inputs,
@@ -205,7 +207,7 @@ class PromptSquareService:
             return request_id
 
         except Exception as e:
-            raise ServerError(msg = "AI生成失败")
+            raise ServerError(msg = "AI生成失败:{}".format(e))
 
     @staticmethod
     async def get_my_favor_list(
@@ -214,6 +216,7 @@ class PromptSquareService:
             page: int,
             page_size: int,
             title: str | None = None,
+            category:str | None = None
     ):
         """
         我的收藏列表
@@ -224,7 +227,8 @@ class PromptSquareService:
             user_id,
             page,
             page_size,
-            title
+            title,
+            category
         )
 
         result = []
