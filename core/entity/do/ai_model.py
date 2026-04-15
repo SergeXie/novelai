@@ -78,6 +78,12 @@ class McAiModel(Base):
         comment="模型支持的最大上下文总长"
     )
 
+    weight: Mapped[float] = mapped_column(
+        Integer,
+        comment="权重从大到小"
+    )
+
+
     status: Mapped[int] = mapped_column(
         SmallInteger,
         nullable=False,

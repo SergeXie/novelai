@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, Body, BackgroundTasks
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
-from core.deps.auth import get_current_user
+from core.deps.auth import get_current_user, check_user_quota_or_raise
 from core.entity.vo.base_vo import PageResp
 from core.entity.vo.prompt_square_vo import PromptSquareDetailReq, PromptSquareUpdateReq, PromptSquareCreateReq
 from service.prompt_square_service import PromptSquareService
@@ -23,7 +23,11 @@ async def execute(
         template: Optional[float] = Body(None),
         maxTokens: Optional[int] = Body(None),
         user=Depends(get_current_user),
-        db=Depends(get_db), ):
+        db=Depends(get_db)):
+
+    # 额度监测
+    await check_user_quota_or_raise(frozen_token_length=(len(userPrompt) + 3000), user_info=user)
+
     request_id = await PromptSquareService.execute_by_template(
         db=db,
         level=level,

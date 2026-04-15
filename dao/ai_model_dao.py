@@ -23,7 +23,7 @@ class AiModelDAO:
         if not self._cache_models or (now - self._last_update) > self.CACHE_TTL:
             try:
                 # 从数据库拉取全量数据
-                stmt = select(McAiModel).order_by(McAiModel.level.asc())
+                stmt = select(McAiModel).order_by(McAiModel.weight.desc())
                 result = await self.db.execute(stmt)
                 all_models = list(result.scalars().all())
 
