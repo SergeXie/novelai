@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import List, Tuple, Optional
 
+from fastapi import params
 from loguru import logger
 from sqlalchemy import select, func, update, desc, and_, Integer, cast
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -101,31 +102,28 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
         根据 request_id 更新生成结果（适配驼峰命名字段）
         更新生成结果 + 扣Token
         """
+        update_fields = {
+            "status": status.value if hasattr(status, "value") else status,
+            "errorMsg": error_msg,
+            **({
+                   "outputContent": ai_rsp.content,
+                   "outputLength": ai_rsp.usage.completion_tokens,
+                   "requestInputLength": ai_rsp.usage.prompt_tokens,
+                   "totalTokens": ai_rsp.usage.total_tokens,
+               } if ai_rsp else {})
+        }
         try:
-            stmt = (
-                update(AiNovelGenerateLog)
-                .where(AiNovelGenerateLog.requestId == request_id)
-                .values({
-                    "outputContent": ai_rsp.content,
-                    "outputLength": ai_rsp.usage.completion_tokens,
-                    "requestInputLength": ai_rsp.usage.prompt_tokens,
-                    "totalTokens": ai_rsp.usage.total_tokens,
-                    "status": status,
-                    "errorMsg": error_msg
-                })
-            )
-
-            result = await self.db.execute(stmt)
-
-            if result.rowcount > 0:
-                await self.db.commit()
-                return True
-
+            async with self.db.begin():
+                stmt = (
+                    update(AiNovelGenerateLog)
+                    .where(AiNovelGenerateLog.requestId == request_id)
+                    .values(update_fields)
+                )
+                result = await self.db.execute(stmt)
+                return result.rowcount > 0
         except Exception as e:
-            # 这里的 logger 建议使用你项目配置好的
-            logger.error(f"Update AiNovelGenerateLog Error: {e}")
-
-        return False
+            logger.error(f"Dao update_output_by_request_id Transaction Failed: {e}")
+            return False
 
     # 假设你的类名已统一为 AiNovelGenerateLog
     async def get_logs_by_bid(self, bid: str) -> List[dict]:
