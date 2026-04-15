@@ -135,10 +135,14 @@ class PromptSquareService:
 
         item = PromptSquareService._to_promp_detail_item(prompt)
 
-        # ==================== 构建返回 ====================
+        data = item.model_dump()
+
+        # ==================== 内容权限控制 ====================
+        if prompt.author_id != user_id:
+            data["content"] = ""  # 或 None
+
         return PromptDetailResp(
-            **item.model_dump(),
-            # 权限字段
+            **data,
             can_edit=(prompt.author_id == user_id),
         )
 
