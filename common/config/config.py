@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     PUBLIC_KEY: str = Field(alias="PUBLIC_KEY", default="")
     PUBLIC_KEY_ID: str = Field(alias="PUBLIC_KEY_ID", default="")
 
+    CLOUD_ADDRESS: str = Field(alias="CLOUD_ADDRESS", default="")
+
+    UPLOAD_USERS_DIR: str = Field(alias="UPLOAD_USERS_DIR", default="")
+
     @field_validator("ai_system_prompt", mode="after")
     @classmethod
     def format_line_breaks(cls, v: str) -> str:
