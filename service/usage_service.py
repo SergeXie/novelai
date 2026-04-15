@@ -129,15 +129,20 @@ class UsageService:
         log_record = await self.ai_log_dao.get_log_by_request_id(request_id=request_id)
 
         if log_record and log_record.userId == user_id:
-            return log_record.outputContent
+            if log_record.status == AIGenerateStatus.SUCCESS:
+                return log_record.outputContent
+            else:
+                return "生成失败，请切换模型或者稍后重试"
 
         return None
 
     async def update_output_content_by_request_id(
             self,
             request_id: str,
-            ai_rsp: AICompletionResponse
-    ):
+            ai_rsp: AICompletionResponse | None,
+            status: AIGenerateStatus = AIGenerateStatus.SUCCESS,
+            error_msg: str = ""
+    )->bool:
         """根据 request_id 更新生成后的输出内容。"""
         if not request_id:
             return False
@@ -145,9 +150,12 @@ class UsageService:
         success = await self.ai_log_dao.update_output_by_request_id(
             request_id=request_id,
             ai_rsp=ai_rsp,
+            status=status,
+            error_msg=error_msg
         )
 
-        await self.record_consumption(request_id=request_id, total_tokens=ai_rsp.usage.total_tokens, multiplier=settings.MULTIPLIER)
+        if status == AIGenerateStatus.SUCCESS and ai_rsp:
+            await self.record_consumption(request_id=request_id, total_tokens=ai_rsp.usage.total_tokens, multiplier=settings.MULTIPLIER)
 
         if success:
             logger.info(f"RequestId: {request_id} 内容更新成功")

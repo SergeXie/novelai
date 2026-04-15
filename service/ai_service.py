@@ -3,7 +3,7 @@ import textwrap
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai.adapters.enums import AIProvider, AIAction
+from ai.adapters.enums import AIProvider, AIAction, AIGenerateStatus
 from ai.ai_nexus import get_ai_nexus
 from common.config.config import settings
 from common.utils.generator import LZSDGenerator
@@ -61,8 +61,6 @@ class AIService:
         if correlation is None:
             correlation = []
 
-        ai_provider = AIProvider.from_level(level)
-
         final_system_prompt = system_prompt or settings.ai_system_prompt
         final_temperature = temperature or settings.ai_temperature
         final_max_tokens = max_tokens or settings.ai_max_tokens
@@ -89,7 +87,7 @@ class AIService:
             background_tasks.add_task(
                 async_generate_task,
                 request_id=request_id,
-                ai_provider=ai_provider,
+                ai_level=level,
                 input_user_prompt=input_user_prompt,
                 system_prompt=final_system_prompt,
                 temperature=final_temperature,
@@ -105,15 +103,12 @@ def _should_retry_with_level2(error: Exception) -> bool:
     """
     error_text = str(error)
     return (
-        "model_not_found" in error_text
-        and "No available channel for model" in error_text
-        and "gemini" in error_text.lower()
+        "Insufficient Balance" in error_text
     )
-
 
 async def async_generate_task(
         request_id: str,
-        ai_provider: AIProvider,
+        ai_level:int,
         input_user_prompt: str,
         system_prompt: str,
         temperature: float,
@@ -121,9 +116,11 @@ async def async_generate_task(
 ):
     """后台异步执行 AI 调用并更新结果"""
     nexus = get_ai_nexus()
+    ai_provider = AIProvider.from_level(ai_level)
     # 构造待尝试的 provider 序列
     providers_to_try = [ai_provider]
     ai_rsp = None
+    error_msg = ""
 
     for i, current_provider in enumerate(providers_to_try):
         try:
@@ -140,7 +137,7 @@ async def async_generate_task(
         except Exception as e:
             logger.info(f"【{current_provider.name}】req:{request_id} 生成异常 {e}")
             # 如果还有重试机会，且符合降级条件
-            if i == 0 and _should_retry_with_level2(e):
+            if i == 0 and ai_level > 0 and _should_retry_with_level2(e):
                 fallback = AIProvider.from_level(2)
                 providers_to_try.append(fallback)
                 logger.warning(f"Req {request_id}: 命中特定错误，准备降级至 {fallback}")
@@ -148,8 +145,12 @@ async def async_generate_task(
 
             # 否则记录错误并彻底结束
             logger.error(f"Generate Error for {request_id}: {e}")
+            error_msg = str(e)
             break
 
-    if ai_rsp:
-        async with get_db_context() as db:
-            await UsageService(db).update_output_content_by_request_id(request_id, ai_rsp)
+    async with get_db_context() as db:
+        await UsageService(db).update_output_content_by_request_id(
+            request_id=request_id,
+            ai_rsp=ai_rsp,
+            status=AIGenerateStatus.SUCCESS if ai_rsp else AIGenerateStatus.FAILED,
+            error_msg=error_msg)

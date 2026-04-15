@@ -56,7 +56,6 @@ class WorkflowService(AIService):
         if correlation is None:
             correlation = []
 
-        ai_provider = AIProvider.from_level(level)
         input_user_prompt = user_prompt
 
         usage_service = UsageService(self.db)
@@ -79,7 +78,7 @@ class WorkflowService(AIService):
         if background_tasks is not None:
             background_tasks.add_task(
                 async_generate_task,  # 具体的执行函数
-                ai_provider,
+                level,
                 input_user_prompt,
                 temperature=temperature,
                 request_id=request_id,
@@ -87,9 +86,10 @@ class WorkflowService(AIService):
 
         return request_id
 
-async def async_generate_task(ai_provider, input_user_prompt, temperature, request_id):
+async def async_generate_task(level, input_user_prompt, temperature, request_id):
     """后台异步执行 AI 调用并更新结果"""
     system_prompt, output_prompt = "", ""
+    ai_provider = AIProvider.from_level(level)
     try:
         # 真正的 AI 耗时操作
         nexus = get_ai_nexus()
