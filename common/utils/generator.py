@@ -45,8 +45,8 @@ class LZSDGenerator:
         # 使用 secrets 模块比 random 更安全
         random_suffix = secrets.token_hex(6).upper()  # 生成 12 位 16 进制字符
 
-        base = f"REQ-{timestamp}-{random_suffix}"
-        return f"{base}-{sign}" if sign else base
+        base = f"REQ{timestamp}{random_suffix}"
+        return f"{base}{sign}" if sign else base
 
     @staticmethod
     def generate_book_id() -> str:

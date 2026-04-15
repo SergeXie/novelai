@@ -227,7 +227,8 @@ class PromptSquareDAO:
             user_id: int,
             page: int,
             page_size: int,
-            title:str
+            title:str,
+            category:str
     ):
         """
         查询我的收藏（带收藏数）
@@ -236,8 +237,11 @@ class PromptSquareDAO:
         conditions = [UserTemplateFavor.user_id == user_id]
 
         if title:
-            print("title:{}".format(title))
             conditions.append(PromptSquare.title.ilike(f"%{title}%"))
+
+        if category:
+            conditions.append(PromptSquare.category == category)
+
 
         FavorAlias = aliased(UserTemplateFavor)
 

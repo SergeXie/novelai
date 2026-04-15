@@ -1,7 +1,7 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, Body
 from fastapi.params import Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, Body, BackgroundTasks
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user
@@ -11,25 +11,30 @@ from service.prompt_square_service import PromptSquareService
 
 aiTemplateController = APIRouter(prefix="/ai/template")
 
-@aiTemplateController.post("/execute", name="广场模板提示词生成推理")
-async def execute(
-        templateKey:str = Body(...),
-        level:int = Body(...),
-        userPrompt:str = Body(...),
-        parameter:Optional[dict] = Body(None),
-        template:Optional[float] = Body(None),
-        maxTokens:Optional[int] = Body(None),
-        user=Depends(get_current_user),
-        db=Depends(get_db)):
 
-    request_id = PromptSquareService.execute_by_template(
+@aiTemplateController.post("/execute")
+async def execute(
+        background_tasks: BackgroundTasks,
+        templateKey: str = Body(...),
+        level: int = Body(...),
+        userPrompt: str = Body(...),
+        bid: str = Body(...),
+        inputs: Optional[dict] = Body(None),
+        template: Optional[float] = Body(None),
+        maxTokens: Optional[int] = Body(None),
+        user=Depends(get_current_user),
+        db=Depends(get_db), ):
+    request_id = await PromptSquareService.execute_by_template(
         db=db,
         level=level,
         template_key=templateKey,
         user_prompt=userPrompt,
         user=user,
+        bid=bid,
+        inputs=inputs,
         temperature=template,
         max_tokens=maxTokens,
+        background_tasks=background_tasks,
     )
 
     return ResponseUtil.success(data=request_id)
@@ -148,6 +153,7 @@ async def get_my_favor_list(
     page: int = Query(1, ge=1),
     pageSize: int = Query(20, le=50),
     title: Optional[str] = Query(None),  # 新增
+    category: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user)
 ):
@@ -156,7 +162,8 @@ async def get_my_favor_list(
         user.pkId,
         page,
         pageSize,
-        title
+        title,
+        category
     )
 
     rsp_data = PageResp(list=data, total=total, pageSize=pageSize, page=page)
@@ -191,3 +198,4 @@ async def unfavor_prompt(
     )
 
     return ResponseUtil.success()
+

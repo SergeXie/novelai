@@ -40,6 +40,7 @@ class AIAction(str, Enum):
     Generate = "generate"
     Render = "render"
     WorkFlow = "workflow"
+    Execute = "execute"
 
     @classmethod
     def _missing_(cls, value):
