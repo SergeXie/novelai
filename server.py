@@ -79,7 +79,8 @@ def register_router(app: FastAPI):
         {'router': bookController, 'tags': ['作品服务接口']},
         {'router': userController, 'tags': ['用户相关接口']},
         {'router': templateController, 'tags': ['书籍模板类型（作品类型）']},
-        {'router': productRouter, 'tags': ['产品中心']}
+        {'router': productRouter, 'tags': ['产品中心']},
+        {'router': aiTemplateController, 'tags': ['提示词模板']}
     ]
 
     for controller in controller_list:

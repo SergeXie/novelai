@@ -17,20 +17,20 @@ class BookService:
         self.book_dao = BookDAO(db)
         self.db = db
 
+    async def get_book_by_bid(self, bid: str, user_id:int) -> Optional[Book]:
+        if bid:
+            return await self.book_dao.get_book_by_bid(bid=bid, user_id=user_id)
+        return None
 
     async def count_book_words(self,bid: str) -> int:
         """
         统计书籍字数（去HTML）
         """
-
         contents = await self.book_dao.get_contents_by_bid(bid)
-
         total = 0
-
         for content in contents:
             clean_text = strip_html_tags(content)
             total += len(clean_text)
-
         return total
 
     async def get_tree(self, bid:str, uid:int, max_depth:Optional[int] = None) -> List[NodeTreeSchema]:
@@ -66,6 +66,11 @@ class BookService:
         # tree.sort(key=lambda x: x.id)
 
         return tree
+    
+    async def get_basic_nodes(self, bid: str, user_id: int)->List[NodeTreeSchema]:
+        nodes = await self.book_dao.get_book_nodes(bid=bid, user_id=user_id) or []
+        # 核心逻辑：保留 is_leaf 等于 1 且 type 大于 1 的元素
+        return [node for node in nodes if node.is_leaf == 1 and node.type > 1]
 
     async def get_sub_tree(self, bid: str, uid: int, root_id: int) -> List[NodeTreeSchema]:
         """
