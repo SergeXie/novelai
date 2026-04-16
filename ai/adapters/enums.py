@@ -32,8 +32,9 @@ class AIProvider(str, Enum):
             7: cls.ZHIPU,       # 7级对应智谱模型
         }
 
+        target_level = level if level is not None else 2
         # 使用 dict.get() 实现“默认返回豆包”的逻辑
-        return level_map.get(level or 2, cls.DOUBAO)
+        return level_map.get(target_level, cls.DOUBAO)
 
 class AIAction(str, Enum):
     Unknown = "unknown"

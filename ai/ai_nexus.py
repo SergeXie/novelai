@@ -15,10 +15,14 @@ from common.config.config import settings
 from common.exception.lzsd_exception import ServiceWarning
 from core.entity.vo.ai_response import AICompletionResponse
 
-def check_ai_input(prompt:str):
+async def check_ai_input(prompt:str):
     current_request_len = len(prompt)
     if current_request_len > settings.SINGLE_REQUEST_TOKEN_LIMIT:
         raise ServiceWarning(message="提示词过长")
+
+    from service.content_audit_service import get_content_audit_service
+
+    await get_content_audit_service().assert_safe_instruction(prompt)
 
 def ai_clean_json(raw_text: str):
     """
