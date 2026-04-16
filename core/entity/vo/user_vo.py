@@ -1,9 +1,15 @@
 from datetime import datetime
 from typing import Union, Optional, List, Dict
-
-from pydantic import BaseModel, Field, ConfigDict, field_serializer
-
+from pydantic import ConfigDict, field_serializer
+from pydantic import BaseModel, Field
 from core.entity.do.users_do import OnlineStatus
+
+class UpdateNicknameRequest(BaseModel):
+    """
+    修改昵称请求
+    """
+
+    nickname: str = Field(..., min_length=1, max_length=20, description="用户昵称")
 
 
 class CurrentUserModel(BaseModel):
@@ -40,10 +46,11 @@ class AccountInfoResponse(BaseModel):
     expire_at: Optional[datetime] = None
     monthly_balance: Optional[int] = 0
     permanent_balance: Optional[int] = 0
-    total_balance: Optional[int] = 0
+    remaining_balance: Optional[int] = 0
     unlocked_models: Optional[List[str]] = []
     extra_privileges: Optional[Dict] = {}
-
+    total_consumed: Optional[int] = 0  # 已使用
+    total_amount: Optional[int] = 0  # 总量
 
     @field_serializer('expire_at')
     def serialize_paid_at(self, expire_at: Optional[datetime], _info):

@@ -1,9 +1,9 @@
-import uuid
 from typing import List, Optional
 
 from sqlalchemy import select, and_, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.utils.generator import LZSDGenerator
 from common.utils.text_util import strip_html_tags
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
@@ -94,7 +94,7 @@ class BookDAO:
         """
         book = Book(
             uid=uid,
-            bid=uuid.uuid4().hex,  # 生成业务层书籍ID
+            bid=LZSDGenerator.generate_request_id(),  # 生成业务层书籍ID
             title=title,
             bookType=bookType,
             description=description,

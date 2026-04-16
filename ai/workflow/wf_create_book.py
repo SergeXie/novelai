@@ -1,10 +1,19 @@
 from typing import List
 
+from ai.adapters.enums import AIProvider
 from ai.workflow.base import BaseWorkflow, WorkflowStep
 
 
 class CreateBookWorkflow(BaseWorkflow):
     """小说创作工作流实现"""
+
+    def __init__(self, ai_provider: AIProvider):
+        # 1. 关键：调用父类的构造函数，把 ai_provider 传上去
+        # 这样 self.ai_provider 才会生效，run() 方法才不会报 'no attribute'
+        super().__init__(ai_provider)
+
+        # 2. 定义子类特有的属性
+        self.name = "一键成书"
 
     def get_steps(self) -> List[WorkflowStep]:
         return [

@@ -30,9 +30,8 @@ class TokenUsageLog(Base):
 
     # ==================== 用户 ====================
 
-    uid: Mapped[str] = mapped_column(
-        String(64),
-        nullable=False,
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
         index=True,
         comment="用户ID"
     )

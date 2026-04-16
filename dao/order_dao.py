@@ -1,30 +1,44 @@
-import datetime
 from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import and_
 
 from core.entity.do.order_do import Order
+from dao.base import BaseDAO
 
 
-class OrderDAO:
+class OrderDAO(BaseDAO[Order]):
     """
     订单DAO层
     """
+
     @staticmethod
     async def list_orders(
-        db: AsyncSession,
-        uid: str,
-        page: int = 1,
-        page_size: int = 10
+            db: AsyncSession,
+            user_id: int,
+            page: int = 1,
+            page_size: int = 10,
+            start_time: str | None = None,
+            end_time: str | None = None
     ):
         """
-        查询订单列表（分页）
+        查询订单列表（分页 + 时间筛选）
         """
+
+        # ==================== 条件 ====================
+        condition = [Order.user_id == user_id]
+
+        #  时间筛选
+        if start_time:
+            condition.append(Order.created_at >= start_time)
+
+        if end_time:
+            condition.append(Order.created_at <= end_time)
 
         # ==================== 查询数据 ====================
 
         stmt = (
             select(Order)
-            .where(Order.uid == uid)
+            .where(and_(*condition))
             .order_by(desc(Order.created_at))
             .offset((page - 1) * page_size)
             .limit(page_size)
@@ -35,7 +49,7 @@ class OrderDAO:
 
         # ==================== 查询总数 ====================
 
-        count_stmt = select(func.count()).where(Order.uid == uid)
+        count_stmt = select(func.count()).where(and_(*condition))
         total = (await db.execute(count_stmt)).scalar()
 
         return records, total
@@ -43,7 +57,7 @@ class OrderDAO:
     @staticmethod
     async def get_pending_order(
         db: AsyncSession,
-        uid: str,
+        user_id: int,
         order_type: str,
         target_code: str,
         pay_method:str
@@ -59,7 +73,7 @@ class OrderDAO:
         stmt = (
             select(Order)
             .where(
-                Order.uid == uid,
+                Order.user_id == user_id,
                 Order.order_type == order_type,
                 Order.target_code == target_code,
                 Order.pay_method == pay_method,

@@ -1,6 +1,7 @@
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.entity.do.token_usage_log_do import TokenUsageLog
 from core.entity.do.users_do import User
 
 
@@ -55,3 +56,30 @@ class UserDAO:
 
         await db.execute(stmt)
         await db.commit()
+
+    @staticmethod
+    async def create_log(
+            db,
+            user_id:int,
+            request_id:str,
+            monthly_amount,
+            permanent_amount:int,
+            total_amount:int,
+            balance_snapshot:dict,
+    ):
+        """
+        写账户流水
+        """
+
+        # ==================== 写 usage_logs ====================
+        usage_log = TokenUsageLog(
+            user_id=user_id,
+            request_id=request_id,
+            action_type="CONSUME",
+            monthly_amount=monthly_amount,
+            permanent_amount=permanent_amount,
+            total_amount=total_amount,
+            balance_snapshot=balance_snapshot
+        )
+
+        db.add(usage_log)

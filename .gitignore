@@ -12,8 +12,10 @@ venv/
 trader_report/
 lztrader_envs/
 ENV/
+novelaienvs
 env.bak/
 venv.bak/
+.env
 *.egg-info/
 dist/
 build/

@@ -3,15 +3,54 @@ from datetime import timedelta, datetime, timezone
 from typing import Union
 import bcrypt
 import jwt
+from sqlalchemy import update
+
 from common.config.config import settings
 from common.exception.lzsd_exception import LoginException, ServiceWarning
-from core.entity.do.users_do import OnlineStatus, AccountStatus
+from core.entity.do.users_do import OnlineStatus, AccountStatus, User
 from dao.user_dao import UserDAO
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 
 
 class UserService:
+
+    @staticmethod
+    async def update_nickname(
+            db: AsyncSession,
+            user_id: str,
+            nickname: str
+    ):
+        """
+        修改用户昵称
+        """
+
+        # ==================== 1. 基础校验 ====================
+
+        nickname = nickname.strip()
+
+        if not nickname:
+            raise ServiceWarning("昵称不能为空")
+
+        if len(nickname) > 20:
+            raise ServiceWarning("昵称不能超过20字符")
+
+        # ==================== 2. 更新 ====================
+
+        stmt = (
+            update(User)
+            .where(User.pkId == user_id)
+            .values(nickname=nickname)
+        )
+
+        result = await db.execute(stmt)
+
+        if result.rowcount == 0:
+            raise ServiceWarning("用户不存在")
+
+        logger.info(f"[用户] 修改昵称 uid={user_id}, nickname={nickname}")
+
+        return True
 
     @classmethod
     async def create_access_token(cls, data: dict, expires_delta: Union[timedelta, None] = None):

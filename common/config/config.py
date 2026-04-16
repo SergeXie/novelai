@@ -8,13 +8,12 @@ class Settings(BaseSettings):
     # Uvicorn
     APP_ENV: str = 'dev'
     UVICORN_HOST: str = '0.0.0.0'
-    UVICORN_PORT: int = 8011
+    UVICORN_PORT: int = Field(alias="PORT")
     UVICORN_RELOAD: bool = True
 
     # 中间件
     MIDDLEWARE_CORS: bool = True
     MIDDLEWARE_GZIP: bool = True
-    MIDDLEWARE_ACCESS: bool = False
 
     # FastAPI
     API_V1_STR: str = '/novelAI'
@@ -53,6 +52,8 @@ class Settings(BaseSettings):
 
     # 读取环境变量，设置默认值为空字符串
     ai_system_prompt: str = Field(default="", alias="AI_SYSTEM_PROMPT")
+    ai_temperature: float = Field(default=0.7, alias="AI_DEFAULT_TEMPERATURE")
+    ai_max_tokens: int = Field(default=4096, alias="AI_MAX_TOKENS")
 
     # Jwt配置
     jwt_secret_key: str = 'b01c66dc2c58dc6a0aabfe2144256be36226de378bf87f72c0c795dda67f4d55'
@@ -71,11 +72,21 @@ class Settings(BaseSettings):
     ALIPAY_GATEWAY: str = Field(alias="ALIPAY_GATEWAY")
 
     # ==================== 支付配置：微信 ====================
+    WECHATPAY_MCHID: str = Field(alias="WECHATPAY_MCHID", default="")
+    WECHATPAY_PRIVATE_KEY_PATH: str = Field(alias="WECHATPAY_PRIVATE_KEY_PATH", default="")
+    WECHATPAY_CERT_SERIAL_NO: str = Field(alias="WECHATPAY_CERT_SERIAL_NO", default="")
+    WECHATPAY_APPID: str = Field(alias="WECHATPAY_APPID", default="")
+    WECHATPAY_APIV3_KEY: str = Field(alias="WECHATPAY_APIV3_KEY", default="")
+    WECHATPAY_NOTIFY_URL: str = Field(alias="WECHATPAY_NOTIFY_URL", default="")
+    WECHATPAY_CERT_DIR: str = Field(alias="WECHATPAY_CERT_DIR", default="")
+    WECHATPAY_PARTNER_MODE: str = Field(alias="WECHATPAY_PARTNER_MODE", default="False")
+    WECHATPAY_TYPE: str = Field(alias="WECHATPAY_TYPE", default="")
+    PUBLIC_KEY: str = Field(alias="PUBLIC_KEY", default="")
+    PUBLIC_KEY_ID: str = Field(alias="PUBLIC_KEY_ID", default="")
 
-    WECHAT_APP_ID: str = Field(alias="WECHAT_APP_ID", default="")
-    WECHAT_MCH_ID: str = Field(alias="WECHAT_MCH_ID", default="")
-    WECHAT_API_KEY: str = Field(alias="WECHAT_API_KEY", default="")
-    WECHAT_NOTIFY_URL: str = Field(alias="WECHAT_NOTIFY_URL", default="")
+    CLOUD_ADDRESS: str = Field(alias="CLOUD_ADDRESS", default="")
+
+    UPLOAD_USERS_DIR: str = Field(alias="UPLOAD_USERS_DIR", default="")
 
     @field_validator("ai_system_prompt", mode="after")
     @classmethod
@@ -94,5 +105,14 @@ class Settings(BaseSettings):
         env_nested_delimiter='__',
         extra='ignore'
     )
+
+    # 封装判断逻辑
+    @property
+    def is_dev(self) -> bool:
+        return self.ENV_MODE.lower() in ("development", "dev", "local")
+
+    @property
+    def is_prod(self) -> bool:
+        return self.ENV_MODE.lower() in ("production", "prod")
 
 settings = Settings()

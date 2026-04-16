@@ -1,16 +1,12 @@
-import uuid
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Query
-from loguru import logger
-from starlette.status import HTTP_400_BAD_REQUEST
+from fastapi import APIRouter, Depends, BackgroundTasks, Query
 
-from ai.adapters.enums import AIProvider
-from ai.ai_nexus import get_ai_nexus
-from common.config.get_db import get_db, get_db_context
+from ai.adapters.enums import AIAction
+from common.config.get_db import get_db
+from common.exception.errors import NotFoundError
 from common.response.response_util import ResponseUtil
-from core.deps.auth import get_login_user, check_book_owner
-from core.entity.do.books import Book
-from core.entity.vo.ai_model_vo import AiModelResp, DeleteHistoryReq
+from core.deps.auth import get_current_user, check_book_owner, check_user_quota_or_raise
 from core.entity.schemas import GenerateRequest
+from core.entity.vo.ai_model_vo import AiModelResp, DeleteHistoryReq
 from service.ai_prompt_service import PromptService
 from service.ai_service import AIService
 from service.usage_service import UsageService
@@ -21,7 +17,7 @@ aiController = APIRouter()
 @aiController.get("/engineList", name="模型列表")
 async def list_models(
     db=Depends(get_db),
-    user=Depends(get_login_user)
+    _=Depends(get_current_user)
 ):
     """
     获取 AI 模型列表
@@ -39,20 +35,23 @@ async def generate(
         request: GenerateRequest,
         background_tasks: BackgroundTasks,
         db=Depends(get_db),
-        book: Book=Depends(check_book_owner),
-        user=Depends(get_login_user),
+        user=Depends(get_current_user),
 ):
     """
     根据设定生成小说片段（输入 / 输出全量留痕）
     """
+    await check_book_owner(bid=request.bid, db=db, user=user)
+
     user_prompt = request.user_prompt
     if not user_prompt:
         return ResponseUtil.error(msg="提示词不能为空")
 
+    await check_user_quota_or_raise(frozen_token_length=(len(user_prompt) + 3000), user_info=user)
+
     correlation = request.correlation  # 章节ID
     bid = request.bid
     level = request.level
-    temperature = request.temperature
+    temperature = request.temperature or 0.7
 
     prompt_service = PromptService(db=db)
     # 用于拼接书籍的基本信息（书名、简介、章节）
@@ -62,13 +61,13 @@ async def generate(
     combined_user_prompt = f"{final_prompt}\n{user_prompt}"
     
     request_id = await ai_service.prepare_and_record_request(
-        user_id=user.pkId,
+        user=user,
         bid=bid,
         origin_prompt=user_prompt,
         user_prompt=combined_user_prompt,
         level=level,
-        temperature=0.7,
-        action_type="generate",
+        temperature=temperature,
+        action_type=AIAction.Generate.value,
         correlation=correlation,
         background_tasks=background_tasks,
     )
@@ -78,9 +77,9 @@ async def generate(
 
 
 @aiController.get("/poll")
-async def poll(requestId: str, db=Depends(get_db), user=Depends(get_login_user)):
+async def poll(requestId: str, db=Depends(get_db), user=Depends(get_current_user)):
     usage_service = UsageService(db=db)
-    output = await usage_service.poll_content_by_request_id(request_id=requestId)
+    output = await usage_service.poll_content_by_request_id(request_id=requestId, user_id=user.pkId)
     if output is None:
         output = ""
     return ResponseUtil.success(data=output)
@@ -91,7 +90,7 @@ async def get_history_list(
         bid: str = Query(..., description="小说ID "),
         page: int = Query(1, ge=1, description="页码"),
         size: int = Query(10, ge=1, le=50, description="每页数量"),
-        user=Depends(get_login_user),
+        user=Depends(get_current_user),
         db=Depends(get_db)
 ):
     """
@@ -99,6 +98,8 @@ async def get_history_list(
     """
     # 简单的权限校验（可选：校验该 bid 是否属于该 user）
     # ...
+
+    await check_book_owner(bid=bid, db=db, user=user)
 
     service = UsageService(db=db)
     result = await service.get_book_chat_history(bid, page, size)
@@ -108,9 +109,9 @@ async def get_history_list(
 
 @aiController.post("/history/delete", name="小说生成对话记录删除")
 async def delete_history(
-    req: DeleteHistoryReq,
-    user=Depends(get_login_user),
-    db=Depends(get_db),
+        req: DeleteHistoryReq,
+        db=Depends(get_db),
+        user=Depends(get_current_user),
 ):
 
     service = AIService(db=db)
@@ -119,5 +120,24 @@ async def delete_history(
         uid=user.pkId,
         request_ids=req.requestIds
     )
-
     return ResponseUtil.success(msg="删除成功")
+
+@aiController.get("/ai/log/list")
+async def get_log_list(
+        page: int = Query(1, ge=1, description="页码"),
+        size: int = Query(10, ge=1, le=50, description="每页数量"),
+        user=Depends(get_current_user),
+        db=Depends(get_db)
+):
+    service = UsageService(db=db)
+    result = await service.get_logs_page(user_id=user.pkId, page=page, size=size)
+    return ResponseUtil.success(data=result)
+
+@aiController.get("/ai/log/detail")
+async def get_log_detail(requestId: str, db=Depends(get_db), _=Depends(get_current_user)):
+    service = UsageService(db=db)
+    rsp = await service.get_log_detail(request_id=requestId)
+    if rsp is None:
+        return NotFoundError
+
+    return ResponseUtil.success(data=rsp)

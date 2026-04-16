@@ -2,13 +2,14 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import HTTPException
 from loguru import logger
 from pydantic_validation_decorator import FieldValidationError
+
 from common.exception.lzsd_exception import (
     AuthException,
     LoginException,
     ModelValidatorException,
     PermissionException,
     ServiceException,
-    ServiceWarning,
+    ServiceWarning, ServiceWarningSpecial, BusinessException,
 )
 from common.response.response_util import jsonable_encoder, JSONResponse, ResponseUtil
 
@@ -57,6 +58,12 @@ def handle_exception(app: FastAPI):
         logger.warning(exc.message)
         return ResponseUtil.failure(data=exc.data, msg=exc.message)
 
+
+    @app.exception_handler(ServiceWarningSpecial)
+    async def service_warning_handler(request: Request, exc: ServiceWarning):
+        logger.warning(exc.message)
+        return ResponseUtil.special_failure(data=exc.data, msg=exc.message)
+
     # 处理其他http请求异常
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
@@ -69,3 +76,14 @@ def handle_exception(app: FastAPI):
     async def exception_handler(request: Request, exc: Exception):
         logger.exception(exc)
         return ResponseUtil.error(msg=str(exc))
+
+    @app.exception_handler(BusinessException)
+    async def business_exception_handler(request: Request, exc: BusinessException):
+        return JSONResponse(
+            status_code=200,
+            content={
+                "code": exc.code,
+                "msg": exc.message,
+                "data": None
+            }
+        )
