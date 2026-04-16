@@ -124,14 +124,16 @@ class PromptSquareService:
         获取用户自己的提示词详情
         """
 
-        prompt = await PromptSquareDAO.get_prompt_detail(
+        row = await PromptSquareDAO.get_prompt_detail(
             db,
             template_key,
             user_id
         )
 
-        if not prompt:
+        if not row:
             return None
+
+        prompt, favor_count, is_favorited = row
 
         item = PromptSquareService._to_promp_detail_item(prompt)
 
@@ -139,11 +141,15 @@ class PromptSquareService:
 
         # ==================== 内容权限控制 ====================
         if prompt.author_id != user_id:
-            data["content"] = ""  # 或 None
+            data["content"] = ""
 
         return PromptDetailResp(
             **data,
             can_edit=(prompt.author_id == user_id),
+
+            # 新增
+            favor_count=favor_count or 0,
+            is_favorited=(is_favorited > 0)
         )
 
     @staticmethod

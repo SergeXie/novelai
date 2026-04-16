@@ -164,23 +164,44 @@ class PromptSquareDAO:
             db: AsyncSession,
             template_key: str,
             user_id: int
-    ) -> PromptSquare | None:
+    ):
         """
-        获取提示词详情（支持公开 / 官方 / 自己）
+        获取提示词详情（带收藏信息）
         """
 
-        stmt = select(PromptSquare).where(
-            PromptSquare.template_key == template_key,
-            or_(
-                PromptSquare.author_id == user_id,  # 自己
-                PromptSquare.author_id == 0,  # 官方
-                PromptSquare.status == 1  # 已上架
+        FavorAlias = aliased(UserTemplateFavor)
+
+        stmt = (
+            select(
+                PromptSquare,
+                func.count(UserTemplateFavor.id).label("favor_count"),
+                func.count(FavorAlias.id).label("is_favorited")
             )
+            # 收藏总数
+            .outerjoin(
+                UserTemplateFavor,
+                UserTemplateFavor.template_key == PromptSquare.template_key
+            )
+            # 当前用户收藏
+            .outerjoin(
+                FavorAlias,
+                (FavorAlias.template_key == PromptSquare.template_key) & (FavorAlias.user_id == user_id)
+            )
+            .where(
+                PromptSquare.template_key == template_key,
+                or_(
+                    PromptSquare.author_id == user_id,
+                    PromptSquare.author_id == 0,
+                    PromptSquare.status == 1
+                )
+            )
+            .group_by(PromptSquare.id)
         )
 
         result = await db.execute(stmt)
-        return result.scalar_one_or_none()
+        row = result.first()
 
+        return row  # 👈 注意这里不再是 prompt，而是 tuple
     @staticmethod
     async def update_user_prompt(
             db: AsyncSession,
