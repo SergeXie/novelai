@@ -19,7 +19,7 @@ from service.user_service import UserService
 userController = APIRouter()
 
 
-@userController.get("/files/{filename}")
+@userController.get("/files/{filename}", name="返回媒体文件")
 async def get_file(filename: str):
     file_path = os.path.join(settings.UPLOAD_USERS_DIR, filename)
     return FileResponse(file_path)
