@@ -12,6 +12,7 @@ from core.entity.do.users_do import User
 from dao.ai_log_dao import AILogDAO
 from dao.ai_model_dao import AiModelDAO
 from service.usage_service import UsageService
+from service.content_audit_service import get_generated_content_audit_service
 
 
 class AIService:
@@ -148,9 +149,21 @@ async def async_generate_task(
             error_msg = str(e)
             break
 
-    async with get_db_context() as db:
-        await UsageService(db).update_output_content_by_request_id(
+    if ai_rsp:
+        async with get_db_context() as db:
+            
+            audit_service = get_generated_content_audit_service()
+            try:
+                audit_result = await audit_service.audit_generated_result(ai_rsp, use_semantic=True)
+                if not audit_result.passed:
+                    logger.warning(f"RequestId: {request_id} 生成结果未通过审核：{audit_result.reason}")
+                    ai_rsp.content = f"{audit_result.reason}"
+            except Exception as exc:
+                logger.warning(f"RequestId: {request_id} 生成结果审核失败，按原结果继续入库: {exc}")
+
+            await UsageService(db).update_output_content_by_request_id(
             request_id=request_id,
             ai_rsp=ai_rsp,
             status=AIGenerateStatus.SUCCESS if ai_rsp else AIGenerateStatus.FAILED,
             error_msg=error_msg)
+

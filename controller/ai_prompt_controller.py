@@ -87,6 +87,9 @@ async def render(
 ):
     # 检查用户额度
     await check_user_quota_or_raise(frozen_token_length=3000, user_info=user)
+    
+    print(f"输入测试，inputs={inputs}")
+    await check_ai_input(inputs)
 
     service = PromptService(db)
 
@@ -131,7 +134,7 @@ async def create_book_flow(
         user:Depends = Depends(get_current_user)
 ):
 
-    check_ai_input(idea)
+    await check_ai_input(idea)
 
     # 1. 校验配额-
     await check_user_quota_or_raise(frozen_token_length=3000, user_info=user)
