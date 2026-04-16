@@ -137,6 +137,9 @@ class PromptDetailResp(PromptItemDetail):
     """
 
     can_edit: bool
+    favor_count: int = 0
+    is_favorited: bool = False
+
 
 
 class PromptSquareDetailReq(BaseModel):
