@@ -204,7 +204,7 @@ class ContentAuditService:
                 passed=False,
                 source="dfa",
                 risk_level="high",
-                reason=f"命中核心违禁词：{'、'.join(matches[:5])}",
+                reason=f"内容包含敏感字：{'、'.join(matches[:5])}",
                 matched_keywords=matches,
             )
 
