@@ -1,13 +1,16 @@
+from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import select, and_, update, delete
+from loguru import logger
+from sqlalchemy import select, and_, update, delete, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.utils.generator import LZSDGenerator
 from common.utils.text_util import strip_html_tags
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
-
+from core.enums.node_type import BookNodeCategory
+from core.processor.book_processor import Chapter
 
 class BookDAO:
     def __init__(self, db: AsyncSession):
@@ -94,7 +97,7 @@ class BookDAO:
         """
         book = Book(
             uid=uid,
-            bid=LZSDGenerator.generate_request_id(),  # 生成业务层书籍ID
+            bid=LZSDGenerator.generate_book_id(),  # 生成业务层书籍ID
             title=title,
             bookType=bookType,
             description=description,
@@ -233,7 +236,7 @@ class BookDAO:
             is_leaf: int,
             name: str,
             depth: int,
-            type: int,
+            category: BookNodeCategory,
             data: dict | None = None,
             content: str | None = None,
     ) -> BookNode:
@@ -249,7 +252,7 @@ class BookDAO:
             depth=depth,
             data=data,
             content=content,
-            type=type
+            type=category.code
         )
         self.db.add(node)
         await self.db.flush()
@@ -264,14 +267,14 @@ class BookDAO:
             name: str,
             data: dict | None = None,
             content: str | None = None,
-            type:int = 0
+            category:BookNodeCategory = BookNodeCategory.NORMAL
     ) -> BookNode:
         """
         新增章节（自动补正文根节点）
         """
         _depth = 1
         _parent_id = 0
-        _type = type
+        _type = category.code
         if parent_node:
             _parent_id = parent_node.id
             _depth = parent_node.depth + 1
@@ -292,12 +295,76 @@ class BookDAO:
         await self.db.flush()
         return node
 
+    async def batch_add_child_nodes(
+            self,
+            user_id: int,
+            bid: str,
+            parent_node: BookNode,
+            chapter_data: list[Chapter],
+            is_leaf:int,
+    ):
+        """
+        批量添加子节点（章节）
+        chapter_data 格式: [{"name": "标题", "content": "正文", "weight": 1}, ...]
+        """
+        if not chapter_data:
+            return
+
+        now = datetime.now()
+
+        # 1. 构造批量数据
+        # 根据你的模型，补全必须字段（depth, is_leaf, book_len 等）
+        insert_values = [
+            {
+                "uid": user_id,
+                "bid": bid,
+                "parent_id": parent_node.id,
+                "name": item.title,
+                "content": item.content,
+                "type": parent_node.type,  # 默认目录类型
+                "is_leaf": is_leaf,
+                "depth": parent_node.depth + 1,  # 假设内容根节点下是第 2 层
+                "book_len": item.word_count,
+                "data": {},
+                "createTime": now,
+                "updateTime": now
+            }
+            for item in chapter_data
+        ]
+
+        try:
+            # 2. 执行批量插入
+            # 使用 insert(Model) 的 values 列表模式，SQLAlchemy 会自动优化为批量 SQL
+            stmt = insert(BookNode).values(insert_values)
+            await self.db.execute(stmt)
+
+            # 3. 注意：如果是异步环境，确保在此处或外部 commit
+            # await self.db.commit()
+
+        except Exception as e:
+            logger.error(f"批量插入章节失败: {e}")
+            raise e
+
     async def get_nodes_by_parent_ids(
         self,
         parent_ids: list[int],
     ) -> list[BookNode]:
         result = await self.db.execute(
             select(BookNode).where(BookNode.parent_id.in_(parent_ids))
+        )
+        nodes = result.scalars().all()
+        return list(nodes)
+
+    async def get_nodes_by_parent_id(
+            self,
+            bid: str,
+            parent_id: int,
+    ) -> list[BookNode]:
+        result = await self.db.execute(
+            select(BookNode).where(
+                BookNode.parent_id == parent_id,
+                BookNode.bid == bid
+            )
         )
         nodes = result.scalars().all()
         return list(nodes)
