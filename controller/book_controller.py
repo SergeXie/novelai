@@ -11,8 +11,9 @@ from sqlalchemy.sql.functions import user
 
 from common.config.get_db import get_db
 from common.exception.errors import RequestError, NotFoundError, ServerError
+from common.modules.html_text_extractor import write_simple_txt
 from common.response.response_util import ResponseUtil
-from core.deps.auth import get_current_user
+from core.deps.auth import get_current_user, check_book_owner
 from core.entity.do.users_do import User
 from core.entity.vo.book_node_schema import BookResp, CreateBookReq, BookNodeDetailResp, UpdateBookNodeReq, \
     EditBookNodeReq, EditBookNodeResp, AddChapterResp, AddBookNodeReq, DeleteBookNodeReq, OfflineBookReq, EditBookReq, \
@@ -417,3 +418,14 @@ async def confirm(
     except Exception as e:
         logger.error(f"确认导入失败: {str(e)}")
         raise ServerError(msg="保存书籍失败，请联系管理员")
+
+@bookController.post("/book/export")
+async def export(
+        bid: str = Body(..., embed=True),
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user)
+):
+    book_service = BookService(db)
+    text = await book_service.export(bid=bid, user_id=current_user.pkId)
+    # write_simple_txt(uuid.uuid4().hex + ".txt", text)
+    return ResponseUtil.success(data=text)

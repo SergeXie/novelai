@@ -1,11 +1,13 @@
+import io
 from typing import List, Optional
 from unittest.mock import DEFAULT
 
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.exception.errors import ServerError
+from common.exception.errors import ServerError, NotFoundError
 from common.exception.lzsd_exception import ServiceWarning
+from common.modules.html_text_extractor import quick_html_to_text
 from common.response.response_util import ResponseUtil
 from common.utils.text_util import strip_html_tags
 from core.entity.do.book_node import BookNode
@@ -537,4 +539,39 @@ class BookService:
             raise ServerError(msg="章节同步入库失败")
 
         return book
+
+    async def export(self, user_id:int, bid:str) ->str:
+        book = await self.book_dao.get_book_by_bid(bid, user_id)
+        if book is None:
+            raise NotFoundError(msg="小说不存在")
+
+        book_name = book.title
+        nodes = await self.book_dao.get_book_nodes(user_id=user_id, bid=bid)
+
+        # 2. 使用 StringIO 作为高效的字符缓冲区（比 += 拼接快得多）
+        output = io.StringIO()
+        output.write(f"{book_name}\n")
+
+        # 3. 寻找内容根节点（使用 next 提高效率，避免全量循环）
+        content_root = next(
+            (node for node in nodes if node.type == BookNodeCategory.CONTENT.code),
+            None
+        )
+
+        if not content_root:
+            return ""
+
+        # 4. 遍历并格式化
+        for child in nodes:
+            if child.parent_id == content_root.id:
+                # 写入标题
+                output.write(f"{child.name}\n")
+                # 写入分割线（可选，增加可读性）
+                output.write("\n")
+                # 写入正文，处理 None 的情况
+                output.write(child.content or "")
+                # 章节间留空行
+                output.write("\n\n")
+
+        return quick_html_to_text(output.getvalue())
 

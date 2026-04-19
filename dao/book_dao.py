@@ -78,7 +78,7 @@ class BookDAO:
         nodes = result.scalars().all()
         return list(nodes)
 
-    async def get_book_node_list(self, user_id:int, bid:str, correlation: list)->List[BookNode]:
+    async def get_book_node_list(self, user_id:int, bid:str, correlation: list[int])->List[BookNode]:
         result = await self.db.execute(
             select(BookNode).where(and_(BookNode.id.in_(correlation), BookNode.uid==user_id, BookNode.bid==bid)).order_by(BookNode.type)
         )
