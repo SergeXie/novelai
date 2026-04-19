@@ -354,7 +354,7 @@ class BookService:
             depth=parent_depth + 1,
             data=data,
             content=content,
-            type=type if type else parent.type
+            category=BookNodeCategory.CONTENT
         )
 
         # 3️⃣ 父节点修正（核心规则）
@@ -492,7 +492,6 @@ class BookService:
 
         if book:
             nodes = await self.book_dao.get_book_nodes(bid=book.bid, user_id=user_id, max_depth=1)
-            node:BookNode = None
             for node in nodes:
                 if node.type == BookNodeCategory.ROLES.code:
                     for role in roles:

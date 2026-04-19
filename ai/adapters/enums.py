@@ -1,40 +1,62 @@
 from enum import Enum, IntEnum
+from typing import Dict
 
+# 等级与供应商值的映射
+_LEVEL_MAP: Dict[int, str] = {
+    0: "ollama",
+    1: "deepseek",
+    2: "doubao",
+    3: "doubaoplus",
+    4: "claude",
+    5: "gemini",
+    6: "gpt",
+    7: "zhipu",
+}
 
 class AIProvider(str, Enum):
     FREE = "ollama"
     DEEPSEEK = "deepseek"
     DOUBAO = "doubao"
-    DOUBAOPLUS = "openai"
+    DOUBAOPLUS = "doubaoplus"
     CLAUDE = "claude"
     GEMINI = "gemini"
     GPT = "gpt"
     ZHIPU = "zhipu"
 
     @classmethod
-    def from_level(cls, level: int | None) -> "AIProvider":
+    def to_provider(cls, value: str | int | None) -> "AIProvider":
         """
-        根据用户等级或推理等级返回对应的供应商
-        1: 基础模型 (豆包)
-        2: 进阶模型 (DeepSeek)
-        3: 旗舰模型 (OpenAI)
+        [核心函数] 将多种输入转化为 AIProvider 实例
+        支持输入:
+        1. 字符串 (如 "deepseek") -> 直接匹配
+        2. 整数 (如 1) -> 按等级匹配
+        3. None -> 返回默认供应商
         """
-        # 定义等级与枚举的映射关系
-        # 使用字典存储不同等级对应的AI服务提供商
-        level_map = {
-            0: cls.FREE,        # 0级对应免费版
-            1: cls.DEEPSEEK,    # 1级对应DeepSeek模型
-            2: cls.DOUBAO,      # 2级对应豆包模型
-            3: cls.DOUBAOPLUS,  # 3级对应豆包Plus模型
-            4: cls.CLAUDE,      # 4级对应Claude模型
-            5: cls.GEMINI,      # 5级Gemini模型
-            6: cls.GPT,         # 6级对应GPT模型
-            7: cls.ZHIPU,       # 7级对应智谱模型
-        }
+        if value is None:
+            return cls.DOUBAO
 
-        target_level = level if level is not None else 2
-        # 使用 dict.get() 实现“默认返回豆包”的逻辑
-        return level_map.get(target_level, cls.DOUBAO)
+        # 如果输入是整数，走 level 匹配逻辑
+        if isinstance(value, int):
+            provider_str = _LEVEL_MAP.get(value, cls.DOUBAO.value)
+            return cls(provider_str)
+
+        # 如果输入是字符串，尝试直接实例化
+        try:
+            return cls(value)
+        except ValueError:
+            # 如果字符串不匹配任何枚举值，返回默认值或抛出异常
+            return cls.DOUBAO
+
+    @classmethod
+    def from_level(cls, level: int | None) -> "AIProvider":
+        """保留原有函数，内部调用 to_provider 以保持逻辑统一"""
+        return cls.to_provider(level)
+
+    def to_level(self) -> int:
+        """根据当前供应商获取对应的等级"""
+        # 反转映射表
+        inv_map = {v: k for k, v in _LEVEL_MAP.items()}
+        return inv_map.get(self.value, 2)
 
 class AIAction(str, Enum):
     Unknown = "unknown"

@@ -58,4 +58,3 @@ class ServerError(BaseExceptionMixin):
     ):
         super().__init__(msg=msg, data=data, background=background)
 
-

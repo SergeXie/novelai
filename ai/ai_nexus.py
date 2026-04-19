@@ -20,10 +20,6 @@ async def check_ai_input(prompt:str):
     if current_request_len > settings.SINGLE_REQUEST_TOKEN_LIMIT:
         raise ServiceWarning(message="提示词过长")
 
-    from service.content_audit_service import get_content_audit_service
-
-    await get_content_audit_service().assert_safe_instruction(prompt)
-
 def ai_clean_json(raw_text: str):
     """
     专门处理 AI 返回的带废话、带元组包装或 Markdown 代码块的 JSON

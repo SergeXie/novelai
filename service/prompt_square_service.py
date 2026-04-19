@@ -2,11 +2,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.adapters.enums import AIAction
 from common.exception.errors import NotFoundError, ServerError
+from common.exception.lzsd_exception import SensitiveWordException
 from common.modules.book_exporter import BookExporter
 from core.entity.do.users_do import User
 from core.entity.vo.prompt_square_vo import (
     PromptItem,
-    PromptSquareCreateReq,
     PromptSquareUpdateReq, PromptItemDetail, PromptDetailResp, PromptListItemResp,
 )
 from core.enums.prompt_sys_var import PromptEngineType
@@ -14,6 +14,7 @@ from dao.prompt_square_dao import PromptSquareDAO
 from service.ai_prompt_service import PromptService
 from service.ai_service import AIService
 from service.book_service import BookService
+from service.content_audit_service import get_content_audit_service
 
 
 class PromptSquareService:
@@ -82,9 +83,24 @@ class PromptSquareService:
     async def create_user_prompt(
             db: AsyncSession,
             user_id: int,
-            req: PromptSquareCreateReq
+            title: str,
+            category: str,
+            description: str,
+            content: str,
     ) -> PromptItem:
-        prompt = await PromptSquareDAO.create_user_prompt(db, user_id, req)
+        # todo 校验category
+
+        # 将需要审核的字段聚合
+        audit_fields = [title, description, content]
+
+        audit_service = get_content_audit_service()
+        for text in audit_fields:
+            result = await audit_service.audit_user_instruction(text=text)
+            if not result.passed:
+                # 可以在 Exception 中传入具体是哪个字段违规
+                raise SensitiveWordException(message=result.reason)
+
+        prompt = await PromptSquareDAO.create_user_prompt(db=db, user_id=user_id, title=title, category=category, description=description, content=content)
         return PromptSquareService._to_prompt_item(prompt)
 
     @staticmethod
@@ -195,17 +211,12 @@ class PromptSquareService:
         if not tpl or tpl.status != 1:
             raise NotFoundError(msg="提示词模版不存在")
 
-        final_inputs = inputs if inputs else {}
-
         book_service = BookService(db)
         book = await book_service.get_book_by_bid(bid=bid, user_id=user.pkId)
         if not book:
             raise NotFoundError(msg=f"书籍[{bid}]不存在")
 
         final_inputs = inputs or {}
-
-        book_prompt = ""
-
         key = "sys_book_info"
         if key in final_inputs:
             nodes = await book_service.get_basic_nodes(bid=bid, user_id=user.pkId) or []

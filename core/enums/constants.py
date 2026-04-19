@@ -1,6 +1,6 @@
-import enum
+from enum import Enum
 
-class UserLevel(enum.Enum):
+class UserLevel(Enum):
     FREE = "free"
     BASIC = "basic"
     PRO_MONTHLY = "pro_monthly"
@@ -17,20 +17,20 @@ class UserLevel(enum.Enum):
             cls.ENTERPRISE: "企业版"
         }
 
-class BizType(enum.Enum):
+class BizType(Enum):
     ORDER = "ORDER"
     AI_CONSUME = "AI_CONSUME"
     REFUND = "REFUND"
     SYSTEM = "SYSTEM"
 
-class ChargeType(enum.Enum):
+class ChargeType(Enum):
     RECHARGE = "RECHARGE"
     CONSUME = "CONSUME"
     REFUND = "REFUND"
     EXPIRE = "EXPIRE"
     ADJUS = "ADJUS"
 
-class AssetType(enum.Enum):
+class AssetType(Enum):
     MONTHLY = "MONTHLY"
     PERMANENT = "PERMANENT"
 
@@ -41,6 +41,14 @@ class AssetType(enum.Enum):
             cls.PERMANENT: "Token包"
         }
 
+class UserCustomPromptStatus(Enum):
+    UNAVAILABLE = (-1, "不可用")
+    PENDING = (0, "待审核")
+    AVAILABLE = (1, "可用")
+
+    def __init__(self, value, label):
+        self._value_ = value
+        self.label = label
 
 if __name__ == '__main__':
     print(ChargeType.RECHARGE.value)

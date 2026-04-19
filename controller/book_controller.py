@@ -428,4 +428,5 @@ async def export(
     book_service = BookService(db)
     text = await book_service.export(bid=bid, user_id=current_user.pkId)
     # write_simple_txt(uuid.uuid4().hex + ".txt", text)
+    # todo 导出文本上传到外网-->发地址
     return ResponseUtil.success(data=text)
