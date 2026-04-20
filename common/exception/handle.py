@@ -84,7 +84,7 @@ def handle_exception(app: FastAPI):
     # 处理其他异常
     @app.exception_handler(Exception)
     async def exception_handler(request: Request, exc: Exception):
-        logger.inf(f"DEBUG: 捕获到未处理异常类型: {type(exc)}, 内容: {str(exc)}")
+        logger.info(f"DEBUG: 捕获到未处理异常类型: {type(exc)}, 内容: {str(exc)}")
         logger.exception(exc)
         return ResponseUtil.error(msg=str(exc))
 

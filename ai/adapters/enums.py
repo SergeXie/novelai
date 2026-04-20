@@ -11,6 +11,7 @@ _LEVEL_MAP: Dict[int, str] = {
     5: "gemini",
     6: "gpt",
     7: "zhipu",
+    8: "claudethinking",
 }
 
 class AIProvider(str, Enum):
@@ -22,6 +23,8 @@ class AIProvider(str, Enum):
     GEMINI = "gemini"
     GPT = "gpt"
     ZHIPU = "zhipu"
+    CLAUDETHINKING = "claudethinking"
+
 
     @classmethod
     def to_provider(cls, value: str | int | None) -> "AIProvider":
@@ -63,7 +66,8 @@ class AIAction(str, Enum):
     Generate = "generate"
     Render = "render"
     WorkFlow = "workflow"
-    Execute = "execute"
+    Execute = "execute",
+    Chat = "chat"
 
     @classmethod
     def _missing_(cls, value):

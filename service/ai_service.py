@@ -58,7 +58,7 @@ class AIService:
         第一阶段：校验、记录、生成请求ID (同步执行，快速返回)
         """
         user_id = user.pkId
-        request_id = LZSDGenerator.generate_request_id(sign=user.account)
+        request_id = LZSDGenerator.generate_request_id()
         if correlation is None:
             correlation = []
 

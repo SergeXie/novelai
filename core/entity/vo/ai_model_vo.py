@@ -1,7 +1,8 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, field_serializer
+from pydantic import BaseModel, ConfigDict, field_serializer, Field
 
 from core.entity.do.generate_log import AiNovelGenerateLog
 from dao.ai_model_dao import AiModelDAO
@@ -30,14 +31,16 @@ class AIGenerateLogResp(BaseModel):
     prompt: str
     status: int
     action: str
-    totalTokens:int
-    model:str
-    actualAmount:int
+    totalTokens: int
+    model: str
+    actualAmount: int
+    # 将 outputContent 设置为 Optional，兼容 defer() 没查出来的情况
+    outputContent: Optional[str] = Field(None, description="模型输出内容")
     createdAt: datetime
 
     @field_serializer('createdAt')
     def serialize_dt(self, dt: datetime):
-        return dt.strftime('%Y-%m-%d %H:%M:%S')
+        return dt.strftime('%Y-%m-%d %H:%M:%S') if dt else None
 
     @classmethod
     async def _get_base_data(cls, log: "AiNovelGenerateLog", model_dao: "AiModelDAO") -> dict:
@@ -45,6 +48,14 @@ class AIGenerateLogResp(BaseModel):
         prompt_content = log.originPrompt or ""
         prompt_preview = (prompt_content[:200] + "...") if len(prompt_content) > 200 else prompt_content
         model_name = await model_dao.get_model_name_by_identifier(log.model)
+
+        # --- 修复点：安全获取 outputContent ---
+        # 不要直接 log.outputContent，那样会触发 MissingGreenlet
+        # 只有当 outputContent 确实在内存里（没被 defer）时才读取
+        output_data = None
+        if 'outputContent' in log.__dict__:
+            output_data = log.outputContent
+        # ------------------------------------
 
         return {
             "requestId": log.requestId,
@@ -54,8 +65,14 @@ class AIGenerateLogResp(BaseModel):
             "action": log.actionType,
             "totalTokens": log.totalTokens,
             "actualAmount": log.actualAmount,
-            "createdAt": log.createdAt
+            "createdAt": log.createdAt,
+            "outputContent": output_data,
         }
+
+    @classmethod
+    async def from_orm_model(cls, log: "AiNovelGenerateLog", model_dao: "AiModelDAO") -> "AIGenerateLogResp":
+        data = await cls._get_base_data(log, model_dao)
+        return cls(**data)
 
     @classmethod
     async def from_orm_model(cls, log: "AiNovelGenerateLog", model_dao: "AiModelDAO") -> "AIGenerateLogResp":

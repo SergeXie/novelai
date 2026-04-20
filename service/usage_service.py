@@ -169,9 +169,9 @@ class UsageService:
 
         return success
 
-    async def get_book_chat_history(self, bid: str, page: int, size: int) -> PageResp:
+    async def get_book_chat_history(self, bid: str, page: int, size: int, with_content:bool = False) -> PageResp:
         """分页获取某本书下的 AI 对话历史。"""
-        logs, total = await self.ai_log_dao.get_logs_by_paged(bid=bid, page=page, size=size)
+        logs, total = await self.ai_log_dao.get_logs_by_paged(bid=bid, page=page, size=size, with_content=with_content)
 
         list_data = [
             await AIGenerateLogResp.from_orm_model(log, self.model_dao)
@@ -182,6 +182,21 @@ class UsageService:
             list=list_data,
             total=total,
             page=page,
+            pageSize=size
+        )
+
+    async def get_chat_history(self, bid: str, offset_id: int, size: int, with_content:bool = False) -> PageResp:
+        """分页获取某本书下的 AI 对话历史。"""
+        logs, total = await self.ai_log_dao.get_logs_by_offset(bid=bid, offset_id=offset_id, size=size)
+
+        list_data = [
+            await AIGenerateLogResp.from_orm_model(log, self.model_dao)
+            for log in logs
+        ]
+
+        return PageResp(
+            list=list_data,
+            total=total,
             pageSize=size
         )
 
