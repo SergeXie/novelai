@@ -130,10 +130,10 @@ class UsageService:
 
         if log_record and log_record.userId == user_id:
             if log_record.status == AIGenerateStatus.SUCCESS:
-                if log_record.actionType == AIAction.Generate or log_record.actionType == AIAction.Execute or log_record.actionType == AIAction.Chat:
-                    return log_record.outputContent
-                else:
+                if log_record.actionType == AIAction.WorkFlow:
                     return "非常规生成内容"
+                else:
+                    return log_record.outputContent
             elif log_record.status == AIGenerateStatus.FAILED:
                 return "生成失败，请切换模型或者稍后重试"
             else:
