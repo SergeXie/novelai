@@ -130,7 +130,7 @@ class UsageService:
 
         if log_record and log_record.userId == user_id:
             if log_record.status == AIGenerateStatus.SUCCESS:
-                if log_record.actionType == AIAction.Generate or log_record.actionType == AIAction.Execute:
+                if log_record.actionType == AIAction.Generate or log_record.actionType == AIAction.Execute or log_record.actionType == AIAction.Chat:
                     return log_record.outputContent
                 else:
                     return "非常规生成内容"
