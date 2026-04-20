@@ -27,6 +27,7 @@ class DeleteHistoryReq(BaseModel):
 
 # --- 1. 定义具体的条目模型 ---
 class AIGenerateLogResp(BaseModel):
+    id:int
     requestId: str
     prompt: str
     status: int
@@ -58,6 +59,7 @@ class AIGenerateLogResp(BaseModel):
         # ------------------------------------
 
         return {
+            "id":log.id,
             "requestId": log.requestId,
             "prompt": prompt_preview,
             "model": model_name,
