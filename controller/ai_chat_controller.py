@@ -32,7 +32,7 @@ async def delete_group(
 async def completions(
         background_tasks: BackgroundTasks,
         gid: Optional[str] = Body(None, embed=True),
-        level: float = Body(0.7, embed=True),  # 建议 level 类型用 float
+        level: int = Body(..., embed=True),  # 建议 level 类型用 float
         content: str = Body(..., embed=True),  # content 通常保持必填
         db=Depends(get_db),
         current_user: User = Depends(get_current_user),
@@ -44,8 +44,6 @@ async def completions(
     await check_user_quota_or_raise(frozen_token_length=(len(user_prompt) + 3000), user_info=current_user)
 
     group_id = await AIChatService.completions(db=db, gid=gid, current_user=current_user, content=content)
-
-    level = level
     temperature = 0.7
 
     ai_srv = AIService(db=db)
