@@ -1,3 +1,5 @@
+from typing import Optional
+
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy import String, Enum, DECIMAL, JSON, TIMESTAMP
 from sqlalchemy.sql import func
@@ -76,11 +78,10 @@ class MembershipLevel(Base):
         comment="每月赠送Token"
     )
 
-    # 解锁模型（JSON数组）
-    unlocked_models: Mapped[dict | None] = mapped_column(
+    unlocked_models: Mapped[Optional[list[int]]] = mapped_column(
         JSON,
         nullable=True,
-        comment="解锁模型列表"
+        comment="解锁模型列表: [1,2]"
     )
 
     # 扩展权益（JSON）

@@ -13,12 +13,6 @@ class MembershipItem(BaseModel):
     duration_days: int
     monthly_token_allowance: int
 
-    # 解锁模型（如 GPT-4）
-    unlocked_models: Optional[List[str]]
-
-    # 扩展权益（并发数/优先级等）
-    extra_privileges: Optional[Dict[str, Any]]
-
 
 class TokenPackageItem(BaseModel):
     """
