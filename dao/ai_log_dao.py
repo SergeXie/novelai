@@ -211,63 +211,7 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             logger.error(f"分页查询 AI 日志失败 (user_id={user_id}, bid={bid}): {e}")
             return [], 0
 
-
-    async def get_logs_by_paged(
-            self,
-            user_id: Optional[int] = None,  # 修改为 int 类型提示
-            bid: Optional[str] = None,
-            offset: int = 0,
-            size: int = 10,
-            with_content: bool = False
-    ) -> Tuple[list[AiNovelGenerateLog], int]:
-        """
-            获取排除大字段后的模型对象列表，并返回总数
-            """
-        try:
-            # 1. 构造过滤条件
-            filters = [AiNovelGenerateLog.isDelete == 0]
-            if user_id is not None:
-                filters.append(AiNovelGenerateLog.userId == user_id)
-            if bid:
-                filters.append(AiNovelGenerateLog.bid == bid)
-
-            # 2. 查询对象列表（使用 defer 排除所有 LongText 字段）
-            # 这样加载到内存中的对象非常轻量
-            stmt = (
-                select(AiNovelGenerateLog)
-                .where(and_(*filters))
-                .order_by(desc(AiNovelGenerateLog.createdAt))
-                .limit(size)
-                .offset(offset)
-            )
-
-            # --- 核心逻辑：动态处理 content 字段 ---
-            if not with_content:
-                # 如果不需要内容，则延迟加载 content 字段
-                # 注意：你可以根据需要 defer 多个大字段，如 .options(defer(Model.col1), defer(Model.col2))
-                stmt = stmt.options(defer(AiNovelGenerateLog.outputContent))
-
-            # 3. 查询总数
-            count_stmt = (
-                select(func.count(AiNovelGenerateLog.id))
-                .where(and_(*filters))
-            )
-
-            # 4. 执行
-            # 执行对象查询
-            result = await self.db.execute(stmt)
-            obj_list = result.scalars().all()  # 这里得到的是 List[AiNovelGenerateLog]
-
-            # 执行计数查询
-            total_count = await self.db.scalar(count_stmt)
-
-            return obj_list, total_count or 0
-
-        except Exception as e:
-            logger.error(f"分页查询 AI 日志失败 (user_id={user_id}, bid={bid}): {e}")
-            return [], 0
-
-    async def get_logs_by_offset(
+    async def get_full_logs_by_offset(
             self,
             user_id: Optional[int] = None,
             bid: Optional[str] = None,
