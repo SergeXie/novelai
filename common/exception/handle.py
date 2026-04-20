@@ -19,6 +19,16 @@ def handle_exception(app: FastAPI):
     全局异常处理
     """
 
+    @app.exception_handler(BusinessException)
+    async def business_exception_handler(request: Request, exc: BusinessException):
+        return JSONResponse(
+            content={
+                "code": exc.code,
+                "msg": exc.message,
+                "data": None
+            }
+        )
+
     # 自定义token检验异常
     @app.exception_handler(AuthException)
     async def auth_exception_handler(request: Request, exc: AuthException):
@@ -58,7 +68,6 @@ def handle_exception(app: FastAPI):
         logger.warning(exc.message)
         return ResponseUtil.failure(data=exc.data, msg=exc.message)
 
-
     @app.exception_handler(ServiceWarningSpecial)
     async def service_warning_handler(request: Request, exc: ServiceWarning):
         logger.warning(exc.message)
@@ -67,6 +76,7 @@ def handle_exception(app: FastAPI):
     # 处理其他http请求异常
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
+        logger.info(f"DEBUG: 捕获到未处理异常类型: {type(exc)}, 内容: {str(exc)}")
         return JSONResponse(
             content=jsonable_encoder({'code': exc.status_code, 'msg': exc.detail}), status_code=exc.status_code
         )
@@ -74,16 +84,8 @@ def handle_exception(app: FastAPI):
     # 处理其他异常
     @app.exception_handler(Exception)
     async def exception_handler(request: Request, exc: Exception):
+        logger.inf(f"DEBUG: 捕获到未处理异常类型: {type(exc)}, 内容: {str(exc)}")
         logger.exception(exc)
         return ResponseUtil.error(msg=str(exc))
 
-    @app.exception_handler(BusinessException)
-    async def business_exception_handler(request: Request, exc: BusinessException):
-        return JSONResponse(
-            status_code=200,
-            content={
-                "code": exc.code,
-                "msg": exc.message,
-                "data": None
-            }
-        )
+
