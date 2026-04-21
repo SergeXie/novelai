@@ -16,4 +16,4 @@ app = register_app()
 
 if __name__ == "__main__":
     logger.info("启动")
-    uvicorn.run(app, host=settings.UVICORN_HOST, port=settings.UVICORN_PORT)
+    uvicorn.run(app, host=settings.UVICORN_HOST, port=settings.UVICORN_PORT, access_log=False)

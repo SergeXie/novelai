@@ -52,7 +52,7 @@ class WorkflowService(AIService):
         """
         user_id = user.pkId
 
-        request_id = LZSDGenerator.generate_request_id(sign=user.account)
+        request_id = LZSDGenerator.generate_request_id()
         if correlation is None:
             correlation = []
 

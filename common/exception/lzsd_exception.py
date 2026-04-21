@@ -84,3 +84,7 @@ class InsufficientTokenException(BusinessException):
 class IllegalBookAccessException(BusinessException):
     def __init__(self, message: str = "无权访问该书籍", code: int = 403):
         super().__init__(message, code)
+
+class SensitiveWordException(BusinessException):
+    def __init__(self, message: str = "内容包含敏感词，请修改后重试", code: int = 400):
+        super().__init__(message, code)

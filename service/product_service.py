@@ -39,8 +39,6 @@ class ProductService:
                     price=float(m.price),  # Decimal -> float
                     duration_days=m.duration_days,
                     monthly_token_allowance=m.monthly_token_allowance,
-                    unlocked_models=m.unlocked_models,
-                    extra_privileges=m.extra_privileges
                 )
             )
 

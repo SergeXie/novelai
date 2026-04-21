@@ -1,16 +1,25 @@
+import io
 from typing import List, Optional
+from unittest.mock import DEFAULT
+
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.exception.errors import ServerError, NotFoundError
 from common.exception.lzsd_exception import ServiceWarning
+from common.modules.html_text_extractor import quick_html_to_text
+from common.response.response_util import ResponseUtil
 from common.utils.text_util import strip_html_tags
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
 from core.entity.vo.book_node_schema import NodeTreeSchema
 from core.entity.vo.bool_vo import Character
 from core.enums.node_type import BookNodeCategory
+from core.processor.book_processor import Chapter
 from dao.book_dao import BookDAO
 from dao.template_dao import TemplateDAO
 
+DEFAULT_TEMPLATE_ID = "TPLXIAOSHUO"
 
 class BookService:
     def __init__(self, db: AsyncSession):
@@ -149,12 +158,7 @@ class BookService:
         创建书籍 + 初始化标准树结构
         """
         # 2️ 查询模板
-        template = await TemplateDAO.get_template_by_template_id(
-            self.db,
-            template_id,
-        )
-
-        print("user:{} create book:{} tpl:{}".format(uid, title, template.tpl_name))
+        template = await TemplateDAO.get_template_by_template_id(self.db, template_id,)
 
         # 1️ 创建书籍
         book = await self.book_dao.create_book(
@@ -350,7 +354,7 @@ class BookService:
             depth=parent_depth + 1,
             data=data,
             content=content,
-            type=type if type else parent.type
+            category=BookNodeCategory.CONTENT
         )
 
         # 3️⃣ 父节点修正（核心规则）
@@ -464,8 +468,8 @@ class BookService:
             raise ServiceWarning("无权限操作该书籍")
 
         # ️ 2 必须已下架才能物理删除
-        if book.status != 3:
-            raise ServiceWarning("请先下架书籍后再删除")
+        # if book.status != 3:
+        #    raise ServiceWarning("请先下架书籍后再删除")
 
         # 3️ 删除节点
         await self.book_dao.delete_nodes_by_bid(bid, uid)
@@ -488,11 +492,85 @@ class BookService:
 
         if book:
             nodes = await self.book_dao.get_book_nodes(bid=book.bid, user_id=user_id, max_depth=1)
-            node:BookNode = None
             for node in nodes:
                 if node.type == BookNodeCategory.ROLES.code:
                     for role in roles:
-                        await self.book_dao.add_child_node(bid=book.bid, uid=user_id, parent_node=node, is_leaf=1, name=role.name, content=role.role)
+                        await self.book_dao.add_child_node(bid=book.bid,
+                                                           uid=user_id,
+                                                           parent_node=node,
+                                                           is_leaf=1,
+                                                           name=role.name,
+                                                           content=role.role)
 
         return book
+
+    async def create_book_with_chapters(
+            self,
+            user_id: int,
+            book_name:str,
+            chapters:List[Chapter],
+    ) -> Book | None:
+        book = await self.create_book_with_tree(uid=user_id, title=book_name, description="", template_id=DEFAULT_TEMPLATE_ID)
+        if book is None:
+            raise ServerError(msg=f"创建书籍[{book_name}]失败")
+
+        content_root_nodes = await self.book_dao.get_nodes_by_parent_id(bid=book.bid, parent_id=0)
+        # 使用 next() 配合生成器更优雅地查找
+        parent_node = next(
+            (node for node in content_root_nodes if node.type == BookNodeCategory.CONTENT.code),
+            None
+        )
+
+        if not parent_node:
+            raise ServerError(msg="未找到书籍内容根节点结构")
+
+        try:
+            await self.book_dao.batch_add_child_nodes(
+                user_id=user_id,
+                bid=book.bid,
+                parent_node=parent_node,
+                chapter_data=chapters,
+                is_leaf=1
+            )
+        except Exception as e:
+            logger.error(f"批量写入章节失败: {e}")
+            # 这里建议根据业务需求考虑是否需要回滚已创建的书籍（如果是同一个事务的话）
+            raise ServerError(msg="章节同步入库失败")
+
+        return book
+
+    async def export(self, user_id:int, bid:str) ->str:
+        book = await self.book_dao.get_book_by_bid(bid, user_id)
+        if book is None:
+            raise NotFoundError(msg="小说不存在")
+
+        book_name = book.title
+        nodes = await self.book_dao.get_book_nodes(user_id=user_id, bid=bid)
+
+        # 2. 使用 StringIO 作为高效的字符缓冲区（比 += 拼接快得多）
+        output = io.StringIO()
+        output.write(f"{book_name}\n")
+
+        # 3. 寻找内容根节点（使用 next 提高效率，避免全量循环）
+        content_root = next(
+            (node for node in nodes if node.type == BookNodeCategory.CONTENT.code),
+            None
+        )
+
+        if not content_root:
+            return ""
+
+        # 4. 遍历并格式化
+        for child in nodes:
+            if child.parent_id == content_root.id:
+                # 写入标题
+                output.write(f"{child.name}\n")
+                # 写入分割线（可选，增加可读性）
+                output.write("\n")
+                # 写入正文，处理 None 的情况
+                output.write(child.content or "")
+                # 章节间留空行
+                output.write("\n\n")
+
+        return quick_html_to_text(output.getvalue())
 

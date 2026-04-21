@@ -9,26 +9,43 @@ if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
 
 def setup_logger():
-    # 1. 移除默认控制台输出（为了自定义格式）
+    # 1. 移除默认配置
     logger.remove()
 
-    # 2. 添加控制台输出 (彩色)
+    # 2. 核心技巧：将整个格式用 <level> 标签包裹
+    # 这样整行的颜色都会根据 logger.level() 定义的颜色来渲染
+    custom_format = "<level>[{time:YYYY-MM-DD HH:mm:ss}][{level:7}] {message}</level>"
+
+    # 3. 添加控制台输出
     logger.add(
         sys.stdout,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level:7}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+        format=custom_format,
         colorize=True,
         level="INFO"
     )
 
-    # 3. 添加文件输出 (模拟 Log4j2 的 RollingFileAppender)
+    # 4. 精准配置各个级别的整行颜色
+    # WARNING 设为黄色（整行变黄）
+    logger.level("WARNING", color="<yellow>")
+
+    # ERROR 设为红色（整行变红）
+    logger.level("ERROR", color="<red>")
+
+    # INFO 设为默认颜色（"" 代表不带颜色标签，即终端默认白/灰色）
+    logger.level("INFO", color="")
+
+    # DEBUG 设为默认颜色
+    logger.level("DEBUG", color="")
+
+    # 添加文件输出
     logger.add(
-        f"{LOG_DIR}/novel_ai.log",
-        rotation="500 MB",    # 文件满 500MB 自动切分
-        retention="30 days",  # 保留最近 30 天日志
-        compression="zip",    # 旧日志压缩存储
+        f"{LOG_DIR}/WYAI_{{time:YYYY-MM-DD}}.log",
+        rotation="00:00",  # 每天零点创建一个新文件
+        # retention="30 days",  <-- 删掉这一行或注释掉
+        compression="zip",  # 建议保留压缩，否则长期运行磁盘压力会很大
         encoding="utf-8",
         level="DEBUG",
-        enqueue=True          # 核心：开启异步写入，不阻塞主线程（类似 Log4j2 的 AsyncAppender）
+        enqueue=True
     )
 
     return logger

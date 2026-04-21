@@ -130,9 +130,14 @@ class UsageService:
 
         if log_record and log_record.userId == user_id:
             if log_record.status == AIGenerateStatus.SUCCESS:
-                return log_record.outputContent
-            else:
+                if log_record.actionType == AIAction.WorkFlow:
+                    return "非常规生成内容"
+                else:
+                    return log_record.outputContent
+            elif log_record.status == AIGenerateStatus.FAILED:
                 return "生成失败，请切换模型或者稍后重试"
+            else:
+                return ""
 
         return None
 
@@ -164,9 +169,9 @@ class UsageService:
 
         return success
 
-    async def get_book_chat_history(self, bid: str, page: int, size: int) -> PageResp:
+    async def get_book_chat_history(self, bid: str, page: int, size: int, with_content:bool = False) -> PageResp:
         """分页获取某本书下的 AI 对话历史。"""
-        logs, total = await self.ai_log_dao.get_logs_by_paged(bid=bid, page=page, size=size)
+        logs, total = await self.ai_log_dao.get_logs_by_paged(bid=bid, page=page, size=size, with_content=with_content)
 
         list_data = [
             await AIGenerateLogResp.from_orm_model(log, self.model_dao)
@@ -180,12 +185,24 @@ class UsageService:
             pageSize=size
         )
 
-    async def get_logs_page(self, user_id:int, page:int, size:int):
-        logs, total = await self.ai_log_dao.get_logs_by_paged(
-            user_id=user_id,
-            page=page,
-            size=size
+    async def get_chat_history(self, bid: str, offset_id: int, size: int, with_content:bool = False) -> PageResp:
+        """分页获取某本书下的 AI 对话历史。"""
+        logs, total = await self.ai_log_dao.get_full_logs_by_offset(bid=bid, offset_id=offset_id, size=size)
+
+        list_data = [
+            await AIGenerateLogResp.from_orm_model(log, self.model_dao)
+            for log in logs
+        ]
+
+        return PageResp(
+            list=list_data,
+            total=total,
+            page=-1,
+            pageSize=size
         )
+
+    async def get_logs_page(self, user_id:int, page:int, size:int):
+        logs, total = await self.ai_log_dao.get_logs_by_paged(user_id=user_id, page=page, size=size)
 
         list_data = [
             await AIGenerateLogResp.from_orm_model(log, self.model_dao)
@@ -268,7 +285,7 @@ class UsageService:
             logger.info("免费额度：{}".format(free_limit_remaining))
 
         # B. 【其次】抵扣月度额度 (Monthly)
-        if account.monthly_balance > 0 and remaining_to_pay > 0:
+        if account and account.monthly_balance > 0 and remaining_to_pay > 0:
             monthly_deduct = min(account.monthly_balance, remaining_to_pay)
             log_entry.monthlyDeduct = monthly_deduct
             account.monthly_balance -= monthly_deduct
@@ -279,7 +296,7 @@ class UsageService:
 
 
         # C. 【最后】抵扣永久额度 (Permanent)
-        if account.permanent_balance > 0 and remaining_to_pay > 0:
+        if account and account.permanent_balance > 0 and remaining_to_pay > 0:
             perm_deduct = min(account.permanent_balance, remaining_to_pay)
             log_entry.permanentDeduct = perm_deduct
             account.permanent_balance -= perm_deduct

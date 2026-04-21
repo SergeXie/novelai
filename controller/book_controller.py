@@ -1,15 +1,26 @@
 import json
-from typing import Optional
-from fastapi import APIRouter, Depends, Query
+import uuid
+from typing import Optional, List
+
+import httpx
+from cachetools import TTLCache
+from fastapi import APIRouter, Depends, Query, Body
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.functions import user
+
 from common.config.get_db import get_db
+from common.exception.errors import RequestError, NotFoundError, ServerError
+from common.modules.html_text_extractor import write_simple_txt
 from common.response.response_util import ResponseUtil
-from core.deps.auth import get_current_user
+from core.deps.auth import get_current_user, check_book_owner
+from core.entity.do.users_do import User
 from core.entity.vo.book_node_schema import BookResp, CreateBookReq, BookNodeDetailResp, UpdateBookNodeReq, \
     EditBookNodeReq, EditBookNodeResp, AddChapterResp, AddBookNodeReq, DeleteBookNodeReq, OfflineBookReq, EditBookReq, \
     HardDeleteBookReq
 from core.entity.vo.bool_vo import AutoCreateBookReq
+from core.entity.vo.confirm_import_req import ConfirmImportRequest
+from core.processor.book_processor import Chapter, NovelProcessor
 from service.book_service import BookService
 
 bookController = APIRouter()
@@ -17,27 +28,29 @@ bookController = APIRouter()
 
 @bookController.get("/book/tree", name="作品树状结构")
 async def get_book_nodes(bid: str,
-                         max_depth: Optional[int] = Query(None, description="最大深度限制"), # 增加可选参数
+                         max_depth: Optional[int] = Query(None, description="最大深度限制"),  # 增加可选参数
                          db: AsyncSession = Depends(get_db),
-                         user=Depends(get_current_user)):
+                         current_user=Depends(get_current_user)):
     book_service = BookService(db)
-    tree = await book_service.get_tree(bid, uid=user.pkId, max_depth=max_depth)
+    tree = await book_service.get_tree(bid, uid=current_user.pkId, max_depth=max_depth)
     return ResponseUtil.success(data=tree)
+
 
 @bookController.get("/book/node/children", name="作品树状结构")
 async def get_book_children_nodes(bid: str,
-                         root_id:int,
-                         db: AsyncSession = Depends(get_db),
-                         user=Depends(get_current_user)):
+                                  root_id: int,
+                                  db: AsyncSession = Depends(get_db),
+                                  current_user=Depends(get_current_user)):
     book_service = BookService(db)
-    tree = await book_service.get_sub_tree(bid, uid=user.pkId, root_id=root_id)
+    tree = await book_service.get_sub_tree(bid, uid=current_user.pkId, root_id=root_id)
     return ResponseUtil.success(data=tree)
+
 
 @bookController.post("/user/chapter/add", name="新增树状结构章节/节点")
 async def add_chapter(
-    req: AddBookNodeReq,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
+        req: AddBookNodeReq,
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user)
 ):
     """
     新增章节接口
@@ -51,7 +64,7 @@ async def add_chapter(
 
     book_service = BookService(db=db)
     chapter = await book_service.add_chapter(
-        uid=user.pkId,
+        uid=current_user.pkId,
         bid=req.bid,
         parent_id=req.parent_id,
         is_leaf=req.is_leaf,
@@ -79,9 +92,9 @@ async def add_chapter(
 
 @bookController.post("/delete", name="删除书籍节点")
 async def delete_book_node(
-    req: DeleteBookNodeReq,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
+        req: DeleteBookNodeReq,
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user)
 
 ):
     """
@@ -91,7 +104,7 @@ async def delete_book_node(
     result = await book_service.delete_node_(
         bid=req.bid,
         node_id=req.id,
-        uid=user.pkId
+        uid=current_user.pkId
     )
 
     return ResponseUtil.success(data=result)
@@ -99,15 +112,14 @@ async def delete_book_node(
 
 @bookController.post("/user/chapter/edit", name="编辑树状结构章节/节点")
 async def edit_book_node(
-    req: EditBookNodeReq,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
+        req: EditBookNodeReq,
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user)
 ):
     """
     编辑章节 / 节点接口
     """
     books = BookService(db)
-
 
     if req.data:
         data = json.loads(req.data)
@@ -116,7 +128,7 @@ async def edit_book_node(
 
     node = await books.edit_book_node(
         node_id=req.id,
-        uid=user.pkId,
+        uid=current_user.pkId,
         bid=req.bid,
         name=req.name,
         data=data
@@ -130,10 +142,10 @@ async def edit_book_node(
 
 @bookController.get("/book/detail", name="书籍详情节点概要内容")
 async def get_book_node_detail(
-    id: int = Query(..., description="mc_book_node 节点ID"),
-    bid: str = Query(..., description="mc_book_node bidID"),
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
+        id: int = Query(..., description="mc_book_node 节点ID"),
+        bid: str = Query(..., description="mc_book_node bidID"),
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user)
 ):
     """
     获取书籍节点详情接口
@@ -142,7 +154,7 @@ async def get_book_node_detail(
 
     node = await books.get_book_node_detail(
         node_id=id,
-        uid=user.pkId,
+        uid=current_user.pkId,
         bid=bid
     )
 
@@ -154,10 +166,9 @@ async def get_book_node_detail(
 
 @bookController.post("/user/book/edit", name="编辑书籍节点概要内容")
 async def edit_book_node(
-    req: UpdateBookNodeReq,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
-
+        req: UpdateBookNodeReq,
+        db: AsyncSession = Depends(get_db),
+        current_user:User = Depends(get_current_user)
 ):
     """
     编辑书籍节点内容接口
@@ -166,7 +177,7 @@ async def edit_book_node(
 
     node = await books.update_book_node_content(
         node_id=req.id,
-        uid=user.pkId,
+        uid=current_user.pkId,
         bid=req.bid,
         book_len=req.len,
         content=req.content,
@@ -181,9 +192,9 @@ async def edit_book_node(
 
 @bookController.get("/book/list", name="书籍列表")
 async def list_books(
-    status: Optional[int] = Query(0, description="书籍状态"),
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
+        status: Optional[int] = Query(0, description="书籍状态"),
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user)
 ):
     """
     获取书籍列表接口
@@ -193,7 +204,7 @@ async def list_books(
 
     data = await books.list_books(
         status=status,
-        uid=user.pkId
+        uid=current_user.pkId
     )
 
     # 关键：手动走 Pydantic v2 序列化
@@ -203,10 +214,9 @@ async def list_books(
 
 @bookController.post("/book/create", response_model=BookResp, name="创建书籍")
 async def create_book(
-    req: CreateBookReq,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
-
+        req: CreateBookReq,
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user)
 ):
     """
     创建书籍（自动初始化树结构）
@@ -215,7 +225,7 @@ async def create_book(
     book = await service.create_book_with_tree(
         title=req.title,
         description=req.description,
-        uid=user.pkId,
+        uid=current_user.pkId,
         template_id=req.template_id,
     )
 
@@ -224,26 +234,27 @@ async def create_book(
 
     return ResponseUtil.success(data=resp)
 
+
 @bookController.post("/book/autoCreate", response_model=BookResp, name="自动创建书籍")
 async def create_book_auto(
-    req: AutoCreateBookReq,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
+        req: AutoCreateBookReq,
+        db: AsyncSession = Depends(get_db),
+        current_user:User= Depends(get_current_user)
 ):
     service = BookService(db)
-    book = await service.auto_create_book(user_id=user.pkId, title=req.title, summary=req.summary, roles=req.characters)
+    book = await service.auto_create_book(user_id=current_user.pkId, title=req.title, summary=req.summary, roles=req.characters)
     if not book:
         return ResponseUtil.error(msg="未知错误")
     else:
         resp = BookResp.model_validate(book)
         return ResponseUtil.success(data=resp)
 
+
 @bookController.post("/book/edit", name="编辑书籍信息")
 async def edit_book(
-    req: EditBookReq,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
-
+        req: EditBookReq,
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user)
 ):
     """
     编辑书籍信息接口
@@ -253,7 +264,7 @@ async def edit_book(
     book = await service.edit_book(
         template_id=req.template_id,
         bid=req.bid,
-        uid=user.pkId,
+        uid=current_user.pkId,
         title=req.title,
         bookType=req.bookType,
         description=req.description,
@@ -267,30 +278,155 @@ async def edit_book(
 
 @bookController.post("/book/offline", name="下架书籍")
 async def offline_book(
-    req: OfflineBookReq,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
+        req: OfflineBookReq,
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user)
 ):
     """
     下架书籍（逻辑删除）
     """
     service = BookService(db)
-    result = await service.offline_book(bid=req.bid, uid=user.pkId)
+    result = await service.offline_book(bid=req.bid, uid=current_user.pkId)
 
     return ResponseUtil.success(data=result)
 
 
 @bookController.post("/hardDelete", name="彻底删除书籍")
 async def hard_delete_book(
-    req: HardDeleteBookReq,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
-
+        req: HardDeleteBookReq,
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user)
 ):
     """
     真正删除书籍接口
     """
     service = BookService(db)
-    result = await service.hard_delete_book(bid=req.bid, uid=user.pkId)
+    result = await service.hard_delete_book(bid=req.bid, uid=current_user.pkId)
 
     return ResponseUtil.success(data=result)
+
+parse_cache = TTLCache(maxsize=1000, ttl=1800)
+@bookController.post(path="/book/import", name="导入书籍获取章节信息")
+async def import_book(url: str = Body(..., embed=True, description="txt连接")):
+    """
+    通过 URL 导入小说：校验 -> 下载 -> 自动拆分
+    """
+    # 1. 识别后缀名
+    # 去除 URL 可能带有的参数（如 ?token=xxx）后再检查
+    clean_url = url.split('?')[0].lower()
+    if not clean_url.endswith('.txt'):
+        logger.warning(f"拒绝非TXT资源下载: {url}")
+        raise RequestError(msg="仅支持 .txt 格式的文件下载")
+
+    # 2. 异步下载文件内容
+    try:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            logger.info(f"开始下载小说资源: {url}")
+            response = await client.get(url)
+
+            # 检查响应状态
+            if response.status_code != 200:
+                logger.error(f"下载失败，状态码: {response.status_code}")
+                raise NotFoundError(
+                    msg="无法下载指定资源，请检查链接有效性"
+                )
+
+            # 获取原始内容（二进制流）
+            raw_content = response.content
+            if not raw_content:
+                raise RequestError(msg="下载的文件内容为空")
+
+    except httpx.RequestError as e:
+        logger.error(f"网络请求异常: {str(e)}")
+        raise ServerError(msg="网络请求异常，请稍后重试")
+
+    # 3. 编码解码与章节切分
+    try:
+        # 使用多编码尝试解码
+        decoded_text = None
+        for encoding in ("utf-8-sig", "utf-8", "gbk", "gb18030"):
+            try:
+                decoded_text = raw_content.decode(encoding)
+                break
+            except UnicodeDecodeError:
+                continue
+
+        if decoded_text is None:
+            decoded_text = raw_content.decode("utf-8", errors="ignore")
+            logger.warning("所有编码解码失败，强制使用 utf-8 ignore 模式")
+
+        processor = NovelProcessor()
+        # 调用我们之前的 NovelProcessor 进行切分
+        chapters: List[Chapter] = processor.split_text(decoded_text)
+
+        if not chapters:
+            return ResponseUtil.error(msg="未能在文件中识别到任何有效章节")
+
+        logger.info(f"成功通过链接导入小说，共计 {len(chapters)} 章")
+
+        task_id = uuid.uuid4().hex.lower().replace("-", "")
+        parse_cache[task_id] = chapters
+
+        data = [
+            {
+                "index": c.index,
+                "title": c.title,
+                "word_count": c.word_count  # 建议带上字数，增加产品质感
+            }
+            for c in chapters
+        ]
+        return ResponseUtil.success(data={"taskId":task_id, "chapter":data})
+
+    except Exception as e:
+        logger.error(f"解析小说内容时发生致命错误: {str(e)}")
+        raise ServerError(msg="小说解析失败")
+
+
+@bookController.post("/book/confirm")
+async def confirm(
+        req: ConfirmImportRequest,
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user)
+):
+    # 1. 从缓存中获取预解析的完整数据
+    # 注意：parse_cache 应该在模块级别定义
+    cached_chapters = parse_cache.get(req.taskId)
+
+    if not cached_chapters:
+        logger.warning(f"任务已过期或不存在: {req.taskId}")
+        raise ServerError(
+            msg="解析任务已过期，请重新上传文件"
+        )
+
+    # 2. 根据用户选中的索引过滤章节
+    # cached_chapters 里面是 List[Chapter] 对象
+    selected_chapters = [
+        c for c in cached_chapters
+        if c.index in req.selectedIndices
+    ]
+
+    if not selected_chapters:
+        raise ServerError(msg="未能匹配到选中的章节，请刷新页面重试")
+
+    try:
+        book_service = BookService(db)
+        book = await book_service.create_book_with_chapters(user_id=current_user.pkId, book_name=req.bookName,
+                                                            chapters=selected_chapters)
+        parse_cache.pop(req.taskId, None)
+        return ResponseUtil.success(data=book)
+
+    except Exception as e:
+        logger.error(f"确认导入失败: {str(e)}")
+        raise ServerError(msg="保存书籍失败，请联系管理员")
+
+@bookController.post("/book/export")
+async def export(
+        bid: str = Body(..., embed=True),
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user)
+):
+    book_service = BookService(db)
+    text = await book_service.export(bid=bid, user_id=current_user.pkId)
+    # write_simple_txt(uuid.uuid4().hex + ".txt", text)
+    # todo 导出文本上传到外网-->发地址
+    return ResponseUtil.success(data=text)

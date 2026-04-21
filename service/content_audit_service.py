@@ -332,18 +332,12 @@ class ContentAuditService:
     async def assert_safe_instruction(self, text, use_semantic: bool = True) -> ContentAuditResult:
         # 对外统一入口：不安全则抛出业务异常
         result = await self.audit_user_instruction(text=text, use_semantic=use_semantic)
-        if result.passed:
-            return result
-
-        raise ServiceWarning(data=asdict(result), message=result.reason)
+        return result
 
     def assert_safe_instruction_dfa_only(self, text) -> ContentAuditResult:
         # 仅 DFA 入口：不安全则抛出业务异常
         result = self.quick_dfa_audit(text)
-        if result.passed:
-            return result
-
-        raise ServiceWarning(data=asdict(result), message=result.reason)
+        return result
 
 
 class GeneratedContentAuditService(ContentAuditService):

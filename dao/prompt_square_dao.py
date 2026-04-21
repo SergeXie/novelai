@@ -1,13 +1,12 @@
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import or_
 from sqlalchemy.sql.expression import delete, desc
-
 from common.utils.generator import LZSDGenerator
 from core.entity.do.prompt_square_do import PromptSquare, UserTemplateFavor
 from core.entity.vo.prompt_square_vo import PromptSquareCreateReq, PromptSquareUpdateReq
+from core.enums.constants import UserCustomPromptStatus
 from core.enums.prompt_sys_var import PromptEngineType
 
 
@@ -46,7 +45,7 @@ class PromptSquareDAO:
 
         else:
             # 公开广场
-            condition = (PromptSquare.status == 1)
+            condition = (PromptSquare.status == UserCustomPromptStatus.AVAILABLE.value)
 
         if category:
             condition = condition & (PromptSquare.category == category)
@@ -111,16 +110,19 @@ class PromptSquareDAO:
     async def create_user_prompt(
             db: AsyncSession,
             user_id: int,
-            req: PromptSquareCreateReq
+            title:str,
+            category: str,
+            description:str,
+            content:str,
     ) -> PromptSquare:
 
         prompt = PromptSquare(
             template_key=LZSDGenerator.generate_template_id(),
-            title=req.title,
-            category=req.category,
-            content=req.content,
-            description=req.description,
-            status=req.status,
+            title=title,
+            category=category,
+            content=content,
+            description=description,
+            status=UserCustomPromptStatus.PENDING.value,
             author_id=user_id,
             cover_img="",
             engine_type=PromptEngineType.JINJA2.value,
