@@ -47,8 +47,6 @@ class AccountInfoResponse(BaseModel):
     monthly_balance: Optional[int] = 0
     permanent_balance: Optional[int] = 0
     remaining_balance: Optional[int] = 0
-    unlocked_models: Optional[List[str]] = []
-    extra_privileges: Optional[Dict] = {}
     total_consumed: Optional[int] = 0  # 已使用
     total_amount: Optional[int] = 0  # 总量
 

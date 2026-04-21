@@ -6,8 +6,9 @@ import jwt
 from sqlalchemy import update
 
 from common.config.config import settings
-from common.exception.lzsd_exception import LoginException, ServiceWarning
+from common.exception.lzsd_exception import LoginException, ServiceWarning, SensitiveWordException
 from core.entity.do.users_do import OnlineStatus, AccountStatus, User
+from service.content_audit_service import get_content_audit_service
 from dao.user_dao import UserDAO
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
@@ -31,6 +32,12 @@ class UserService:
 
         if not nickname:
             raise ServiceWarning("昵称不能为空")
+
+        audit_service = get_content_audit_service()
+        result = audit_service.assert_safe_instruction_dfa_only(text=nickname)
+        if not result.passed:
+            # 可以在 Exception 中传入具体是哪个字段违规
+            raise SensitiveWordException(message=result.reason)
 
         if len(nickname) > 20:
             raise ServiceWarning("昵称不能超过20字符")

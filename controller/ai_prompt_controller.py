@@ -1,23 +1,22 @@
 import json
 from typing import Optional
-from fastapi import APIRouter, Depends, Body, BackgroundTasks, Query
+from loguru import logger
+from fastapi import APIRouter, Depends, Body, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from ai.adapters.enums import AIProvider, AIAction
-from ai.ai_nexus import check_ai_input
 from ai.workflow.wf_create_book import CreateBookWorkflow
 from common.config.config import settings
-from common.utils.generator import LZSDGenerator
 from common.config.get_db import get_db, get_db_context
+from common.log import logger
 from common.response.response_util import ResponseUtil
+from common.utils.generator import LZSDGenerator
 from core.deps.auth import get_current_user, check_user_quota_or_raise
 from core.entity.vo.ai_response import TokenUsage
-from core.entity.vo.base_vo import PageResp
 from core.entity.vo.prompt_register_vo import PromptRegistryResp
-from core.entity.vo.prompt_square_vo import PromptSquareCreateReq, PromptSquareUpdateReq, PromptSquareDetailReq
 from dao.book_dao import BookDAO
 from service.ai_prompt_service import PromptService
 from service.ai_service import AIService
-from service.prompt_square_service import PromptSquareService
 from service.usage_service import UsageService
 
 promptController = APIRouter(prefix="/prompts", tags=["提示词管理"])
@@ -128,16 +127,14 @@ async def render(
 async def create_book_flow(
         idea: str = Body(..., description="小说脑洞/主题"),
         level:int = Body(..., description="模型"),
-        user:Depends = Depends(get_current_user)
+        user=Depends(get_current_user)
 ):
-
-    check_ai_input(idea)
 
     # 1. 校验配额-
     await check_user_quota_or_raise(frozen_token_length=3000, user_info=user)
-
     try:
-        ai_provider = AIProvider.from_level(level)
+        # 定死level
+        ai_provider = AIProvider.DOUBAO.to_provider()
         workflow = CreateBookWorkflow(ai_provider=ai_provider)
         context = {"idea": idea}
         try:
@@ -199,29 +196,33 @@ async def create_book_flow(
         final_obj = workflow_rsp.final_result
         is_dict = isinstance(final_obj, dict)
 
-        async with get_db_context() as db:
-            request_id = LZSDGenerator.generate_request_id()
-            usage_service = UsageService(db)
-            await usage_service.record(
-                user_id=user.pkId,
-                level=level,
-                bid="",
-                user_prompt="一键成书",
-                origin_prompt=idea,
-                request_id=request_id,
-                # 兼容字典和对象访问
-                system_prompt="",  # 如果 AICompletionResponse 没存 system_prompt，传空
-                output_content=final_obj.get("content", "") if is_dict else final_obj.content,
-                action_type=AIAction.WorkFlow,
-                temperature=0.7,
-                totalTokens=usage.total_tokens,
-                promptTokens=usage.prompt_tokens,
-                completionTokens=usage.completion_tokens,
-            )
+        try:
+            async with get_db_context() as db:
+                request_id = LZSDGenerator.generate_request_id()
+                usage_service = UsageService(db)
+                await usage_service.record(
+                    user_id=user.pkId,
+                    level=level,
+                    bid="",
+                    user_prompt="一键成书",
+                    origin_prompt=idea,
+                    request_id=request_id,
+                    # 兼容字典和对象访问
+                    system_prompt="",  # 如果 AICompletionResponse 没存 system_prompt，传空
+                    output_content=final_obj.get("content", "") if is_dict else final_obj.content,
+                    action_type=AIAction.WorkFlow,
+                    temperature=0.7,
+                    totalTokens=usage.total_tokens,
+                    promptTokens=usage.prompt_tokens,
+                    completionTokens=usage.completion_tokens,
+                )
 
-            await usage_service.record_consumption(request_id=request_id, total_tokens=usage.total_tokens, multiplier=settings.MULTIPLIER)
+            await usage_service.record_consumption(request_id=request_id, total_tokens=usage.total_tokens,
+                                                   multiplier=settings.MULTIPLIER)
+        except Exception as e:
+            logger.error(f"一键成书token消耗回写失败：{str(e)}")
 
         return ResponseUtil.success(data=final_result_data)
 
     except Exception as e:
-        return ResponseUtil.error(msg=f"执行失败: {str(e)}")
+        return ResponseUtil.error(msg=f"一键成书执行失败: {str(e)}")

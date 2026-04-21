@@ -75,7 +75,6 @@ async def generate(
     # 5. 立即返回 requestId 供前端轮询
     return ResponseUtil.success(data={"requestId": request_id})
 
-
 @aiController.get("/poll")
 async def poll(requestId: str, db=Depends(get_db), user=Depends(get_current_user)):
     usage_service = UsageService(db=db)

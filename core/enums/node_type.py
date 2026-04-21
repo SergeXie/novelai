@@ -6,6 +6,7 @@ class BookNodeCategory(Enum):
     ROLES = (2, "角色卡")
     WORLDVIEW = (3, "世界观")
     WRITING_STYLE = (4, "写作手法")
+    OUTLINE = (5, "大纲")  # 新增：大纲定义
 
     def __init__(self, code, key):
         self.code = code

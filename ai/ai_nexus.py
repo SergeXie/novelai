@@ -1,8 +1,13 @@
+import asyncio
 import json
 import re
+import threading
+from dataclasses import dataclass
+from typing import Optional
 
 from loguru import logger
 from ai.adapters.claude import ClaudeAdapter
+from ai.adapters.claude_thinking import ClaudeThinkingAdapter
 from ai.adapters.deep_seek import DeepSeekAdapter
 from ai.adapters.doubao import DoubaoAdapter
 from ai.adapters.doubao_plus import DoubaoPlusAdapter
@@ -15,7 +20,18 @@ from common.config.config import settings
 from common.exception.lzsd_exception import ServiceWarning
 from core.entity.vo.ai_response import AICompletionResponse
 
-def check_ai_input(prompt:str):
+
+@dataclass
+class _QueuedOllamaRequest:
+    # Ollama 请求队列中的单个任务数据
+    system_prompt: str
+    user_prompt: str
+    temperature: float
+    max_tokens: Optional[int]
+    future: asyncio.Future
+
+async def check_ai_input(prompt: str):
+    # 检查输入长度是否超过系统限制
     current_request_len = len(prompt)
     if current_request_len > settings.SINGLE_REQUEST_TOKEN_LIMIT:
         raise ServiceWarning(message="提示词过长")
@@ -39,7 +55,6 @@ def ai_clean_json(raw_text: str):
     json_str = match.group(0)
 
     # 3. 处理特殊的单引号问题（AI 有时会输出 Python 风格的单引号 JSON）
-    # 注意：这只是简单的启发式替换，复杂的转义可能需要更精细的处理
     if "'" in json_str and '"' not in json_str:
         json_str = json_str.replace("'", '"')
 
@@ -54,11 +69,11 @@ def ai_clean_json(raw_text: str):
             raise ValueError(f"JSON 解析最终失败: {str(e)}")
 
 def filter_ai_content(content: str) -> str:
+    # 统一过滤 AI 返回内容中的特定敏感词
     if not content:
         return ""
 
-    # 匹配 "claude" 或 "anthropic"（忽略大小写）
-    # 如果发现包含敏感词，直接返回空字符串
+    # 如果发现包含敏感词，直接返回提示语
     if re.search(r"claude|anthropic", content, re.IGNORECASE):
         return "暂时无法生成，更改提示词试试。"
 
@@ -67,7 +82,7 @@ def filter_ai_content(content: str) -> str:
 
 class AINexus:
     def __init__(self):
-        # 预加载所有支持的适配器
+        # 预加载所有支持的适配器，减少运行时重复创建对象的开销
         self._adapters = {
             AIProvider.FREE: OllamaAdapter(),
             AIProvider.DEEPSEEK: DeepSeekAdapter(),
@@ -77,25 +92,68 @@ class AINexus:
             AIProvider.GEMINI: GeminiAdapter(),
             AIProvider.GPT: GPTAdapter(),
             AIProvider.ZHIPU: GLMAdapter(),
+            AIProvider.CLAUDETHINKING: ClaudeThinkingAdapter(),
         }
 
-    async def generate_novel_text(self, provider: AIProvider, user_prompt: str, system_prompt:str, temperature:float = 0.7, max_tokens: int = None) \
-            -> AICompletionResponse:
+        # Ollama 走异步队列，避免并发直接打到本地模型服务
+        self._ollama_queue: asyncio.Queue[_QueuedOllamaRequest] | None = None
+        self._ollama_worker_task: asyncio.Task | None = None
+        self._ollama_worker_start_lock = threading.Lock()
 
-        # 1. 根据传入的 provider 获取对应的适配器
-        adapter = self._adapters.get(provider)
-        if not adapter:
-            raise ValueError(f"未支持的模型提供商: {provider}")
+    def _ensure_ollama_worker(self) -> None:
+        # 确保 Ollama 队列和 worker 已初始化，且 worker 只启动一次
+        with self._ollama_worker_start_lock:
+            if self._ollama_queue is None:
+                self._ollama_queue = asyncio.Queue()
 
-        safe_temperature = max(0.0, min(temperature, 1.2))
+            if self._ollama_worker_task is None or self._ollama_worker_task.done():
+                self._ollama_worker_task = asyncio.create_task(self._ollama_queue_worker())
 
-        # 2. 调用适配器的统一接口
+    async def _ollama_queue_worker(self) -> None:
+        # 后台 worker：顺序处理 Ollama 请求，避免并发冲突
+        assert self._ollama_queue is not None
+
+        while True:
+            request = await self._ollama_queue.get()
+            try:
+                ai_rsp = await self._adapters[AIProvider.FREE].generate_text(
+                    system_prompt=request.system_prompt,
+                    user_prompt=request.user_prompt,
+                    max_tokens=request.max_tokens,
+                    temperature=request.temperature,
+                )
+
+                # 对返回内容做统一过滤
+                try:
+                    ai_rsp.content = filter_ai_content(ai_rsp.content)
+                except Exception as e:
+                    logger.error(f"AI内容过滤失败: {str(e)}", exc_info=True)
+
+                if not request.future.done():
+                    request.future.set_result(ai_rsp)
+            except Exception as e:
+                if not request.future.done():
+                    request.future.set_exception(e)
+            finally:
+                self._ollama_queue.task_done()
+
+    async def _generate_with_adapter(
+        self,
+        adapter,
+        user_prompt: str,
+        system_prompt: str,
+        temperature: float,
+        max_tokens: int = None,
+    ) -> AICompletionResponse:
+        # 统一封装非 Ollama 模型的调用逻辑
         ai_rsp = await adapter.generate_text(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             max_tokens=max_tokens,
-            temperature=safe_temperature
+            temperature=temperature,
         )
+
+        # 对返回内容做统一过滤
         try:
             ai_rsp.content = filter_ai_content(ai_rsp.content)
         except Exception as e:
@@ -103,7 +161,66 @@ class AINexus:
 
         return ai_rsp
 
+    async def _enqueue_ollama_request(
+        self,
+        user_prompt: str,
+        system_prompt: str,
+        temperature: float,
+        max_tokens: int = None,
+    ) -> AICompletionResponse:
+        # 将 Ollama 请求放入队列，交由后台 worker 串行处理
+        self._ensure_ollama_worker()
+        assert self._ollama_queue is not None
+
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future = loop.create_future()
+        await self._ollama_queue.put(
+            _QueuedOllamaRequest(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                future=future,
+            )
+        )
+        return await future
+
+    async def generate_novel_text(
+        self,
+        provider: AIProvider,
+        user_prompt: str,
+        system_prompt: str,
+        temperature: float = 0.7,
+        max_tokens: int = None
+    ) -> AICompletionResponse:
+        # 根据 provider 选择对应适配器
+        adapter = self._adapters.get(provider)
+        if not adapter:
+            raise ValueError(f"未支持的模型提供商: {provider}")
+
+        # 限制温度范围，防止传入异常值
+        safe_temperature = max(0.0, min(temperature, 1.2))
+
+        # FREE 模型走队列，其他模型直接调用
+        if provider == AIProvider.FREE:
+            return await self._enqueue_ollama_request(
+                user_prompt=user_prompt,
+                system_prompt=system_prompt,
+                temperature=safe_temperature,
+                max_tokens=max_tokens,
+            )
+
+        return await self._generate_with_adapter(
+            adapter=adapter,
+            user_prompt=user_prompt,
+            system_prompt=system_prompt,
+            temperature=safe_temperature,
+            max_tokens=max_tokens,
+        )
+
+# 单例实例，避免重复创建 AINexus
 _ai_nexus_instance = AINexus()
 
 def get_ai_nexus() -> AINexus:
+    # 对外提供统一入口
     return _ai_nexus_instance

@@ -44,8 +44,6 @@ async def execute(
     return ResponseUtil.success(data=request_id)
 
 
-
-
 @aiTemplateController.get("/publicPromptList", name="提示词广场模板库")
 async def get_public_private_prompt_list(
     page: int = Query(1, ge=1),
@@ -93,9 +91,8 @@ async def create_user_prompt_square(
     """
     创建用户自己的提示词广场数据
     """
-    data = await PromptSquareService.create_user_prompt(db, user.pkId, req)
+    data = await PromptSquareService.create_user_prompt(db, user.pkId, title=req.title, description=req.description, category=req.category, content=req.content)
     return ResponseUtil.success(data=data)
-
 
 @aiTemplateController.get("/detail", name="获取用户提示词详情")
 async def get_user_prompt_detail(

@@ -1,10 +1,11 @@
 from datetime import datetime
 from typing import List, Tuple, Optional
 
+from fastapi import params
 from loguru import logger
 from sqlalchemy import select, func, update, desc, and_, Integer, cast
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import undefer
+from sqlalchemy.orm import undefer, defer
 
 from ai.adapters.enums import AIGenerateStatus
 from core.entity.do.generate_log import AiNovelGenerateLog
@@ -101,31 +102,28 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
         根据 request_id 更新生成结果（适配驼峰命名字段）
         更新生成结果 + 扣Token
         """
+        update_fields = {
+            "status": status.value if hasattr(status, "value") else status,
+            "errorMsg": error_msg,
+            **({
+                   "outputContent": ai_rsp.content,
+                   "outputLength": ai_rsp.usage.completion_tokens,
+                   "requestInputLength": ai_rsp.usage.prompt_tokens,
+                   "totalTokens": ai_rsp.usage.total_tokens,
+               } if ai_rsp else {})
+        }
         try:
-            stmt = (
-                update(AiNovelGenerateLog)
-                .where(AiNovelGenerateLog.requestId == request_id)
-                .values({
-                    "outputContent": ai_rsp.content,
-                    "outputLength": ai_rsp.usage.completion_tokens,
-                    "requestInputLength": ai_rsp.usage.prompt_tokens,
-                    "totalTokens": ai_rsp.usage.total_tokens,
-                    "status": status,
-                    "errorMsg": error_msg
-                })
-            )
-
-            result = await self.db.execute(stmt)
-
-            if result.rowcount > 0:
-                await self.db.commit()
-                return True
-
+            async with self.db.begin():
+                stmt = (
+                    update(AiNovelGenerateLog)
+                    .where(AiNovelGenerateLog.requestId == request_id)
+                    .values(update_fields)
+                )
+                result = await self.db.execute(stmt)
+                return result.rowcount > 0
         except Exception as e:
-            # 这里的 logger 建议使用你项目配置好的
-            logger.error(f"Update AiNovelGenerateLog Error: {e}")
-
-        return False
+            logger.error(f"Dao update_output_by_request_id Transaction Failed: {e}")
+            return False
 
     # 假设你的类名已统一为 AiNovelGenerateLog
     async def get_logs_by_bid(self, bid: str) -> List[dict]:
@@ -161,7 +159,8 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             user_id: Optional[int] = None,  # 修改为 int 类型提示
             bid: Optional[str] = None,
             page: int = 1,
-            size: int = 10
+            size: int = 10,
+            with_content: bool = False
     ) -> Tuple[list[AiNovelGenerateLog], int]:
         """
             获取排除大字段后的模型对象列表，并返回总数
@@ -186,6 +185,12 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
                 .offset(offset)
             )
 
+            # --- 核心逻辑：动态处理 content 字段 ---
+            if not with_content:
+                # 如果不需要内容，则延迟加载 content 字段
+                # 注意：你可以根据需要 defer 多个大字段，如 .options(defer(Model.col1), defer(Model.col2))
+                stmt = stmt.options(defer(AiNovelGenerateLog.outputContent))
+
             # 3. 查询总数
             count_stmt = (
                 select(func.count(AiNovelGenerateLog.id))
@@ -204,6 +209,61 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
 
         except Exception as e:
             logger.error(f"分页查询 AI 日志失败 (user_id={user_id}, bid={bid}): {e}")
+            return [], 0
+
+    async def get_full_logs_by_offset(
+            self,
+            user_id: Optional[int] = None,
+            bid: Optional[str] = None,
+            offset_id: int = 0,  # 基于 ID 的游标起始点
+            size: int = 10
+    ) -> Tuple[List[AiNovelGenerateLog], int]:
+        """
+        通过 offset_id 分页查询，并包含 outputContent 字段
+        """
+        try:
+            # 1. 构造基础过滤条件
+            filters = [AiNovelGenerateLog.isDelete == 0]
+
+            # 2. 添加 offset_id 过滤 (游标分页核心)
+            if offset_id > 0:
+                filters.append(AiNovelGenerateLog.id < offset_id)  # 假设你是按时间倒序查，则 ID 应小于当前 ID
+
+            if user_id is not None:
+                filters.append(AiNovelGenerateLog.userId == user_id)
+            if bid:
+                filters.append(AiNovelGenerateLog.bid == bid)
+
+            # 3. 构造查询语句
+            stmt = (
+                select(AiNovelGenerateLog)
+                .where(and_(*filters))
+                .order_by(desc(AiNovelGenerateLog.id))  # 使用 ID 排序比使用 createdAt 性能更稳
+                .limit(size)
+            )
+            stmt = stmt.options(undefer(AiNovelGenerateLog.outputContent))
+
+            # 注意：这里去掉了 if not with_content 的 defer 逻辑
+            # outputContent 会被自然地 select 出来
+
+            # 4. 查询总数 (总数查询通常不带 id 过滤条件，除非是查剩余数量)
+            count_filters = [AiNovelGenerateLog.isDelete == 0]
+            if user_id is not None: count_filters.append(AiNovelGenerateLog.userId == user_id)
+            if bid: count_filters.append(AiNovelGenerateLog.bid == bid)
+
+            count_stmt = select(func.count(AiNovelGenerateLog.id)).where(and_(*count_filters))
+
+            # 5. 执行
+            result = await self.db.execute(stmt)
+            # 转换为 list 确保数据被立刻读取到内存，避免 lazy load 风险
+            obj_list = list(result.scalars().all())
+
+            total_count = await self.db.scalar(count_stmt)
+
+            return obj_list, total_count or 0
+
+        except Exception as e:
+            logger.error(f"分页查询 AI 日志失败 (user_id={user_id}, offset_id={offset_id}): {e}")
             return [], 0
 
     @staticmethod

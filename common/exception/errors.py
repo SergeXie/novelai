@@ -58,23 +58,3 @@ class ServerError(BaseExceptionMixin):
     ):
         super().__init__(msg=msg, data=data, background=background)
 
-
-class GatewayError(BaseExceptionMixin):
-    code = 502
-
-    def __init__(self, *, msg: str = 'Bad Gateway', data: Any = None, background: BackgroundTask | None = None):
-        super().__init__(msg=msg, data=data, background=background)
-
-
-class AuthorizationError(BaseExceptionMixin):
-    code = 401
-
-    def __init__(self, *, msg: str = 'Permission denied', data: Any = None, background: BackgroundTask | None = None):
-        super().__init__(msg=msg, data=data, background=background)
-
-
-class TokenError(HTTPError):
-    code = 401
-
-    def __init__(self, *, msg: str = 'Not authenticated', headers: dict[str, Any] | None = None):
-        super().__init__(code=self.code, msg=msg, headers=headers or {'WWW-Authenticate': 'Bearer'})

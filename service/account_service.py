@@ -42,14 +42,6 @@ class AccountService:
 
         total_balance = account.monthly_balance + account.permanent_balance
 
-        # ==================== 4. 处理权益 ====================
-
-        unlocked_models = []
-        extra_privileges = {}
-
-        if membership:
-            unlocked_models = membership.unlocked_models or []
-            extra_privileges = membership.extra_privileges or {}
 
         # ==================== 5. 返回 ====================
         # 每日的额度 + 总月度赠送额度 + 永久有效额度
@@ -62,8 +54,6 @@ class AccountService:
             monthly_balance=account.monthly_balance,
             permanent_balance=account.permanent_balance,
             remaining_balance=total_balance,
-            unlocked_models=unlocked_models,
-            extra_privileges=extra_privileges,
             total_consumed=account.total_consumed,
             total_amount = account.total_amount
         )

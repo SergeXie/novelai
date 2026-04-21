@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     free: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
     doubaoplus: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
     claude: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
+    claudethinking: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
     gemini: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
     gpt: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
     zhipu: LLMProviderConfig = Field(default_factory=LLMProviderConfig)
