@@ -83,12 +83,13 @@ async def check_book_owner( bid: str,  db: AsyncSession = Depends(get_db), user=
         raise IllegalBookAccessException()
 
 
-async def check_user_quota_or_raise(frozen_token_length: int, user_info: User):
+async def check_user_quota_or_raise(frozen_token_length: int, user_info: User, level=None):
     """
     有三个地方需要检查
     -- ai工具调用render
     -- 推理 generate
     -- 一键成书工作流
+    -- level模型等级（免费用户只能用执笔和才女）
     """
 
     user_id = user_info.pkId
@@ -98,6 +99,10 @@ async def check_user_quota_or_raise(frozen_token_length: int, user_info: User):
         # 1. 获取付费账户余额
         account = await AccountService.get_account_info(db=db, user_id=user_id)
         user_paid_balance = account.total_amount if account else 0
+
+        if account.level == "free" and level:
+            if level not in [0, 2]:  # TODO 0 执笔 2 才女
+                raise InsufficientTokenException("免费用户只能使用执笔与才女")
 
         # 情况 A：付费额度充足，直接放行 (这是最快的路径)
         if user_paid_balance >= frozen_token_length:
