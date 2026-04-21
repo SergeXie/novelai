@@ -63,14 +63,15 @@ async def get_current_user(
         logger.warning('用户token不合法')
         raise AuthException(data='', message='用户token不合法')
 
+    # 重启服务器不要丢失已登录的用户状态
     # 从缓存中拿出token
-    access_token = TokenManager.get_account_by_token(query_user.account)
-
-    if token == access_token:
-        return query_user
-    else:
-        logger.warning('用户凭证已失效，请重新登录')
-        raise AuthException(data='', message='用户凭证已失效，请重新登录！')
+    # access_token = TokenManager.get_account_by_token(query_user.account)
+    #
+    # if token == access_token:
+    #     return query_user
+    # else:
+    #     logger.warning('用户凭证已失效，请重新登录')
+    #     raise AuthException(data='', message='用户凭证已失效，请重新登录！')
 
 
 async def check_book_owner( bid: str,  db: AsyncSession = Depends(get_db), user=Depends(get_current_user)) :
