@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
-
 from common.config.config import settings
 from common.exception.handle import handle_exception
 from controller.ai_chat_controller import aiChatController
@@ -16,6 +15,7 @@ from controller.product_controller import productRouter
 from controller.ai_prompt_controller import promptController
 from controller.template_controller import templateController
 from controller.user_controller import userController
+from core.scheduler.membership_scheduler import start_scheduler, shutdown_scheduler
 
 
 @asynccontextmanager
@@ -28,22 +28,35 @@ async def register_init(app: FastAPI):
     print("初始化")
 
 def register_app():
+
+    # 新增：生命周期管理
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # 启动时
+        start_scheduler()
+
+        yield
+
+        # 关闭时
+        shutdown_scheduler()
+
     # FastAPI
-    
     app = FastAPI(
         title=settings.TITLE,
         version=settings.VERSION,
         description=settings.DESCRIPTION,
-        # docs_url=settings.DOCS_URL,
-        # redoc_url=settings.REDOCS_URL,
         openapi_url=settings.OPENAPI_URL,
-        # lifespan=register_init,
+        # 核心：加这个
+        lifespan=lifespan,
     )
+
     # 中间件
     register_middleware(app)
+
     # 路由
     register_router(app)
-    # 加载全局异常处理方法
+
+    # 全局异常
     handle_exception(app)
 
     return app

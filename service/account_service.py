@@ -19,6 +19,48 @@ class AccountService:
     """
 
     @staticmethod
+    def is_membership_active(account: UserAccount) -> bool:
+        """
+        判断会员是否有效（唯一标准入口）
+        """
+        if not account:
+            return False
+
+        if not account.expire_at:
+            return False
+
+        now = datetime.now(timezone.utc)
+
+        # 兼容数据库里是 naive datetime 的情况
+        expire_at = account.expire_at
+        if expire_at.tzinfo is None:
+            expire_at = expire_at.replace(tzinfo=timezone.utc)
+
+        return expire_at > now
+
+    @staticmethod
+    async def get_effective_membership(db, account: UserAccount):
+        """
+        获取“当前有效会员”（已过期返回 None）
+        """
+        if not AccountService.is_membership_active(account):
+            return None
+
+        from dao.membership_dao import MembershipDAO
+        return await MembershipDAO.get_by_code(db, account.level_code)
+
+    @staticmethod
+    def get_user_level(account: UserAccount) -> str:
+        """
+        对外统一返回用户等级（已过期自动降级为 FREE）
+        """
+        if not AccountService.is_membership_active(account):
+            return "FREE"
+
+        return account.level_code
+    
+
+    @staticmethod
     async def get_account_info(db: AsyncSession, user_id: int):
         """
         获取用户资产信息
@@ -44,9 +86,6 @@ class AccountService:
 
 
         # ==================== 5. 返回 ====================
-        # 每日的额度 + 总月度赠送额度 + 永久有效额度
-        user_daily_token_limit = account.monthly_balance + account.permanent_balance
-
         return AccountInfoResponse(
             level=account.level_code if account else TokenConsumeSource.FREE.value,
             level_name=membership.level_name if membership else "免费用户",

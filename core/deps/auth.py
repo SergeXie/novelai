@@ -76,7 +76,7 @@ async def get_current_user(
     #     logger.warning('用户凭证已失效，请重新登录')
     #     raise AuthException(data='', message='用户凭证已失效，请重新登录！')
 
-    return query_user
+    # return query_user
 
 
 async def check_book_owner( bid: str,  db: AsyncSession = Depends(get_db), user=Depends(get_current_user)) :
