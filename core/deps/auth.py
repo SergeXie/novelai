@@ -48,13 +48,14 @@ async def get_current_user(
         pkId: str = payload.get('pkId')
         account: str = payload.get('account')
         nickname: str = payload.get('nickname')
+        avatar: str = payload.get('avatar')
         if not uuid and not pkId:
             logger.warning('用户token不合法')
             raise AuthException(message='用户token不合法')
 
         # token_data = TokenData(uuid=uuid)
         # 直接构造用户（不查数据库）
-        return CurrentUser(pkId=pkId, uuid=uuid, account=account, nickname=nickname)
+        return CurrentUser(pkId=pkId, uuid=uuid, account=account, nickname=nickname, avatar=avatar)
 
     except Exception as _:
         logger.warning('用户凭证已失效，请重新登录！')

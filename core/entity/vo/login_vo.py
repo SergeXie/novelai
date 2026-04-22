@@ -10,3 +10,4 @@ class CurrentUser(BaseModel):
     uuid: str
     account: str
     nickname: str
+    avatar: str

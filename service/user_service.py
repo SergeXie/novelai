@@ -114,6 +114,7 @@ class UserService:
                 'account': user.account,
                 'nickname': user.nickname,
                 'session_id': session_id,
+                "avatar": user.avatar
             },
             expires_delta=access_token_expires,
         )
