@@ -50,6 +50,7 @@ class AIService:
             max_tokens: int | None = None,
             tokenEstimate : int | None = 0,
             system_prompt: str | None = None,
+            enable_web_search: bool = False,
             correlation=None,
             background_tasks=None,
 
@@ -93,6 +94,7 @@ class AIService:
                 system_prompt=final_system_prompt,
                 temperature=final_temperature,
                 max_tokens=final_max_tokens,
+                enable_web_search=enable_web_search,
             )
 
         return request_id
@@ -114,6 +116,7 @@ async def async_generate_task(
         system_prompt: str,
         temperature: float,
         max_tokens: int,
+    enable_web_search: bool = False,
 ):
     """后台异步执行 AI 调用并更新结果"""
     nexus = get_ai_nexus()
@@ -132,6 +135,7 @@ async def async_generate_task(
                 system_prompt=system_prompt,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                enable_web_search=enable_web_search,
             )
             logger.info(f"【{current_provider.name}】req:{request_id} 生成结束 返回:{textwrap.shorten(ai_rsp.content, width=20, placeholder="...")}")
             break  # 成功则跳出循环
@@ -152,14 +156,14 @@ async def async_generate_task(
     if ai_rsp:
         async with get_db_context() as db:
             
-            audit_service = get_generated_content_audit_service()
-            try:
-                audit_result = await audit_service.audit_generated_result(ai_rsp, use_semantic=True)
-                if not audit_result.passed:
-                    logger.warning(f"RequestId: {request_id} 生成结果未通过审核：{audit_result.reason}")
-                    ai_rsp.content = f"{audit_result.reason}"
-            except Exception as exc:
-                logger.warning(f"RequestId: {request_id} 生成结果审核失败，按原结果继续入库: {exc}")
+            # audit_service = get_generated_content_audit_service()
+            # try:
+            #     audit_result = await audit_service.audit_generated_result(ai_rsp, use_semantic=True)
+            #     if not audit_result.passed:
+            #         logger.warning(f"RequestId: {request_id} 生成结果未通过审核：{audit_result.reason}")
+            #         ai_rsp.content = f"{audit_result.reason}"
+            # except Exception as exc:
+            #     logger.warning(f"RequestId: {request_id} 生成结果审核失败，按原结果继续入库: {exc}")
 
             await UsageService(db).update_output_content_by_request_id(
             request_id=request_id,

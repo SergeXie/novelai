@@ -717,6 +717,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "sqlalchemy" },
     { name = "uvicorn" },
+    { name = "volcengine-python-sdk", extra = ["ark"] },
     { name = "wechatpayv3" },
     { name = "zai-sdk" },
 ]
@@ -741,6 +742,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "sqlalchemy", specifier = ">=2.0.48" },
     { name = "uvicorn", specifier = ">=0.40.0" },
+    { name = "volcengine-python-sdk", extras = ["ark"], specifier = ">=5.0.24" },
     { name = "wechatpayv3", specifier = ">=2.0.2" },
     { name = "zai-sdk", specifier = ">=0.2.2" },
 ]
@@ -1213,6 +1215,29 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c3/d1/8f3c683c9561a4e6689dd3b1d345c815f10f86acd044ee1fb9a4dcd0b8c5/uvicorn-0.40.0.tar.gz", hash = "sha256:839676675e87e73694518b5574fd0f24c9d97b46bea16df7b8c05ea1a51071ea", size = 81761, upload-time = "2025-12-21T14:16:22.45Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3d/d8/2083a1daa7439a66f3a48589a57d576aa117726762618f6bb09fe3798796/uvicorn-0.40.0-py3-none-any.whl", hash = "sha256:c6c8f55bc8bf13eb6fa9ff87ad62308bbbc33d0b67f84293151efe87e0d5f2ee", size = 68502, upload-time = "2025-12-21T14:16:21.041Z" },
+]
+
+[[package]]
+name = "volcengine-python-sdk"
+version = "5.0.24"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "certifi" },
+    { name = "python-dateutil" },
+    { name = "six" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/73/1d/98d4f5c02135e070f43e9bfbda373638342ceadb219ff73855bc8b473702/volcengine_python_sdk-5.0.24.tar.gz", hash = "sha256:d36cd9e8ece24f46fde8ae57ad706c5e988f5426fbbe856c6562aeb86ac3148a", size = 8625698, upload-time = "2026-04-16T12:04:31.585Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f2/58/cdb0211395b5daf060541ade554aa0038ce85333cd400e8736b0f1bdf67d/volcengine_python_sdk-5.0.24-py2.py3-none-any.whl", hash = "sha256:0257db7828535146f13206916c18b8b67edf19741f4196513647ec94c0f5c6a2", size = 34075458, upload-time = "2026-04-16T12:04:25.359Z" },
+]
+
+[package.optional-dependencies]
+ark = [
+    { name = "anyio" },
+    { name = "cryptography" },
+    { name = "httpx" },
+    { name = "pydantic" },
 ]
 
 [[package]]
