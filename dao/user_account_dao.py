@@ -26,7 +26,9 @@ class UserAccountDAO:
         result = await db.execute(select(UserAccount).where(UserAccount.user_id == user_id))
         account = result.scalars().first()
 
-        if account and not account.is_expired:
+        if account:
             return account
+
         return None
+
 
