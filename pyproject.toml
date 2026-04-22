@@ -23,6 +23,7 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "sqlalchemy>=2.0.48",
     "uvicorn>=0.40.0",
+    "volcengine-python-sdk[ark]>=5.0.24",
     "wechatpayv3>=2.0.2",
     "zai-sdk>=0.2.2",
 ]

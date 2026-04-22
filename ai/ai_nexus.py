@@ -139,19 +139,26 @@ class AINexus:
 
     async def _generate_with_adapter(
         self,
+        provider: AIProvider,
         adapter,
         user_prompt: str,
         system_prompt: str,
         temperature: float,
         max_tokens: int = None,
+        enable_web_search: bool = False,
     ) -> AICompletionResponse:
         # 统一封装非 Ollama 模型的调用逻辑
-        ai_rsp = await adapter.generate_text(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
+        generate_kwargs = {
+            "system_prompt": system_prompt,
+            "user_prompt": user_prompt,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+        }
+
+        if provider in {AIProvider.DOUBAO, AIProvider.DOUBAOPLUS}:
+            generate_kwargs["enable_web_search"] = enable_web_search
+
+        ai_rsp = await adapter.generate_text(**generate_kwargs)
 
         # 对返回内容做统一过滤
         try:
@@ -191,7 +198,8 @@ class AINexus:
         user_prompt: str,
         system_prompt: str,
         temperature: float = 0.7,
-        max_tokens: int = None
+        max_tokens: int = None,
+        enable_web_search: bool = False,
     ) -> AICompletionResponse:
         # 根据 provider 选择对应适配器
         adapter = self._adapters.get(provider)
@@ -211,11 +219,13 @@ class AINexus:
             )
 
         return await self._generate_with_adapter(
+            provider=provider,
             adapter=adapter,
             user_prompt=user_prompt,
             system_prompt=system_prompt,
             temperature=safe_temperature,
             max_tokens=max_tokens,
+            enable_web_search=enable_web_search,
         )
 
 # 单例实例，避免重复创建 AINexus
