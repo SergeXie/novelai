@@ -13,7 +13,7 @@ scheduler = AsyncIOScheduler()
 
 
 
-@scheduler.scheduled_job("interval", minutes=1)
+@scheduler.scheduled_job("interval", minutes=10)
 async def membership_expire_job():
     """
     会员过期处理任务（最终稳定版）
