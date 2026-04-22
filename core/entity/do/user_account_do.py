@@ -128,7 +128,7 @@ class AccountLog(Base):
     # ==================== 业务关联 ====================
 
     biz_id: Mapped[str] = mapped_column(
-        String(64),
+        String(256),
         nullable=False,
         comment="业务ID（订单号 / 请求ID）"
     )
