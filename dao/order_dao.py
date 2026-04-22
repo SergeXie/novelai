@@ -39,7 +39,7 @@ class OrderDAO(BaseDAO[Order]):
         stmt = (
             select(Order)
             .where(and_(*condition))
-            .order_by(desc(Order.created_at))
+            .order_by(desc(Order.paid_at))
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
