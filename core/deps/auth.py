@@ -6,9 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.config.config import settings
 from common.config.get_db import get_db, get_db_context
 from common.exception.lzsd_exception import AuthException, IllegalBookAccessException, InsufficientTokenException
-from core.deps.token_utils import TokenManager
 from core.entity.do.users_do import User
-from core.entity.vo.user_vo import TokenData
+from core.entity.vo.login_vo import CurrentUser
 from dao.book_dao import BookDAO
 from dao.user_dao import UserDAO
 from service.account_service import AccountService
@@ -19,7 +18,7 @@ async def get_current_user(
     authorization: str = Header(None),
     dev: str = Header(None),
     db: AsyncSession = Depends(get_db)  # 优先使用注入的 Session
-) -> User| None:
+) -> CurrentUser| None:
 
     ### 根据header中token获取当前用户
     try:
@@ -46,22 +45,26 @@ async def get_current_user(
 
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
         uuid: str = payload.get('uuid')
-
-        if not uuid:
+        pkId: str = payload.get('pkId')
+        account: str = payload.get('account')
+        nickname: str = payload.get('nickname')
+        if not uuid and not pkId:
             logger.warning('用户token不合法')
             raise AuthException(message='用户token不合法')
 
-        token_data = TokenData(uuid=uuid)
+        # token_data = TokenData(uuid=uuid)
+        # 直接构造用户（不查数据库）
+        return CurrentUser(pkId=pkId, uuid=uuid, account=account, nickname=nickname)
 
     except Exception as _:
         logger.warning('用户凭证已失效，请重新登录！')
         raise AuthException(data='', message='用户token已失效，请重新登录')
 
-    query_user = await UserDAO.get_by_uuid(db, user_uuid=token_data.uuid)
-
-    if query_user is None:
-        logger.warning('用户token不合法')
-        raise AuthException(data='', message='用户token不合法')
+    # query_user = await UserDAO.get_by_uuid(db, user_uuid=token_data.uuid)
+    #
+    # if query_user is None:
+    #     logger.warning('用户token不合法')
+    #     raise AuthException(data='', message='用户token不合法')
 
     # 重启服务器不要丢失已登录的用户状态
     # 从缓存中拿出token
@@ -72,6 +75,7 @@ async def get_current_user(
     # else:
     #     logger.warning('用户凭证已失效，请重新登录')
     #     raise AuthException(data='', message='用户凭证已失效，请重新登录！')
+
     return query_user
 
 
