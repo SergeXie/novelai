@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.expression import select
 from starlette.responses import FileResponse
-
+from loguru import logger
 from common.config.config import settings
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
@@ -27,7 +27,7 @@ async def get_file(filename: str):
 
 @userController.post("/getUserFile", name="转发服务接收用户头像")
 async def user_upload(data: dict, db: AsyncSession = Depends(get_db)):
-
+    logger.info("转发服务接收用户头像..")
     file_url = data.get("file_url")
     user_id = data.get("user_id")
 
@@ -81,6 +81,8 @@ async def user_upload(data: dict, db: AsyncSession = Depends(get_db)):
         user.avatar = avatar_url
         await db.commit()
 
+        logger.info("头像更新成功 user_id={}".format(user_id))
+
         return {
             "code": 0,
             "msg": "头像更新成功",
@@ -89,6 +91,8 @@ async def user_upload(data: dict, db: AsyncSession = Depends(get_db)):
                 "avatar": avatar_url
             }
         }
+
+
 
     except Exception as e:
         return {"code": 500, "msg": str(e)}
@@ -152,7 +156,7 @@ async def user_info(
         "userId": user.pkId,
         "account": user.account,
         "nickname": user.nickname,
-
+        "avatar": user.avatar,
         # ===== 当天用量 =====
         "todayInputChars": todayInputChars,
         "todayOutputChars": todayOutputChars,
