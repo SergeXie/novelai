@@ -109,6 +109,7 @@ class UserService:
 
         access_token = await cls.create_access_token(
             data={
+                "pkId": user.pkId,
                 'uuid': user.uuid,
                 'account': user.account,
                 'nickname': user.nickname,

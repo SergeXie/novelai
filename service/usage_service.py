@@ -76,7 +76,7 @@ class UsageService:
             monthlyDeduct:int = 0,
             permanentDeduct:int = 0,
             tokenEstimate: int = 0,
-    ):
+    ) -> AiNovelGenerateLog:
         """记录一次 AI 生成日志。
 
         会补充模型配置，并把输入、输出、估算 token、状态等信息一起入库。
@@ -135,6 +135,9 @@ class UsageService:
                 return "生成失败，请切换模型或者稍后重试"
 
         return ""
+
+    async def get_log_by_request_id(self, request_id: str) -> AiNovelGenerateLog | None:
+        return await self.ai_log_dao.get_log_by_request_id(request_id=request_id)
 
     async def update_output_content_by_request_id(
             self,

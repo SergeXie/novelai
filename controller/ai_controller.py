@@ -46,7 +46,7 @@ async def generate(
     if not user_prompt:
         return ResponseUtil.error(msg="提示词不能为空")
 
-    await check_user_quota_or_raise(frozen_token_length=(len(user_prompt) + 3000), user_info=user)
+    await check_user_quota_or_raise(frozen_token_length=(len(user_prompt) + 3000), user_info=user, level=request.level)
 
     correlation = request.correlation  # 章节ID
     bid = request.bid

@@ -69,9 +69,11 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
         result = await self.db.execute(stmt)
         return result.scalar_one()
 
-    async def create_ai_generate_log(self, log_obj: AiNovelGenerateLog):
+    async def create_ai_generate_log(self, log_obj: AiNovelGenerateLog) -> AiNovelGenerateLog:
         self.db.add(log_obj)
-        await self.db.commit()  # 或者在 Service 层统一 commit
+        await self.db.commit()
+        await self.db.refresh(log_obj)
+        return log_obj
 
     async def get_log_by_request_id(self, request_id: str) -> AiNovelGenerateLog:
         """

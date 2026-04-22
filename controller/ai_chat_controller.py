@@ -7,6 +7,7 @@ from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user, check_user_quota_or_raise
 from core.entity.do.users_do import User
+from service import usage_service
 from service.ai_chat_service import AIChatService
 from service.ai_service import AIService
 from service.usage_service import UsageService
@@ -59,9 +60,12 @@ async def completions(
         action_type=AIAction.Chat.value,
         background_tasks=background_tasks,
     )
+    usage_service = UsageService(db=db)
+    log = await usage_service.get_log_by_request_id(request_id=request_id)
+    data_id = log.id if log else -1
 
     # 5. 立即返回 requestId 供前端轮询
-    return ResponseUtil.success(data={"requestId": request_id, "groupId":group_id})
+    return ResponseUtil.success(data={"requestId": request_id, "groupId":group_id, "id":data_id})
 
 
 @aiChatController.get("/history", summary="分页获取对话记录")
