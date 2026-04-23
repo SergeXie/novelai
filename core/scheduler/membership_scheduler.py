@@ -1,5 +1,3 @@
-import os
-
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime
 from loguru import logger
@@ -8,12 +6,9 @@ from core.entity.do.user_account_do import AccountLog
 from core.enums.constants import BizType, ChargeType, AssetType
 from dao.user_account_dao import UserAccountDAO
 
-
 scheduler = AsyncIOScheduler()
 
-
-
-@scheduler.scheduled_job("interval", minutes=10)
+@scheduler.scheduled_job("cron", hour=1, minute=0)
 async def membership_expire_job():
     """
     会员过期处理任务（最终稳定版）

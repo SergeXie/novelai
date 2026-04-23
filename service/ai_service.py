@@ -153,7 +153,7 @@ async def async_generate_task(
 ):
     """后台异步执行 AI 调用并更新结果"""
     nexus = get_ai_nexus()
-    ai_provider = AIProvider.from_level(ai_level)
+    ai_provider = AIProvider.parse(value=ai_level)
     # 构造待尝试的 provider 序列
     providers_to_try = [ai_provider]
     ai_rsp = None
@@ -182,7 +182,7 @@ async def async_generate_task(
             logger.info(f"【{current_provider.name}】req:{request_id} 生成异常 {e}")
             # 如果还有重试机会，且符合降级条件
             if i == 0 and ai_level > 0 and _should_retry_with_level2(e):
-                fallback = AIProvider.from_level(2)
+                fallback = AIProvider.DOUBAO
                 providers_to_try.append(fallback)
                 logger.warning(f"Req {request_id}: 命中特定错误，准备降级至 {fallback}")
                 continue

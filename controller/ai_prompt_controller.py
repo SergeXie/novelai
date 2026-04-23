@@ -135,7 +135,7 @@ async def create_book_flow(
 
     try:
         # 定死level
-        ai_provider = AIProvider.DOUBAO.to_provider()
+        ai_provider = AIProvider.DOUBAO
         workflow = CreateBookWorkflow(ai_provider=ai_provider)
         context = {"idea": idea}
         try:
