@@ -1,5 +1,6 @@
 import asyncio
 from abc import ABC, abstractmethod
+from typing import Optional
 
 from loguru import logger
 from openai import OpenAI, AsyncOpenAI
@@ -9,7 +10,14 @@ from core.entity.vo.ai_response import AICompletionResponse, TokenUsage
 
 class BaseAIAdapter(ABC):
     @abstractmethod
-    async def generate_text(self, system_prompt: str, user_prompt: str, temperature:float, max_tokens: int = None) -> AICompletionResponse:
+    async def generate_text(
+            self,
+            system_prompt: str,
+            user_prompt: str,
+            temperature: float,
+            max_tokens: int = None,
+            context_messages: Optional[list[dict]] = None,
+    ) -> AICompletionResponse:
         """
         所有适配器必须实现的文本生成方法
         """
@@ -26,21 +34,26 @@ class OpenAIBaseAdapter(BaseAIAdapter):
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.name = name
-
+        
     async def generate_text(
             self,
             system_prompt: str,
             user_prompt: str,
             temperature: float = None,
-            max_tokens: int = None
+            max_tokens: int = None,
+            context_messages: Optional[list[dict]] = None,
     ) -> AICompletionResponse:  # 指定返回类型
         try:
+            messages = [
+                {"role": "system", "content": system_prompt},
+            ]
+            if context_messages:
+                messages += context_messages
+            messages.append({"role": "user", "content": user_prompt})
+            
             response = await self.client.chat.completions.create(
                 model=self.model_name,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
+                messages=messages,
                 temperature=temperature or self.temperature,
                 max_tokens=min(max_tokens or self.max_tokens, self.max_tokens))
 
