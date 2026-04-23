@@ -1,6 +1,5 @@
 import uvicorn
 from loguru import logger
-
 from common.config.config import settings
 from common.log.logger import setup_logger, init_app_logging
 from server import register_app

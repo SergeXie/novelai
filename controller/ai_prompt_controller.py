@@ -132,6 +132,7 @@ async def create_book_flow(
 
     # 1. 校验配额-
     await check_user_quota_or_raise(frozen_token_length=3000, user_info=user)
+
     try:
         # 定死level
         ai_provider = AIProvider.DOUBAO.to_provider()

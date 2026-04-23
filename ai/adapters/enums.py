@@ -27,7 +27,7 @@ class AIProvider(str, Enum):
 
 
     @classmethod
-    def to_provider(cls, value: str | int | None) -> "AIProvider":
+    def get_provider(cls, value: str | int | None) -> "AIProvider":
         """
         [核心函数] 将多种输入转化为 AIProvider 实例
         支持输入:
@@ -55,11 +55,11 @@ class AIProvider(str, Enum):
         """保留原有函数，内部调用 to_provider 以保持逻辑统一"""
         return cls.to_provider(level)
 
-    def to_level(self) -> int:
+    def to_provider(self) -> "AIProvider":
         """根据当前供应商获取对应的等级"""
         # 反转映射表
         inv_map = {v: k for k, v in _LEVEL_MAP.items()}
-        return inv_map.get(self.value, 2)
+        return self.get_provider(inv_map.get(self.value, 2))
 
 class AIAction(str, Enum):
     Unknown = "unknown"
