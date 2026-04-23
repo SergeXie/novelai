@@ -89,7 +89,7 @@ class WorkflowService(AIService):
 async def async_generate_task(level, input_user_prompt, temperature, request_id):
     """后台异步执行 AI 调用并更新结果"""
     system_prompt, output_prompt = "", ""
-    ai_provider = AIProvider.from_level(level)
+    ai_provider = AIProvider.parse(level)
     try:
         # 真正的 AI 耗时操作
         nexus = get_ai_nexus()

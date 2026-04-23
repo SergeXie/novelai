@@ -18,7 +18,7 @@ async def execute(
         templateKey: str = Body(...),
         level: int = Body(...),
         userPrompt: str = Body(...),
-        bid: str = Body(...),
+        bid: Optional[str] = Body(None),
         inputs: Optional[dict] = Body(None),
         template: Optional[float] = Body(None),
         maxTokens: Optional[int] = Body(None),

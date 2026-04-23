@@ -107,13 +107,13 @@ async def render(
         }
 
         # 生成 requestId 并记录初始请求（不阻塞）
-        request_id = await ai_service.prepare_and_record_request(
+        request_id, _ = await ai_service.prepare_and_record_request(
             user=user,
             bid=bid,
             user_prompt=final_prompt,
             level=level,
             temperature=0.7,
-            action_type="render",
+            action_type=AIAction.Render,
             correlation=payload,
             background_tasks=background_tasks,
             origin_prompt=""
@@ -135,7 +135,7 @@ async def create_book_flow(
 
     try:
         # 定死level
-        ai_provider = AIProvider.DOUBAO.to_provider()
+        ai_provider = AIProvider.DOUBAO
         workflow = CreateBookWorkflow(ai_provider=ai_provider)
         context = {"idea": idea}
         try:

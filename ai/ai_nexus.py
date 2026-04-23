@@ -161,8 +161,9 @@ class AINexus:
 
         if provider in {AIProvider.DOUBAO, AIProvider.DOUBAOPLUS}:
             generate_kwargs["enable_web_search"] = enable_web_search
-        
-        ai_rsp = await adapter.generate_text(**generate_kwargs) 
+
+        logger.info(f"[{provider.name}] temperature:{temperature} max_tokens:{max_tokens} web_search:{enable_web_search} begin to request....")
+        ai_rsp = await adapter.generate_text(**generate_kwargs)
 
         # 对返回内容做统一过滤
         try:

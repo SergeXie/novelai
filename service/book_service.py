@@ -2,10 +2,12 @@ import io
 from typing import List, Optional
 from unittest.mock import DEFAULT
 
+import httpx
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
+from volcenginesdkaiotvideo.models import device_streams_for_list_devices_output
 
-from common.exception.errors import ServerError, NotFoundError
+from common.exception.errors import ServerError, NotFoundError, RequestError
 from common.exception.lzsd_exception import ServiceWarning
 from common.modules.html_text_extractor import quick_html_to_text
 from common.response.response_util import ResponseUtil
@@ -573,4 +575,60 @@ class BookService:
                 output.write("\n\n")
 
         return quick_html_to_text(output.getvalue())
+
+    @staticmethod
+    async def download_novel_content(url: str, timeout: float = 120.0) -> bytes:
+        """
+        [Service] 异步下载小说内容
+        :param url: 文件下载链接
+        :param timeout: 超时时间
+        :return: 文件的原始二进制内容 (bytes)
+        """
+        try:
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                logger.info(f"发起文件下载请求: {url}")
+                response = await client.get(url)
+
+                # 1. 校验状态码
+                if response.status_code == 404:
+                    raise NotFoundError(msg="下载链接已失效或文件不存在")
+                if response.status_code != 200:
+                    logger.error(f"下载失败，HTTP状态码: {response.status_code}")
+                    raise RequestError(msg=f"远程服务器返回异常: {response.status_code}")
+
+                # 2. 校验内容
+                content = response.content
+                if not content:
+                    raise RequestError(msg="下载完成，但文件内容为空")
+
+                # 3. 校验大小（建议选配：防止恶意下载超大文件导致内存崩溃）
+                # 50MB 限制
+                if len(content) > 10 * 1024 * 1024:
+                    raise RequestError(msg="文件过大，超出系统处理范围")
+
+                # 使用多编码尝试解码
+                decoded_text = None
+                for encoding in ("utf-8-sig", "utf-8", "gbk", "gb18030"):
+                    try:
+                        decoded_text = content.decode(encoding)
+                        return decoded_text
+                    except UnicodeDecodeError:
+                        continue
+
+                if decoded_text is None:
+                    decoded_text = content.decode("utf-8", errors="ignore")
+                    logger.warning("所有编码解码失败，强制使用 utf-8 ignore 模式")
+                    return decoded_text
+
+                return None
+
+        except httpx.ConnectTimeout:
+            logger.error(f"连接服务器超时: {url}")
+            raise ServerError(msg="连接服务器超时，请稍后重试")
+        except httpx.RequestError as e:
+            logger.error(f"网络异常 (httpx.RequestError): {str(e)}")
+            raise ServerError(msg="网络请求异常，请检查链接或稍后重试")
+        except Exception as e:
+            logger.error(f"下载函数内部未知错误: {str(e)}")
+            raise ServerError(msg="文件下载服务暂不可用")
 
