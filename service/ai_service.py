@@ -19,6 +19,37 @@ class AIService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+        self.fill_context = []
+    
+    async def fill_context_with_adapter(self, data: list):
+        self.fill_context = data or []
+
+    async def build_chat_context_messages(
+            self,
+            bid: str,
+            user_id: int,
+            offset_id: int = 0,
+            size: int = 10,
+    ) -> list[dict]:
+        logs, _ = await AILogDAO(self.db).get_full_logs_by_offset(
+            user_id=user_id,
+            bid=bid,
+            offset_id=offset_id,
+            size=size,
+        )
+
+        messages = []
+        for log in reversed(logs):
+            user_prompt = (getattr(log, "userPrompt", None) or "").strip()
+            output_content = (getattr(log, "outputContent", None) or "").strip()
+
+            if not user_prompt or not output_content:
+                continue
+
+            messages.append({"role": "user", "content": user_prompt})
+            messages.append({"role": "assistant", "content": output_content})
+
+        return messages
 
     async def list_models(self, only_enabled: bool = True):
         """
@@ -95,6 +126,7 @@ class AIService:
                 temperature=final_temperature,
                 max_tokens=final_max_tokens,
                 enable_web_search=enable_web_search,
+                context=self.fill_context,
             )
 
         return request_id
@@ -116,6 +148,7 @@ async def async_generate_task(
         system_prompt: str,
         temperature: float,
         max_tokens: int,
+        context: list,
     enable_web_search: bool = False,
 ):
     """后台异步执行 AI 调用并更新结果"""
@@ -129,12 +162,18 @@ async def async_generate_task(
     for i, current_provider in enumerate(providers_to_try):
         try:
             logger.info(f"【{current_provider.name}】req:{request_id} 开始生成 提示词:{textwrap.shorten(input_user_prompt, width=20, placeholder="...")} temperature:{temperature} max_tokens:{max_tokens}")
+            normalized_context = await nexus.fill_context_with_adapter(
+                provider=current_provider,
+                data=context
+                )  # 如果需要对提示词进行特殊处理，可以在这里实现
+            
             ai_rsp = await nexus.generate_novel_text(
                 provider=current_provider,
                 user_prompt=input_user_prompt,
                 system_prompt=system_prompt,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                context_messages=normalized_context,
                 enable_web_search=enable_web_search,
             )
             logger.info(f"【{current_provider.name}】req:{request_id} 生成结束 返回:{textwrap.shorten(ai_rsp.content, width=20, placeholder="...")}")
@@ -153,7 +192,7 @@ async def async_generate_task(
             error_msg = str(e)
             break
 
-    if ai_rsp:
+    if ai_rsp or error_msg:
         async with get_db_context() as db:
             
             # audit_service = get_generated_content_audit_service()

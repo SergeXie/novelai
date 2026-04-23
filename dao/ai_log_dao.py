@@ -243,7 +243,10 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
                 .order_by(desc(AiNovelGenerateLog.id))  # 使用 ID 排序比使用 createdAt 性能更稳
                 .limit(size)
             )
-            stmt = stmt.options(undefer(AiNovelGenerateLog.outputContent))
+            stmt = stmt.options(
+                undefer(AiNovelGenerateLog.outputContent),
+                undefer(AiNovelGenerateLog.userPrompt)
+            )
 
             # 注意：这里去掉了 if not with_content 的 defer 逻辑
             # outputContent 会被自然地 select 出来
