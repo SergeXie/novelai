@@ -236,7 +236,7 @@ class PromptSquareService:
             final_user_prompt = "\n".join(filter(None, [prompt, user_prompt]))
 
             ai_service = AIService(db)
-            request_id = await ai_service.prepare_and_record_request(
+            request_id, _ = await ai_service.prepare_and_record_request(
                 user=user,
                 bid=bid,
                 origin_prompt=f"【模版】{tpl.title} 【提示词】{user_prompt}",

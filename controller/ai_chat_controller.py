@@ -49,7 +49,7 @@ async def completions(
     temperature = 0.7
 
     ai_srv = AIService(db=db)
-    request_id = await ai_srv.prepare_and_record_request(
+    request_id, _ = await ai_srv.prepare_and_record_request(
         user=current_user,
         bid=group_id,
         origin_prompt=user_prompt,
@@ -58,7 +58,7 @@ async def completions(
         level=level,
         temperature=temperature,
         enable_web_search=True,
-        action_type=AIAction.Chat.value,
+        action_type=AIAction.Chat,
         background_tasks=background_tasks,
     )
     usage_service = UsageService(db=db)
@@ -101,7 +101,7 @@ async def multi_completions(
     )
     await ai_srv.fill_context_with_adapter(context_messages)
     
-    request_id = await ai_srv.prepare_and_record_request(
+    request_id, _ = await ai_srv.prepare_and_record_request(
         user=current_user,
         bid=group_id,
         origin_prompt=content,
@@ -110,7 +110,7 @@ async def multi_completions(
         level=level,
         temperature=temperature,
         enable_web_search=True,
-        action_type=AIAction.Chat.value,
+        action_type=AIAction.Chat,
         background_tasks=background_tasks,
     )
 

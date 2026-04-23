@@ -1,26 +1,32 @@
 import json
+import os
 import uuid
 from typing import Optional, List
+from urllib.parse import urlparse
 
 import httpx
 from cachetools import TTLCache
 from fastapi import APIRouter, Depends, Query, Body
 from loguru import logger
+from openai.resources.skills import content
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql.functions import user
 
+from ai.adapters.enums import AIProvider, AIAction
 from common.config.get_db import get_db
 from common.exception.errors import RequestError, NotFoundError, ServerError
-from common.modules.html_text_extractor import write_simple_txt
 from common.response.response_util import ResponseUtil
-from core.deps.auth import get_current_user, check_book_owner
+from core.deps.auth import get_current_user, check_user_quota_or_raise
 from core.entity.do.users_do import User
+from core.entity.vo.ai_response import AICompletionResponse
 from core.entity.vo.book_node_schema import BookResp, CreateBookReq, BookNodeDetailResp, UpdateBookNodeReq, \
     EditBookNodeReq, EditBookNodeResp, AddChapterResp, AddBookNodeReq, DeleteBookNodeReq, OfflineBookReq, EditBookReq, \
     HardDeleteBookReq
 from core.entity.vo.bool_vo import AutoCreateBookReq
 from core.entity.vo.confirm_import_req import ConfirmImportRequest
 from core.processor.book_processor import Chapter, NovelProcessor
+from service import ai_service
+from service.ai_prompt_service import PromptService
+from service.ai_service import AIService
 from service.book_service import BookService
 
 bookController = APIRouter()
@@ -168,7 +174,7 @@ async def get_book_node_detail(
 async def edit_book_node(
         req: UpdateBookNodeReq,
         db: AsyncSession = Depends(get_db),
-        current_user:User = Depends(get_current_user)
+        current_user: User = Depends(get_current_user)
 ):
     """
     编辑书籍节点内容接口
@@ -239,10 +245,11 @@ async def create_book(
 async def create_book_auto(
         req: AutoCreateBookReq,
         db: AsyncSession = Depends(get_db),
-        current_user:User= Depends(get_current_user)
+        current_user: User = Depends(get_current_user)
 ):
     service = BookService(db)
-    book = await service.auto_create_book(user_id=current_user.pkId, title=req.title, summary=req.summary, roles=req.characters)
+    book = await service.auto_create_book(user_id=current_user.pkId, title=req.title, summary=req.summary,
+                                          roles=req.characters)
     if not book:
         return ResponseUtil.error(msg="未知错误")
     else:
@@ -305,7 +312,10 @@ async def hard_delete_book(
 
     return ResponseUtil.success(data=result)
 
+
 parse_cache = TTLCache(maxsize=1000, ttl=1800)
+
+
 @bookController.post(path="/book/import", name="导入书籍获取章节信息")
 async def import_book(url: str = Body(..., embed=True, description="txt连接")):
     """
@@ -375,14 +385,18 @@ async def import_book(url: str = Body(..., embed=True, description="txt连接"))
             }
             for c in chapters
         ]
-        return ResponseUtil.success(data={"taskId":task_id, "chapter":data})
+
+        path = urlparse(clean_url).path
+        filename = os.path.basename(path)
+
+        return ResponseUtil.success(data={"taskId": task_id, "chapter": data, "fileName": filename})
 
     except Exception as e:
         logger.error(f"解析小说内容时发生致命错误: {str(e)}")
         raise ServerError(msg="小说解析失败")
 
 
-@bookController.post("/book/confirm")
+@bookController.post(path="/book/confirm", name="导入作品后确认创建书籍")
 async def confirm(
         req: ConfirmImportRequest,
         db: AsyncSession = Depends(get_db),
@@ -419,7 +433,42 @@ async def confirm(
         logger.error(f"确认导入失败: {str(e)}")
         raise ServerError(msg="保存书籍失败，请联系管理员")
 
-@bookController.post("/book/export")
+@bookController.post(path="/book/deconstruct", name="拆书")
+async def deconstruct(
+        url: str = Body(..., embed=True, description="txt连接"),
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user)
+):
+    content = await BookService.download_novel_content(url=url)
+    if not content:
+        raise NotFoundError(msg="资源不存在")
+
+
+    tool_key = "wenyuan_deconstructor_2"
+    params = {
+        "noval": content
+    }
+    prompt_service = PromptService(db)
+    user_prompt = await prompt_service.render_prompt_tool(book=None, tool_key=tool_key, inputs=params)
+
+    level = AIProvider.DOUBAO.value
+    check_user_quota_or_raise(frozen_token_length=len(user_prompt)*2, user_info=current_user, level=level)
+
+    ai_service = AIService(db)
+    request_id, ai_rsp = await ai_service.prepare_and_record_request(
+        user=current_user,
+        origin_prompt="拆书",
+        user_prompt=user_prompt,
+        level=level,
+        action_type=AIAction.Execute,
+        background_tasks=None
+    )
+    if ai_rsp:
+        return ResponseUtil.success(data=ai_rsp.content)
+    else:
+        return ResponseUtil.error()
+
+@bookController.post(path="/book/export", name="导出作品")
 async def export(
         bid: str = Body(..., embed=True),
         db: AsyncSession = Depends(get_db),
@@ -430,3 +479,6 @@ async def export(
     # write_simple_txt(uuid.uuid4().hex + ".txt", text)
     # todo 导出文本上传到外网-->发地址
     return ResponseUtil.success(data=text)
+
+
+
