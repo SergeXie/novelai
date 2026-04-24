@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.config.config import settings
 from common.exception.lzsd_exception import ServiceWarning
 from core.entity.do.user_account_do import UserAccount, AccountLog
 from core.entity.vo.user_vo import AccountInfoResponse
@@ -11,6 +12,7 @@ from core.enums.token_consume_source import TokenConsumeSource
 from dao.membership_dao import MembershipDAO
 from dao.package_dao import PackageDAO
 from dao.user_account_dao import UserAccountDAO
+from service.usage_service import UsageService
 
 
 class AccountService:
@@ -65,6 +67,12 @@ class AccountService:
         """
         获取用户资产信息
         """
+        # =============计算个人每天免费额度===================
+        usage_service = UsageService(db)
+        input_total, output_total = await usage_service._get_user_daily_input_output(user_id)
+        user_already_used_weighted = int((input_total + output_total) * settings.MULTIPLIER)
+        # 计算今天剩余可用的免费额度
+        free_limit_remaining = max(0, settings.USER_DAILY_TOKEN_LIMIT - user_already_used_weighted)
         # ==================== 1. 获取账户 ====================
         account = await UserAccountDAO.get_active_account(db=db, user_id=user_id)
         if not account:
@@ -74,6 +82,10 @@ class AccountService:
             return AccountInfoResponse(
                 level=UserLevel.FREE.value,
                 level_name=UserLevel.get_descriptions()[UserLevel.FREE],
+                monthly_balance=settings.USER_DAILY_TOKEN_LIMIT,
+                remaining_balance=free_limit_remaining,
+                total_consumed=user_already_used_weighted,
+                total_amount=settings.USER_DAILY_TOKEN_LIMIT
             )
 
         # ==================== 2. 获取会员配置 ====================
@@ -90,11 +102,11 @@ class AccountService:
             level=account.level_code if account else TokenConsumeSource.FREE.value,
             level_name=membership.level_name if membership else "免费用户",
             expire_at=account.expire_at if account else None,
-            monthly_balance=account.monthly_balance,
+            monthly_balance=account.monthly_balance + settings.USER_DAILY_TOKEN_LIMIT,
             permanent_balance=account.permanent_balance,
-            remaining_balance=total_balance,
-            total_consumed=account.total_consumed,
-            total_amount = account.total_amount
+            remaining_balance=total_balance + user_already_used_weighted,
+            total_consumed=account.total_consumed + user_already_used_weighted,
+            total_amount = account.total_amount + settings.USER_DAILY_TOKEN_LIMIT
         )
 
     @staticmethod
