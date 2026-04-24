@@ -9,6 +9,7 @@ from common.config.config import settings
 from common.utils.generator import LZSDGenerator
 from common.config.get_db import get_db_context
 from core.entity.do.users_do import User
+from core.entity.vo.ai_response import AICompletionResponse
 from dao.ai_log_dao import AILogDAO
 from dao.ai_model_dao import AiModelDAO
 from service.usage_service import UsageService
@@ -19,6 +20,37 @@ class AIService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+        self.fill_context = []
+    
+    async def fill_context_with_adapter(self, data: list):
+        self.fill_context = data or []
+
+    async def build_chat_context_messages(
+            self,
+            bid: str,
+            user_id: int,
+            offset_id: int = 0,
+            size: int = 10,
+    ) -> list[dict]:
+        logs, _ = await AILogDAO(self.db).get_full_logs_by_offset(
+            user_id=user_id,
+            bid=bid,
+            offset_id=offset_id,
+            size=size,
+        )
+
+        messages = []
+        for log in reversed(logs):
+            user_prompt = (getattr(log, "userPrompt", None) or "").strip()
+            output_content = (getattr(log, "outputContent", None) or "").strip()
+
+            if not user_prompt or not output_content:
+                continue
+
+            messages.append({"role": "user", "content": user_prompt})
+            messages.append({"role": "assistant", "content": output_content})
+
+        return messages
 
     async def list_models(self, only_enabled: bool = True):
         """
@@ -44,19 +76,19 @@ class AIService:
             origin_prompt: str,
             user_prompt: str,
             level: int,
-            action_type: str,
+            action_type: AIAction,
             bid: str | None = None,
             temperature: float | None = None,
             max_tokens: int | None = None,
-            tokenEstimate : int | None = 0,
+            tokenEstimate: int | None = 0,
             system_prompt: str | None = None,
             enable_web_search: bool = False,
             correlation=None,
             background_tasks=None,
-
-    )->str:
+    ) -> tuple[str, None] | tuple[str, AICompletionResponse | None]:
         """
-        第一阶段：校验、记录、生成请求ID (同步执行，快速返回)
+        第一阶段：校验、记录、生成请求ID
+        当 background_tasks 为 None 时，直接同步等待任务完成。
         """
         user_id = user.pkId
         request_id = LZSDGenerator.generate_request_id()
@@ -70,6 +102,8 @@ class AIService:
         usage_service = UsageService(self.db)
 
         input_user_prompt = user_prompt
+
+        # 1. 记录初始请求
         await usage_service.record(
             user_id=user_id,
             request_id=request_id,
@@ -82,22 +116,31 @@ class AIService:
             temperature=final_temperature,
             output_content="",
             action_type=AIAction(action_type),
-
         )
 
-        if background_tasks is not None:
-            background_tasks.add_task(
-                async_generate_task,
-                request_id=request_id,
-                ai_level=level,
-                input_user_prompt=input_user_prompt,
-                system_prompt=final_system_prompt,
-                temperature=final_temperature,
-                max_tokens=final_max_tokens,
-                enable_web_search=enable_web_search,
-            )
+        # 2. 任务分发逻辑
+        task_kwargs = {
+            "request_id": request_id,
+            "ai_level": level,
+            "input_user_prompt": input_user_prompt,
+            "system_prompt": final_system_prompt,
+            "temperature": final_temperature,
+            "max_tokens": final_max_tokens,
+            "enable_web_search": enable_web_search,
+            "context": self.fill_context,
+        }
 
-        return request_id
+        if background_tasks is not None:
+            # 异步模式：交给 FastAPI 后台进程，函数立即返回 request_id
+            background_tasks.add_task(async_generate_task, **task_kwargs)
+            logger.info(f"任务 {request_id} 已加入后台队列")
+            return request_id, None
+        else:
+            # 同步模式：直接等待异步任务执行完毕（阻塞当前请求）
+            logger.info(f"任务 {request_id} 正在同步执行...")
+            ai_rsp = await async_generate_task(**task_kwargs)
+            return request_id, ai_rsp
+
 
 
 def _should_retry_with_level2(error: Exception) -> bool:
@@ -116,11 +159,12 @@ async def async_generate_task(
         system_prompt: str,
         temperature: float,
         max_tokens: int,
+        context: list,
     enable_web_search: bool = False,
-):
+) -> AICompletionResponse | None:
     """后台异步执行 AI 调用并更新结果"""
     nexus = get_ai_nexus()
-    ai_provider = AIProvider.from_level(ai_level)
+    ai_provider = AIProvider.parse(value=ai_level)
     # 构造待尝试的 provider 序列
     providers_to_try = [ai_provider]
     ai_rsp = None
@@ -129,12 +173,18 @@ async def async_generate_task(
     for i, current_provider in enumerate(providers_to_try):
         try:
             logger.info(f"【{current_provider.name}】req:{request_id} 开始生成 提示词:{textwrap.shorten(input_user_prompt, width=20, placeholder="...")} temperature:{temperature} max_tokens:{max_tokens}")
+            normalized_context = await nexus.fill_context_with_adapter(
+                provider=current_provider,
+                data=context
+                )  # 如果需要对提示词进行特殊处理，可以在这里实现
+            
             ai_rsp = await nexus.generate_novel_text(
                 provider=current_provider,
                 user_prompt=input_user_prompt,
                 system_prompt=system_prompt,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                context_messages=normalized_context,
                 enable_web_search=enable_web_search,
             )
             logger.info(f"【{current_provider.name}】req:{request_id} 生成结束 返回:{textwrap.shorten(ai_rsp.content, width=20, placeholder="...")}")
@@ -143,7 +193,7 @@ async def async_generate_task(
             logger.info(f"【{current_provider.name}】req:{request_id} 生成异常 {e}")
             # 如果还有重试机会，且符合降级条件
             if i == 0 and ai_level > 0 and _should_retry_with_level2(e):
-                fallback = AIProvider.from_level(2)
+                fallback = AIProvider.DOUBAO
                 providers_to_try.append(fallback)
                 logger.warning(f"Req {request_id}: 命中特定错误，准备降级至 {fallback}")
                 continue
@@ -153,7 +203,7 @@ async def async_generate_task(
             error_msg = str(e)
             break
 
-    if ai_rsp:
+    if ai_rsp or error_msg:
         async with get_db_context() as db:
             
             # audit_service = get_generated_content_audit_service()
@@ -170,4 +220,6 @@ async def async_generate_task(
             ai_rsp=ai_rsp,
             status=AIGenerateStatus.SUCCESS if ai_rsp else AIGenerateStatus.FAILED,
             error_msg=error_msg)
+
+    return ai_rsp
 

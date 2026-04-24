@@ -1,65 +1,31 @@
 from enum import Enum, IntEnum
-from typing import Dict
+from enum import IntEnum
 
-# 等级与供应商值的映射
-_LEVEL_MAP: Dict[int, str] = {
-    0: "ollama",
-    1: "deepseek",
-    2: "doubao",
-    3: "doubaoplus",
-    4: "claude",
-    5: "gemini",
-    6: "gpt",
-    7: "zhipu",
-    8: "claudethinking",
-}
-
-class AIProvider(str, Enum):
-    FREE = "ollama"
-    DEEPSEEK = "deepseek"
-    DOUBAO = "doubao"
-    DOUBAOPLUS = "doubaoplus"
-    CLAUDE = "claude"
-    GEMINI = "gemini"
-    GPT = "gpt"
-    ZHIPU = "zhipu"
-    CLAUDETHINKING = "claudethinking"
-
+class AIProvider(IntEnum):
+    FREE = 0
+    DEEPSEEK = 1
+    DOUBAO = 2
+    DOUBAOPLUS = 3
+    CLAUDE = 4
+    GEMINI = 5
+    GPT = 6
+    ZHIPU = 7
+    CLAUDETHINKING = 8
 
     @classmethod
-    def to_provider(cls, value: str | int | None) -> "AIProvider":
+    def parse(cls, value: int | None) -> "AIProvider":
         """
-        [核心函数] 将多种输入转化为 AIProvider 实例
-        支持输入:
-        1. 字符串 (如 "deepseek") -> 直接匹配
-        2. 整数 (如 1) -> 按等级匹配
-        3. None -> 返回默认供应商
+        将整数转化为 AIProvider 实例
+        如果输入为 None 或未在枚举中定义，则默认为 DOUBAO (2)
         """
         if value is None:
             return cls.DOUBAO
 
-        # 如果输入是整数，走 level 匹配逻辑
-        if isinstance(value, int):
-            provider_str = _LEVEL_MAP.get(value, cls.DOUBAO.value)
-            return cls(provider_str)
-
-        # 如果输入是字符串，尝试直接实例化
         try:
             return cls(value)
         except ValueError:
-            # 如果字符串不匹配任何枚举值，返回默认值或抛出异常
+            # 当 value 不在 0-8 范围内时，返回默认供应商
             return cls.DOUBAO
-
-    @classmethod
-    def from_level(cls, level: int | None) -> "AIProvider":
-        """保留原有函数，内部调用 to_provider 以保持逻辑统一"""
-        return cls.to_provider(level)
-
-    def to_level(self) -> int:
-        """根据当前供应商获取对应的等级"""
-        # 反转映射表
-        inv_map = {v: k for k, v in _LEVEL_MAP.items()}
-        return inv_map.get(self.value, 2)
 
 class AIAction(str, Enum):
     Unknown = "unknown"

@@ -1,4 +1,5 @@
 import asyncio
+from typing import Optional
 
 from loguru import logger
 from volcenginesdkarkruntime import Ark
@@ -35,6 +36,7 @@ class DoubaoPlusAdapter(OpenAIBaseAdapter):
         user_prompt: str,
         temperature: float = None,
         max_tokens: int = None,
+        context_messages: Optional[list[dict]] = None,
         enable_web_search: bool = False,
     ) -> AICompletionResponse:
         if not enable_web_search:
@@ -43,6 +45,7 @@ class DoubaoPlusAdapter(OpenAIBaseAdapter):
                 user_prompt=user_prompt,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                context_messages=context_messages,
             )
 
         try:
@@ -53,6 +56,7 @@ class DoubaoPlusAdapter(OpenAIBaseAdapter):
                 "model": self.model_name,
                 "input": [
                     {"role": "system", "content": system_prompt},
+                    *(context_messages or []),
                     {"role": "user", "content": user_prompt},
                 ],
                 "temperature": final_temperature,

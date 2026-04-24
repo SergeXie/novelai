@@ -28,6 +28,7 @@ class _QueuedOllamaRequest:
     user_prompt: str
     temperature: float
     max_tokens: Optional[int]
+    context_messages: Optional[list[dict]]
     future: asyncio.Future
 
 async def check_ai_input(prompt: str):
@@ -121,6 +122,7 @@ class AINexus:
                     user_prompt=request.user_prompt,
                     max_tokens=request.max_tokens,
                     temperature=request.temperature,
+                    context_messages=request.context_messages,
                 )
 
                 # 对返回内容做统一过滤
@@ -145,6 +147,7 @@ class AINexus:
         system_prompt: str,
         temperature: float,
         max_tokens: int = None,
+        context_messages: Optional[list[dict]] = None,
         enable_web_search: bool = False,
     ) -> AICompletionResponse:
         # 统一封装非 Ollama 模型的调用逻辑
@@ -153,11 +156,13 @@ class AINexus:
             "user_prompt": user_prompt,
             "max_tokens": max_tokens,
             "temperature": temperature,
+            "context_messages": context_messages,
         }
 
         if provider in {AIProvider.DOUBAO, AIProvider.DOUBAOPLUS}:
             generate_kwargs["enable_web_search"] = enable_web_search
 
+        logger.info(f"[{provider.name}] temperature:{temperature} max_tokens:{max_tokens} web_search:{enable_web_search} begin to request....")
         ai_rsp = await adapter.generate_text(**generate_kwargs)
 
         # 对返回内容做统一过滤
@@ -174,6 +179,7 @@ class AINexus:
         system_prompt: str,
         temperature: float,
         max_tokens: int = None,
+        context_messages: Optional[list[dict]] = None,
     ) -> AICompletionResponse:
         # 将 Ollama 请求放入队列，交由后台 worker 串行处理
         self._ensure_ollama_worker()
@@ -187,10 +193,31 @@ class AINexus:
                 user_prompt=user_prompt,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                context_messages=context_messages,
                 future=future,
             )
         )
         return await future
+
+    async def fill_context_with_adapter(self, provider: AIProvider, data: Optional[list[dict]] = None):
+        # 兼容旧调用链，统一返回已标准化的上下文消息列表
+        adapter = self._adapters.get(provider)
+        if not adapter:
+            raise ValueError(f"未支持的模型提供商: {provider}")
+
+        normalized_messages = []
+        for item in data or []:
+            if not isinstance(item, dict):
+                continue
+            role = item.get("role")
+            content = item.get("content")
+            if role not in {"user", "assistant"}:
+                continue
+            if not content:
+                continue
+            normalized_messages.append({"role": role, "content": content})
+
+        return normalized_messages
 
     async def generate_novel_text(
         self,
@@ -199,6 +226,7 @@ class AINexus:
         system_prompt: str,
         temperature: float = 0.7,
         max_tokens: int = None,
+        context_messages: Optional[list[dict]] = None,
         enable_web_search: bool = False,
     ) -> AICompletionResponse:
         # 根据 provider 选择对应适配器
@@ -216,6 +244,7 @@ class AINexus:
                 system_prompt=system_prompt,
                 temperature=safe_temperature,
                 max_tokens=max_tokens,
+                context_messages=context_messages,
             )
 
         return await self._generate_with_adapter(
@@ -225,6 +254,7 @@ class AINexus:
             system_prompt=system_prompt,
             temperature=safe_temperature,
             max_tokens=max_tokens,
+            context_messages=context_messages,
             enable_web_search=enable_web_search,
         )
 

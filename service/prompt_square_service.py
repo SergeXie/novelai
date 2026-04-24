@@ -211,19 +211,20 @@ class PromptSquareService:
         if not tpl or tpl.status != 1:
             raise NotFoundError(msg="提示词模版不存在")
 
-        book_service = BookService(db)
-        book = await book_service.get_book_by_bid(bid=bid, user_id=user.pkId)
-        if not book:
-            raise NotFoundError(msg=f"书籍[{bid}]不存在")
-
         final_inputs = inputs or {}
-        key = "sys_book_info"
-        if key in final_inputs:
-            nodes = await book_service.get_basic_nodes(bid=bid, user_id=user.pkId) or []
-            leaf_ids = [node.id for node in nodes]
-            exporter = BookExporter(db)
-            book_prompt = await exporter.export_to_markdown(book=book, leaf_node_ids=leaf_ids)
-            final_inputs[key] = book_prompt
+        if bid:
+            book_service = BookService(db)
+            book = await book_service.get_book_by_bid(bid=bid, user_id=user.pkId)
+            if not book:
+                raise NotFoundError(msg=f"书籍[{bid}]不存在")
+
+            key = "sys_book_info"
+            if key in final_inputs:
+                nodes = await book_service.get_basic_nodes(bid=bid, user_id=user.pkId) or []
+                leaf_ids = [node.id for node in nodes]
+                exporter = BookExporter(db)
+                book_prompt = await exporter.export_to_markdown(book=book, leaf_node_ids=leaf_ids)
+                final_inputs[key] = book_prompt
 
         try:
 
@@ -235,7 +236,7 @@ class PromptSquareService:
             final_user_prompt = "\n".join(filter(None, [prompt, user_prompt]))
 
             ai_service = AIService(db)
-            request_id = await ai_service.prepare_and_record_request(
+            request_id, _ = await ai_service.prepare_and_record_request(
                 user=user,
                 bid=bid,
                 origin_prompt=f"【模版】{tpl.title} 【提示词】{user_prompt}",

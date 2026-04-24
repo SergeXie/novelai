@@ -60,14 +60,14 @@ async def generate(
 
     combined_user_prompt = f"{final_prompt}\n{user_prompt}"
     
-    request_id = await ai_service.prepare_and_record_request(
+    request_id, _ = await ai_service.prepare_and_record_request(
         user=user,
         bid=bid,
         origin_prompt=user_prompt,
         user_prompt=combined_user_prompt,
         level=level,
         temperature=temperature,
-        action_type=AIAction.Generate.value,
+        action_type=AIAction.Generate,
         correlation=correlation,
         background_tasks=background_tasks,
     )
