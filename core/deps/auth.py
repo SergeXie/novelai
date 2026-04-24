@@ -107,7 +107,7 @@ async def check_user_quota_or_raise(frozen_token_length: int, user_info: User, l
 
         if account.level == "free" and level:
             if level not in [0, 2]:  # TODO 0 执笔 2 才女
-                raise InsufficientTokenException("免费用户只能使用执笔与才女")
+                raise InsufficientTokenException("免费用户只能使用执笔与才女模型")
 
         # 情况 A：付费额度充足，直接放行 (这是最快的路径)
         if user_paid_balance >= frozen_token_length:
