@@ -157,10 +157,8 @@ class AINexus:
             "max_tokens": max_tokens,
             "temperature": temperature,
             "context_messages": context_messages,
+            "enable_web_search": enable_web_search,
         }
-
-        if provider in {AIProvider.DOUBAO, AIProvider.DOUBAOPLUS}:
-            generate_kwargs["enable_web_search"] = enable_web_search
 
         logger.info(f"[{provider.name}] temperature:{temperature} max_tokens:{max_tokens} web_search:{enable_web_search} begin to request....")
         ai_rsp = await adapter.generate_text(**generate_kwargs)

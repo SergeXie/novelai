@@ -8,7 +8,7 @@ import httpx
 from cachetools import TTLCache
 from fastapi import APIRouter, Depends, Query, Body
 from loguru import logger
-from openai.resources.skills import content
+# from openai.resources.skills import content
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.adapters.enums import AIProvider, AIAction

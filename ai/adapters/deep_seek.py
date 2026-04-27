@@ -1,6 +1,7 @@
 from ai.adapters.base_adapter import OpenAIBaseAdapter
 from common.config.config import settings
 
+
 class DeepSeekAdapter(OpenAIBaseAdapter):
     def __init__(self):
         super().__init__(name="Deepseek",

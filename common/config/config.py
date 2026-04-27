@@ -88,6 +88,8 @@ class Settings(BaseSettings):
     CLOUD_ADDRESS: str = Field(alias="CLOUD_ADDRESS", default="")
 
     UPLOAD_USERS_DIR: str = Field(alias="UPLOAD_USERS_DIR", default="")
+    WEB_SEARCH_API_KEY: str = Field(alias="WEB_SEARCH_API_KEY", default="")
+    WEB_SEARCH_URL: str = Field(alias="WEB_SEARCH_URL", default="https://open.feedcoopapi.com/search_api/web_search")
 
     @field_validator("ai_system_prompt", mode="after")
     @classmethod
