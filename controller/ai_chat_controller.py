@@ -30,7 +30,7 @@ async def delete_group(
     return ResponseUtil.success()
 
 
-@aiChatController.post("/completions")
+@aiChatController.post("/multi/completions")
 async def completions(
         background_tasks: BackgroundTasks,
         gid: Optional[str] = Body(None, embed=True),
@@ -69,38 +69,52 @@ async def completions(
     return ResponseUtil.success(data={"requestId": request_id, "groupId":group_id, "id":data_id})
 
 
-@aiChatController.post("/multi/completions")
+@aiChatController.post("/completions")
 async def multi_completions(
         background_tasks: BackgroundTasks,
         content: str = Body(..., embed=True),
         level: int = Body(2, embed=True),
-        gid: str = Body(..., embed=True),
-        offsetId: int = Body(0, embed=True),
-        size: int = Body(10, ge=1, le=500, embed=True),
+        gid: Optional[str] = Body(None, embed=True),
         db=Depends(get_db),
         current_user: User = Depends(get_current_user),
 ):
     """
-    多轮对话最简单壳：
-    先保留接口，后续再接入历史消息拼接、上下文裁剪、模型调用等逻辑。
+    多轮对话：
+    - gid 为空：创建新会话，不加载上下文
+    - gid 不为空：按原逻辑加载上下文
     """
+    offsetId = 0
+    size = 10
+
     if not content:
         return ResponseUtil.error(msg="聊天内容不能为空")
-    print('请求内容：', content)
-    
-    await check_user_quota_or_raise(frozen_token_length=(len(content) + 3000), user_info=current_user)
 
-    group_id = await AIChatService.completions(db=db, gid=gid, current_user=current_user, content=content)
+    print("请求内容：", content)
+
+    await check_user_quota_or_raise(
+        frozen_token_length=(len(content) + 3000),
+        user_info=current_user
+    )
+
+    has_context = bool(gid)
+    group_id = await AIChatService.completions(
+        db=db,
+        gid=gid,
+        current_user=current_user,
+        content=content
+    )
     temperature = 0.7
     ai_srv = AIService(db=db)
-    context_messages = await ai_srv.build_chat_context_messages(
-        bid=group_id,
-        user_id=current_user.pkId,
-        offset_id=offsetId,
-        size=size,
-    )
-    await ai_srv.fill_context_with_adapter(context_messages)
-    
+
+    if has_context:
+        context_messages = await ai_srv.build_chat_context_messages(
+            bid=group_id,
+            user_id=current_user.pkId,
+            offset_id=offsetId,
+            size=size,
+        )
+        await ai_srv.fill_context_with_adapter(context_messages)
+
     request_id, _ = await ai_srv.prepare_and_record_request(
         user=current_user,
         bid=group_id,
