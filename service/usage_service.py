@@ -44,6 +44,12 @@ class UsageService:
         intput_count, output_count, _, _, _ = await self.ai_log_dao.get_usage_sum(user_id, start, end)
         return intput_count, output_count
 
+    async def _get_user_daily_input_output(self, user_id: int) -> tuple[int, int]:
+        """获取用户今天累计的输入长度和输出长度。"""
+        start, end = self.get_today_range()
+        intput_count, output_count, _, _, _ = await self.ai_log_dao._get_usage_sum(user_id, start, end)
+        return intput_count, output_count
+
     async def get_user_total_input_output(self, user_id: int) -> tuple[int, int]:
         """获取用户历史累计的输入长度和输出长度。"""
         intput_total_count, output_total_count, actualAmount, freeDeduct, permanentDeduct = await self.ai_log_dao.get_usage_sum(user_id)
@@ -261,7 +267,6 @@ class UsageService:
         # 2. 查询用户当前所有资产
         account = await UserAccountDAO.get_active_account(db=self.db, user_id=user_id)
 
-        print("account:{}".format(account))
         remaining_to_pay = actual_amount
 
         # --- 资产拆解扣减逻辑 (顺序调整) ---
@@ -271,10 +276,9 @@ class UsageService:
         # 假设你的 check_quota 逻辑里已经算过了，这里我们需要知道用户今天还能免单多少
         input_total, output_total = await self.get_user_daily_input_output(user_id)
         user_already_used_weighted = int((input_total + output_total) * multiplier)
-
         # 计算今天剩余可用的免费额度
         free_limit_remaining = max(0, settings.USER_DAILY_TOKEN_LIMIT - user_already_used_weighted)
-        print("今日剩余可用额度：{}".format(remaining_to_pay))
+        print("本次使用的额度：{}".format(remaining_to_pay))
         if free_limit_remaining > 0 and remaining_to_pay > 0:
             free_deduct = min(free_limit_remaining, remaining_to_pay)
             log_entry.freeDeduct = free_deduct

@@ -55,6 +55,44 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             logger.error(f"Usage sum failed for user {user_id}: {e}")
             return 0, 0, 0, 0, 0
 
+    async def _get_usage_sum(self,
+                            user_id: int,
+                            start_time: datetime = None,
+                            end_time: datetime = None) -> Tuple[int, int, int, int, int]:
+        """
+        高效统计：利用索引下推减少内存扫描，并处理空值。
+        """
+        # 1. 预构建聚合列，增加别名方便调试
+        metrics = [
+            func.coalesce(cast(func.sum(self.model.requestInputLength), Integer), 0).label("in_len"),
+            func.coalesce(cast(func.sum(self.model.outputLength), Integer), 0).label("out_len"),
+            func.coalesce(cast(func.sum(self.model.actualAmount), Integer), 0).label("total"),
+            func.coalesce(cast(func.sum(self.model.freeDeduct), Integer), 0).label("free"),
+            func.coalesce(cast(func.sum(self.model.permanentDeduct), Integer), 0).label("perm")
+        ]
+
+        # 2. 构造查询：务必确保 userId 和 createdAt 组合索引被激活
+        stmt = select(*metrics).where(
+            self.model.userId == user_id,
+            self.model.status == 2,
+            self.model.isDelete == 0  # 增加逻辑删除过滤，避免统计无效数据
+        )
+
+        if start_time:
+            stmt = stmt.where(self.model.createdAt >= start_time)
+        if end_time:
+            stmt = stmt.where(self.model.createdAt <= end_time)
+
+        # 3. 使用 execute().one() 的安全解包
+        # 4G 服务器建议：使用 scalars 或 row 结果前先检查
+        try:
+            result = await self.db.execute(stmt)
+            row = result.one()
+            return tuple(row)
+        except Exception as e:
+            logger.error(f"Usage sum failed for user {user_id}: {e}")
+            return 0, 0, 0, 0, 0
+
     async def get_platform_usage_sum(self, start_time: datetime, end_time: datetime) -> int:
         """
         统计全平台在特定时间内的总 Token 消耗
