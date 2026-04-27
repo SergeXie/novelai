@@ -86,6 +86,8 @@ async def multi_completions(
     offsetId = 0
     size = 10
 
+
+
     if not content:
         return ResponseUtil.error(msg="聊天内容不能为空")
 
@@ -93,7 +95,8 @@ async def multi_completions(
 
     await check_user_quota_or_raise(
         frozen_token_length=(len(content) + 3000),
-        user_info=current_user
+        user_info=current_user,
+        level=level
     )
 
     has_context = bool(gid)
