@@ -368,7 +368,8 @@ async def qr_status(state: str, db: AsyncSession = Depends(get_db)):
 
     row = result.scalar_one_or_none()
 
-    if row.status == "register":
+
+    if row and row.status == "register":
         data = {
             "status": "register",
             "openid": row.openid,
@@ -376,7 +377,7 @@ async def qr_status(state: str, db: AsyncSession = Depends(get_db)):
         }
         return ResponseUtil.success(data=data)
 
-    elif row.status == "login":
+    elif row and row.status == "login":
         return ResponseUtil.success(msg='登录成功', dict_content={'data': json.loads(row.token)})
 
     else:
