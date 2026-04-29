@@ -1,6 +1,7 @@
+import json
 import secrets
 import uuid
-from datetime import timedelta
+from datetime import timedelta, datetime
 from typing import Optional
 from urllib.parse import quote
 
@@ -18,7 +19,7 @@ from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user
 from core.deps.token_utils import TokenManager
-from core.entity.do.users_do import User, OnlineStatus
+from core.entity.do.users_do import User, OnlineStatus, WechatLoginState
 from core.entity.vo.login_vo import UserLogin
 from core.entity.vo.user_schema import ChangePasswordReq
 from service.user_service import UserService
@@ -208,7 +209,7 @@ REDIRECT_URI = "http://wenyuanai.com/novelAI/qr_callback"
 
 
 @loginController.get("/wechat/qr_login")
-def wechat_qr_login():
+async def wechat_qr_login(db: AsyncSession = Depends(get_db)):
     state = uuid.uuid4().hex
 
     # ✅ 关键修复：完整编码
@@ -229,13 +230,24 @@ def wechat_qr_login():
         "state": state
     }
 
+    state = uuid.uuid4().hex
+
+    row = WechatLoginState(
+        state=state,
+        status="waiting",
+        expireTime=datetime.utcnow() + timedelta(minutes=5)
+    )
+
+    db.add(row)
+    await db.commit()
+
     return ResponseUtil.success(data=data)
 
 
 # =====================================================
 # 微信扫码登录回调（异步 SQLAlchemy）
 # =====================================================
-@loginController.get("/qr_callback")
+@loginController.get("/qr_callback", name="微信扫码回调")
 async def qr_callback(
     code: str = "",
     state: str = "",
@@ -279,6 +291,15 @@ async def qr_callback(
     # =============================
     # 已注册 → 直接登录
     # =============================
+
+    login = await db.execute(
+        select(WechatLoginState).where(
+            WechatLoginState.state == state
+        )
+    )
+    row = login.scalar_one_or_none()
+
+
     if user:
         access_token_expires = timedelta(minutes=settings.jwt_expire_minutes)
         session_id = str(uuid.uuid4())
@@ -310,6 +331,14 @@ async def qr_callback(
             "account": user.account,
             "nickname": user.nickname
         }
+
+
+        row.status = "login"
+        row.openid = openid
+        row.unionid = unionid
+        row.token = json.dumps(data)
+        await db.commit()
+
         return ResponseUtil.success(msg='登录成功', dict_content={'data': data})
 
     # =============================
@@ -321,4 +350,37 @@ async def qr_callback(
         "unionid": unionid
     }
 
+    row.status = "register"
+    row.openid = openid
+    row.unionid = unionid
+    await db.commit()
+
+
     return ResponseUtil.success(data=data)
+
+
+@loginController.get("/wechat/qr_status")
+async def qr_status(state: str, db: AsyncSession = Depends(get_db)):
+
+    result = await db.execute(
+        select(WechatLoginState).where(
+            WechatLoginState.state == state
+        )
+    )
+
+    row = result.scalar_one_or_none()
+
+    if row.status == "register":
+        data = {
+            "status": "register",
+            "openid": row.openid,
+            "unionid": row.unionid
+        }
+        return ResponseUtil.success(data=data)
+
+    elif row.status == "login":
+        return ResponseUtil.success(msg='登录成功', dict_content={'data': json.loads(row.token)})
+
+    else:
+        data =  {"status": False}
+        return ResponseUtil.success(data=data)
