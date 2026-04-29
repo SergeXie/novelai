@@ -230,8 +230,6 @@ async def wechat_qr_login(db: AsyncSession = Depends(get_db)):
         "state": state
     }
 
-    state = uuid.uuid4().hex
-
     row = WechatLoginState(
         state=state,
         status="waiting",
