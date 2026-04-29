@@ -136,7 +136,7 @@ FRONT_LOGIN_SUCCESS_URL = "https://wenyuanai.com/novelAi/#/loginSuccess"
 APP_ID = "wxd81a903a6cff7273"
 
 # ⚠️ 必须 HTTPS + 已配置回调域名
-REDIRECT_URI = "http://wenyuanai.com/novelAI/order/qr_callback"
+REDIRECT_URI = "http://wenyuanai.com/novelAI/qr_callback"
 
 
 @loginController.get("/wechat/qr_login")
