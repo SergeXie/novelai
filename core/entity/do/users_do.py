@@ -72,7 +72,7 @@ class User(Base):
 
 
 class WechatLoginState(Base):
-    __tablename__ = "wechat_login_state"
+    __tablename__ = "mc_wechat_login_state"
 
     # 主键ID
     pkId: Mapped[int] = mapped_column(
