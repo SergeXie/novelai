@@ -1,6 +1,7 @@
 import secrets
 import uuid
 from datetime import timedelta
+from typing import Optional
 from urllib.parse import quote
 
 import bcrypt
@@ -24,12 +25,41 @@ from service.user_service import UserService
 
 loginController = APIRouter()
 
-
 class UserRegisterRequest(BaseModel):
-    account: str = Field(..., min_length=4, max_length=64)
-    password: str = Field(..., min_length=6, max_length=64)
-    nickname: str = Field(..., min_length=1, max_length=64)
+    # 基础注册信息
+    account: str = Field(
+        ...,
+        min_length=4,
+        max_length=64,
+        description="账号"
+    )
 
+    password: str = Field(
+        ...,
+        min_length=6,
+        max_length=64,
+        description="密码"
+    )
+
+    nickname: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="昵称"
+    )
+
+    # 微信注册时携带（普通注册可不传）
+    openid: Optional[str] = Field(
+        default=None,
+        max_length=64,
+        description="微信openid"
+    )
+
+    unionid: Optional[str] = Field(
+        default=None,
+        max_length=64,
+        description="微信unionid"
+    )
 
 @loginController.post('/login', name="登录")
 async def login(user_login: UserLogin,
@@ -53,18 +83,25 @@ async def login(user_login: UserLogin,
     return ResponseUtil.success(msg='登录成功', dict_content={'data': data})
 
 
-@loginController.post("/register", summary="用户注册")
+@loginController.post("/register", summary="用户注册（支持微信绑定）")
 async def register(
     req: UserRegisterRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """
-    用户注册接口
-    - account 唯一
-    - password 使用 bcrypt + salt
+    注册逻辑：
+
+    普通注册：
+        account + password + nickname
+
+    微信注册：
+        account + password + nickname
+        + openid + unionid
     """
 
+    # =====================================
     # 1️⃣ 校验账号是否存在
+    # =====================================
     stmt = select(User).where(User.account == req.account)
     result = await db.execute(stmt)
     exists = result.scalar_one_or_none()
@@ -72,30 +109,66 @@ async def register(
     if exists:
         raise HTTPException(status_code=400, detail="账号已存在")
 
-    # 2️⃣ 密码加盐哈希
+    # =====================================
+    # 2️⃣ 如果传了微信信息，检查是否已绑定
+    # =====================================
+    if getattr(req, "openid", None):
+
+        stmt = select(User).where(
+            User.wechatOpenid == req.openid
+        )
+        result = await db.execute(stmt)
+        bind_user = result.scalar_one_or_none()
+
+        if bind_user:
+            raise HTTPException(status_code=400, detail="该微信已注册")
+
+    if getattr(req, "unionid", None):
+
+        stmt = select(User).where(
+            User.wechatUnionid == req.unionid
+        )
+        result = await db.execute(stmt)
+        bind_user = result.scalar_one_or_none()
+
+        if bind_user:
+            raise HTTPException(status_code=400, detail="该微信已注册")
+
+    # =====================================
+    # 3️⃣ 密码加密
+    # =====================================
     hashed_password = bcrypt.hashpw(
         req.password.encode("utf-8"),
         bcrypt.gensalt()
     ).decode("utf-8")
 
-    # 3️⃣ 创建用户
+    # =====================================
+    # 4️⃣ 创建用户
+    # =====================================
     user = User(
         uuid=LZSDGenerator.generate_user_uid(),
         account=req.account,
         nickname=req.nickname,
-        password=hashed_password
+        avatar="",
+        password=hashed_password,
+
+        # 微信字段（可为空）
+        wechatOpenid=getattr(req, "openid", None),
+        wechatUnionid=getattr(req, "unionid", None)
     )
 
-    # 4️⃣ 入库
+    # =====================================
+    # 5️⃣ 入库
+    # =====================================
     db.add(user)
     await db.commit()
     await db.refresh(user)
 
-    data =  {
+    data = {
         "pkId": user.pkId,
         "uuid": user.uuid,
         "account": user.account,
-        "nickname": user.nickname
+        "nickname": user.nickname,
     }
 
     return ResponseUtil.success(data=data)
@@ -127,12 +200,7 @@ async def change_password(
 WECHAT_APP_ID = "wxd81a903a6cff7273"
 WECHAT_APP_SECRET = "576e309f6d1e2880a0064ac864d92cf1"
 
-# 前端登录成功页（带 token 回跳）
-FRONT_LOGIN_SUCCESS_URL = "https://wenyuanai.com/novelAi/#/loginSuccess"
-
-
-
-# ⚠️ 必须是开放平台 网站应用 AppID
+# 必须是开放平台 网站应用 AppID
 APP_ID = "wxd81a903a6cff7273"
 
 # ⚠️ 必须 HTTPS + 已配置回调域名
@@ -162,9 +230,6 @@ def wechat_qr_login():
     }
 
     return ResponseUtil.success(data=data)
-
-
-
 
 
 # =====================================================
@@ -232,14 +297,12 @@ async def qr_callback(
         # 1️ 更新在线状态
         user.onlineStatus = OnlineStatus.ONLINE
 
-        # 1️ 更新在线状态
-        user.onlineStatus = OnlineStatus.ONLINE
-
-        # 3️ 提交（和生成 token 在同一个事务里）
+        # 2 提交（和生成 token 在同一个事务里）
         await db.flush()
 
         # 登录成功（返回你需要的最小信息）
         data =  {
+            "status": "login",
             'accessToken': "Bearer" + " " + access_token,
             "account": user.account,
             "nickname": user.nickname
