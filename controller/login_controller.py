@@ -1,15 +1,23 @@
+import secrets
+import uuid
+from datetime import timedelta
+from urllib.parse import quote
+
 import bcrypt
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import RedirectResponse
 
+from common.config.config import settings
 from common.utils.generator import LZSDGenerator
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user
 from core.deps.token_utils import TokenManager
-from core.entity.do.users_do import User
+from core.entity.do.users_do import User, OnlineStatus
 from core.entity.vo.login_vo import UserLogin
 from core.entity.vo.user_schema import ChangePasswordReq
 from service.user_service import UserService
@@ -110,3 +118,141 @@ async def change_password(
     )
 
     return ResponseUtil.success(msg="密码修改成功")
+
+
+
+# =========================
+# 微信开放平台配置
+# =========================
+WECHAT_APP_ID = "wxd81a903a6cff7273"
+WECHAT_APP_SECRET = "576e309f6d1e2880a0064ac864d92cf1"
+
+# 前端登录成功页（带 token 回跳）
+FRONT_LOGIN_SUCCESS_URL = "https://wenyuanai.com/novelAi/#/loginSuccess"
+
+
+
+# ⚠️ 必须是开放平台 网站应用 AppID
+APP_ID = "wxd81a903a6cff7273"
+
+# ⚠️ 必须 HTTPS + 已配置回调域名
+REDIRECT_URI = "http://wenyuanai.com/novelAI/order/qr_callback"
+
+
+@loginController.get("/wechat/qr_login")
+def wechat_qr_login():
+    state = uuid.uuid4().hex
+
+    # ✅ 关键修复：完整编码
+    redirect_uri = quote(REDIRECT_URI, safe="")
+
+    url = (
+        "https://open.weixin.qq.com/connect/qrconnect?"
+        f"appid={APP_ID}"
+        f"&redirect_uri={redirect_uri}"
+        "&response_type=code"
+        "&scope=snsapi_login"
+        f"&state={state}"
+        "#wechat_redirect"
+    )
+
+    data = {
+        "url": url,
+        "state": state
+    }
+
+    return ResponseUtil.success(data=data)
+
+
+
+
+
+# =====================================================
+# 微信扫码登录回调（异步 SQLAlchemy）
+# =====================================================
+@loginController.get("/qr_callback")
+async def qr_callback(
+    code: str = "",
+    state: str = "",
+    db: AsyncSession = Depends(get_db)
+):
+    if not code:
+        raise HTTPException(400, "缺少code")
+
+    # 1. 微信换 token
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            "https://api.weixin.qq.com/sns/oauth2/access_token",
+            params={
+                "appid": WECHAT_APP_ID,
+                "secret": WECHAT_APP_SECRET,
+                "code": code,
+                "grant_type": "authorization_code"
+            }
+        )
+
+    data = resp.json()
+
+    openid = data.get("openid")
+    unionid = data.get("unionid")
+
+    # 2. 查用户
+    user = None
+
+    if unionid:
+        result = await db.execute(
+            select(User).where(User.wechatUnionid == unionid)
+        )
+        user = result.scalar_one_or_none()
+
+    if not user:
+        result = await db.execute(
+            select(User).where(User.wechatOpenid == openid)
+        )
+        user = result.scalar_one_or_none()
+
+    # =============================
+    # 已注册 → 直接登录
+    # =============================
+    if user:
+        access_token_expires = timedelta(minutes=settings.jwt_expire_minutes)
+        session_id = str(uuid.uuid4())
+
+        access_token = await UserService.create_access_token(
+            data={
+                "pkId": user.pkId,
+                'uuid': user.uuid,
+                'account': user.account,
+                'nickname': user.nickname,
+                'session_id': session_id,
+            },
+            expires_delta=access_token_expires,
+        )
+
+        # 1️ 更新在线状态
+        user.onlineStatus = OnlineStatus.ONLINE
+
+        # 1️ 更新在线状态
+        user.onlineStatus = OnlineStatus.ONLINE
+
+        # 3️ 提交（和生成 token 在同一个事务里）
+        await db.flush()
+
+        # 登录成功（返回你需要的最小信息）
+        data =  {
+            'accessToken': "Bearer" + " " + access_token,
+            "account": user.account,
+            "nickname": user.nickname
+        }
+        return ResponseUtil.success(msg='登录成功', dict_content={'data': data})
+
+    # =============================
+    # 未注册 → 跳注册页
+    # =============================
+    data = {
+        "status": "register",
+        "openid": openid,
+        "unionid": unionid
+    }
+
+    return ResponseUtil.success(data=data)

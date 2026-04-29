@@ -36,6 +36,33 @@ class User(Base):
     status: Mapped[AccountStatus] = mapped_column(Enum(AccountStatus), nullable=False, default=AccountStatus.ACTIVE,
                                                   comment="帐号状态")
 
+    wechatOpenid: Mapped[str] = mapped_column(
+        String(64),
+        nullable=True,
+        unique=True,
+        comment="微信开放平台openid"
+    )
+
+    wechatUnionid: Mapped[str] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+        comment="微信unionid"
+    )
+
+    loginType: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="account",
+        comment="登录方式 account/wechat"
+    )
+
+    lastLoginTime: Mapped[DateTime] = mapped_column(
+        DateTime,
+        nullable=True,
+        comment="最后登录时间"
+    )
+
     createTime: Mapped[DateTime] = mapped_column(DateTime, nullable=False, server_default=func.current_timestamp(),
                                                   comment="创建时间")
 
