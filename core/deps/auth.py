@@ -58,6 +58,7 @@ async def get_current_user(
         return CurrentUser(pkId=pkId, uuid=uuid, account=account, nickname=nickname, avatar=avatar)
 
     except Exception as _:
+        print("_:{}".format(_))
         logger.warning('用户凭证已失效，请重新登录！')
         raise AuthException(data='', message='用户token已失效，请重新登录')
 
