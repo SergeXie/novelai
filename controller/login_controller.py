@@ -293,6 +293,7 @@ async def qr_callback(
             },
             expires_delta=access_token_expires,
         )
+        print("user:{}".format(user.pkId))
 
         # 1️ 更新在线状态
         user.onlineStatus = OnlineStatus.ONLINE
