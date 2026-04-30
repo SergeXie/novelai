@@ -336,8 +336,10 @@ async def qr_callback(
 
         await db.commit()
 
-        return ResponseUtil.success(msg="绑定成功")
-
+        data = {
+            "status": "bind_success",
+        }
+        return ResponseUtil.success(msg='绑定成功', data=data)
     else:
 
         # =====================================
@@ -445,7 +447,10 @@ async def qr_status(state: str, db: AsyncSession = Depends(get_db)):
         return ResponseUtil.success(msg='登录成功', dict_content={'data': json.loads(row.token)})
 
     elif row and row.status == "bind_success":
-        return ResponseUtil.success(msg='绑定成功')
+        data = {
+            "status": row.status,
+        }
+        return ResponseUtil.success(msg='绑定成功', data=data)
 
     elif row and row.status == "bind_error":
         return ResponseUtil.success(msg='绑定失败')
