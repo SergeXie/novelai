@@ -13,6 +13,7 @@ from ai.adapters.doubao import DoubaoAdapter
 from ai.adapters.doubao_plus import DoubaoPlusAdapter
 from ai.adapters.enums import AIProvider
 from ai.adapters.gpt import GPTAdapter
+from ai.adapters.mimo import MimoAdapter
 from ai.adapters.ollama import OllamaAdapter
 from ai.adapters.gemini import GeminiAdapter
 from ai.adapters.glm import GLMAdapter
@@ -94,6 +95,7 @@ class AINexus:
             AIProvider.GPT: GPTAdapter(),
             AIProvider.ZHIPU: GLMAdapter(),
             AIProvider.CLAUDETHINKING: ClaudeThinkingAdapter(),
+            AIProvider.MIMO: MimoAdapter(),
         }
 
         # Ollama 走异步队列，避免并发直接打到本地模型服务
