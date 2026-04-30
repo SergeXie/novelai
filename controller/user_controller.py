@@ -75,7 +75,8 @@ async def user_info(
 
     data = {
         # ===== 用户信息 =====
-        "openid": user.wechatOpenid,
+        "isBindWechat": user.isBindWechat,
+        "wechatOpenid": user.wechatOpenid,
         "userId": user.pkId,
         "account": user.account,
         "nickname": user.nickname,
