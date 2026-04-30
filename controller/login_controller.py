@@ -361,6 +361,8 @@ async def qr_callback(
         nickname = user_info.get("nickname", "")
         avatar = user_info.get("headimgurl", "")
 
+        print("nickname:{}".format(nickname))
+        print("avatar:{}".format(avatar))
         # 获取高清头像
         if avatar:
             avatar = avatar[:-1] + "0"
