@@ -13,6 +13,7 @@ from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user, check_user_quota_or_raise
 from core.entity.do.users_do import User
 from core.entity.vo.user_vo import UpdateNicknameRequest
+from dao.user_dao import UserDAO
 from service.usage_service import UsageService
 from service.user_service import UserService
 
@@ -73,10 +74,11 @@ async def user_info(
 
     user_daily_token_limit = settings.USER_DAILY_TOKEN_LIMIT
 
+    query_user = await UserDAO.get_by_uuid(db, user_uuid=user.uuid)
+
     data = {
         # ===== 用户信息 =====
-        "isBindWechat": user.isBindWechat,
-        "wechatOpenid": user.wechatOpenid,
+        "isBindWechat": query_user.isBindWechat if query_user else 0,
         "userId": user.pkId,
         "account": user.account,
         "nickname": user.nickname,
