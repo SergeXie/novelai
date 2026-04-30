@@ -128,9 +128,21 @@ class UsageService:
             monthlyDeduct=monthlyDeduct,
             permanentDeduct=permanentDeduct,
         )
-        await self.ai_log_dao.create_ai_generate_log(log_obj=log)
+        return await self.ai_log_dao.create_ai_generate_log(log_obj=log)
 
     async def poll_content_by_request_id(self, request_id: str, user_id:int):
+        """根据 request_id 查询生成内容，常用于前端轮询结果。"""
+        log_record = await self.ai_log_dao.get_log_by_request_id(request_id=request_id)
+
+        if log_record and log_record.userId == user_id:
+            if log_record.status == AIGenerateStatus.SUCCESS:
+                return log_record.outputContent
+            elif log_record.status == AIGenerateStatus.FAILED:
+                return "生成失败，请切换模型或者稍后重试"
+
+        return ""
+
+    async def get_book_invalid_destructor_log(self, bid: str):
         """根据 request_id 查询生成内容，常用于前端轮询结果。"""
         log_record = await self.ai_log_dao.get_log_by_request_id(request_id=request_id)
 
@@ -188,6 +200,9 @@ class UsageService:
             page=page,
             pageSize=size
         )
+
+    async def get_invalid_book_destructor_log(self, bid: str) -> AiNovelGenerateLog | None:
+        return await self.ai_log_dao.get_invalid_book_destructor_log(bid=bid)
 
     async def get_chat_history(self, bid: str, offset_id: int, size: int, with_content:bool = False, user_id: int | None = None) -> PageResp:
         """分页获取某本书下的 AI 对话历史。"""

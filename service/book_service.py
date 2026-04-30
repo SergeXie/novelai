@@ -577,7 +577,7 @@ class BookService:
         return quick_html_to_text(output.getvalue())
 
     @staticmethod
-    async def download_novel_content(url: str, timeout: float = 120.0) -> bytes:
+    async def download_novel_content(url: str, timeout: float = 120.0) -> str:
         """
         [Service] 异步下载小说内容
         :param url: 文件下载链接

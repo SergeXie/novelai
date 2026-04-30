@@ -1,6 +1,7 @@
 import textwrap
 
 from loguru import logger
+from sqlalchemy import false
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.adapters.enums import AIProvider, AIAction, AIGenerateStatus
@@ -8,6 +9,7 @@ from ai.ai_nexus import get_ai_nexus
 from common.config.config import settings
 from common.utils.generator import LZSDGenerator
 from common.config.get_db import get_db_context
+from core.entity.do.generate_log import AiNovelGenerateLog
 from core.entity.do.users_do import User
 from core.entity.vo.ai_response import AICompletionResponse
 from dao.ai_log_dao import AILogDAO
@@ -21,7 +23,7 @@ class AIService:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.fill_context = []
-    
+
     async def fill_context_with_adapter(self, data: list):
         self.fill_context = data or []
 
@@ -104,7 +106,7 @@ class AIService:
         input_user_prompt = user_prompt
 
         # 1. 记录初始请求
-        await usage_service.record(
+        log = await usage_service.record(
             user_id=user_id,
             request_id=request_id,
             level=level,
@@ -127,6 +129,7 @@ class AIService:
             "temperature": final_temperature,
             "max_tokens": final_max_tokens,
             "enable_web_search": enable_web_search,
+            "log": log,
             "context": self.fill_context,
         }
 
@@ -142,25 +145,26 @@ class AIService:
             return request_id, ai_rsp
 
 
-
 def _should_retry_with_level2(error: Exception) -> bool:
     """
     命中特定 Gemini 渠道/模型不可用错误时，降级到 level=2 重试
     """
     error_text = str(error)
     return (
-        "Insufficient Balance" in error_text
+            "Insufficient Balance" in error_text
     )
+
 
 async def async_generate_task(
         request_id: str,
-        ai_level:int,
+        ai_level: int,
         input_user_prompt: str,
         system_prompt: str,
         temperature: float,
         max_tokens: int,
         context: list,
-    enable_web_search: bool = False,
+        log: AiNovelGenerateLog,
+        enable_web_search: bool = False,
 ) -> AICompletionResponse | None:
     """后台异步执行 AI 调用并更新结果"""
     nexus = get_ai_nexus()
@@ -170,14 +174,19 @@ async def async_generate_task(
     ai_rsp = None
     error_msg = ""
 
+    # 假如是拆书 可以复用
+    if await reuse_book_destructor_data(log=log):
+        return None
+
     for i, current_provider in enumerate(providers_to_try):
         try:
-            logger.info(f"【{current_provider.name}】req:{request_id} 开始生成 提示词:{textwrap.shorten(input_user_prompt, width=20, placeholder="...")} temperature:{temperature} max_tokens:{max_tokens}")
+            logger.info(
+                f"[{current_provider.name}] req:{request_id} 开始生成 提示词:{textwrap.shorten(input_user_prompt, width=32, placeholder="...")} temperature:{temperature} max_tokens:{max_tokens}")
             normalized_context = await nexus.fill_context_with_adapter(
                 provider=current_provider,
                 data=context
-                )  # 如果需要对提示词进行特殊处理，可以在这里实现
-            
+            )  # 如果需要对提示词进行特殊处理，可以在这里实现
+
             ai_rsp = await nexus.generate_novel_text(
                 provider=current_provider,
                 user_prompt=input_user_prompt,
@@ -187,7 +196,8 @@ async def async_generate_task(
                 context_messages=normalized_context,
                 enable_web_search=enable_web_search,
             )
-            logger.info(f"【{current_provider.name}】req:{request_id} 生成结束 返回:{textwrap.shorten(ai_rsp.content, width=20, placeholder="...")}")
+            logger.info(
+                f"【{current_provider.name}】req:{request_id} 生成结束 返回:{textwrap.shorten(ai_rsp.content, width=20, placeholder="...")}")
             break  # 成功则跳出循环
         except Exception as e:
             logger.info(f"【{current_provider.name}】req:{request_id} 生成异常 {e}")
@@ -205,7 +215,6 @@ async def async_generate_task(
 
     if ai_rsp or error_msg:
         async with get_db_context() as db:
-            
             # audit_service = get_generated_content_audit_service()
             # try:
             #     audit_result = await audit_service.audit_generated_result(ai_rsp, use_semantic=True)
@@ -216,10 +225,24 @@ async def async_generate_task(
             #     logger.warning(f"RequestId: {request_id} 生成结果审核失败，按原结果继续入库: {exc}")
 
             await UsageService(db).update_output_content_by_request_id(
-            request_id=request_id,
-            ai_rsp=ai_rsp,
-            status=AIGenerateStatus.SUCCESS if ai_rsp else AIGenerateStatus.FAILED,
-            error_msg=error_msg)
+                request_id=request_id,
+                ai_rsp=ai_rsp,
+                status=AIGenerateStatus.SUCCESS if ai_rsp else AIGenerateStatus.FAILED,
+                error_msg=error_msg)
 
     return ai_rsp
 
+async def reuse_book_destructor_data(
+        log: AiNovelGenerateLog,
+) -> bool:
+    if log.actionType == AIAction.Deconstruct:
+        sha256_id = log.bid
+        async with get_db_context() as db:
+            dao = AILogDAO(db=db)
+            reuse_log = await dao.get_invalid_book_destructor_log(bid=sha256_id)
+            if log:
+                await dao.sync_ai_log_data(source_request_id=reuse_log.requestId, target_request_id=log.requestId)
+                logger.info(f"[拆书]{sha256_id} 复用成功{reuse_log.requestId}--->{log.requestId}")
+                return True
+
+    return False
