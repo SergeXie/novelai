@@ -214,6 +214,7 @@ class BookDAO:
             *,
             name: str | None,
             data: dict | None = None,
+            content: str | None = None
     ) -> BookNode:
         """
         更新节点名称 / 正文
@@ -222,6 +223,8 @@ class BookDAO:
             node.name = name
         if data is not None:
             node.data = data
+        if content is not None:
+            node.content = content
 
         self.db.add(node)
         await self.db.commit()
@@ -267,7 +270,8 @@ class BookDAO:
             name: str,
             data: dict | None = None,
             content: str | None = None,
-            category:BookNodeCategory = BookNodeCategory.NORMAL
+            category:BookNodeCategory = BookNodeCategory.NORMAL,
+            order:int = 0,
     ) -> BookNode:
         """
         新增章节（自动补正文根节点）
@@ -287,9 +291,10 @@ class BookDAO:
             name=name,
             is_leaf=is_leaf,
             depth=_depth,
-            data=data,
+            data=data or {},
             content=content,
-            type=_type
+            type=_type,
+            order=order,
         )
         self.db.add(node)
         await self.db.flush()

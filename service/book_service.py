@@ -1,21 +1,18 @@
 import io
 from typing import List, Optional
-from unittest.mock import DEFAULT
 
 import httpx
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
-from volcenginesdkaiotvideo.models import device_streams_for_list_devices_output
 
 from common.exception.errors import ServerError, NotFoundError, RequestError
 from common.exception.lzsd_exception import ServiceWarning
 from common.modules.html_text_extractor import quick_html_to_text
-from common.response.response_util import ResponseUtil
 from common.utils.text_util import strip_html_tags
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
 from core.entity.vo.book_node_schema import NodeTreeSchema
-from core.entity.vo.bool_vo import Character
+from core.entity.vo.bool_vo import Character, ChapterData
 from core.enums.node_type import BookNodeCategory
 from core.processor.book_processor import Chapter
 from dao.book_dao import BookDAO
@@ -23,17 +20,18 @@ from dao.template_dao import TemplateDAO
 
 DEFAULT_TEMPLATE_ID = "TPLXIAOSHUO"
 
+
 class BookService:
     def __init__(self, db: AsyncSession):
         self.book_dao = BookDAO(db)
         self.db = db
 
-    async def get_book_by_bid(self, bid: str, user_id:int) -> Optional[Book]:
+    async def get_book_by_bid(self, bid: str, user_id: int) -> Optional[Book]:
         if bid:
             return await self.book_dao.get_book_by_bid(bid=bid, user_id=user_id)
         return None
 
-    async def count_book_words(self,bid: str) -> int:
+    async def count_book_words(self, bid: str) -> int:
         """
         统计书籍字数（去HTML）
         """
@@ -44,7 +42,7 @@ class BookService:
             total += len(clean_text)
         return total
 
-    async def get_tree(self, bid:str, uid:int, max_depth:Optional[int] = None) -> List[NodeTreeSchema]:
+    async def get_tree(self, bid: str, uid: int, max_depth: Optional[int] = None) -> List[NodeTreeSchema]:
         tree = []
         # 从 DAO 获取原始数据库对象
         nodes = await self.book_dao.get_book_nodes(bid, uid, max_depth)
@@ -77,8 +75,8 @@ class BookService:
         # tree.sort(key=lambda x: x.id)
 
         return tree
-    
-    async def get_basic_nodes(self, bid: str, user_id: int)->List[NodeTreeSchema]:
+
+    async def get_basic_nodes(self, bid: str, user_id: int) -> List[BookNode]:
         nodes = await self.book_dao.get_book_nodes(bid=bid, user_id=user_id) or []
         # 核心逻辑：保留 is_leaf 等于 1 且 type 大于 1 的元素
         return [node for node in nodes if node.is_leaf == 1 and node.type > 1]
@@ -109,12 +107,12 @@ class BookService:
         return [target_node] if target_node else []
 
     async def _create_nodes_from_template(self,
-            uid:int,
-            bid: str,
-            nodes: list[dict],
-            parent_id: int,
-            depth: int,
-    ):
+                                          uid: int,
+                                          bid: str,
+                                          nodes: list[dict],
+                                          parent_id: int,
+                                          depth: int,
+                                          ):
         """
         递归创建模板节点
         """
@@ -160,7 +158,7 @@ class BookService:
         创建书籍 + 初始化标准树结构
         """
         # 2️ 查询模板
-        template = await TemplateDAO.get_template_by_template_id(self.db, template_id,)
+        template = await TemplateDAO.get_template_by_template_id(self.db, template_id, )
 
         # 1️ 创建书籍
         book = await self.book_dao.create_book(
@@ -235,7 +233,7 @@ class BookService:
             self,
             *,
             status: int | None = None,
-            uid:int
+            uid: int
     ) -> list[Book]:
         """
         获取用户书籍列表
@@ -370,12 +368,11 @@ class BookService:
 
         return node
 
-
     async def delete_node_(
             self,
             bid: str,
             node_id: int,
-            uid:int
+            uid: int
     ):
         """
         删除节点（包含整个子树）
@@ -484,35 +481,71 @@ class BookService:
             "deleted": True
         }
 
-    async def auto_create_book(self, user_id:int, title:str, summary:str, roles:List[Character])->Book:
-        book = await self.create_book_with_tree(
-            title=title,
-            description=summary,
-            uid=user_id,
-            template_id="TPLXIAOSHUO",
-        )
+    async def auto_create_book(self, user_id: int, title: str, summary: str,
+                               roles: List[Character],
+                               outline: str | None = None,
+                               writing_style: str | None = None,
+                               world_view: str | None = None,
+                               chapters: List[ChapterData] | None = None) -> Book:
 
-        if book:
-            nodes = await self.book_dao.get_book_nodes(bid=book.bid, user_id=user_id, max_depth=1)
-            for node in nodes:
-                if node.type == BookNodeCategory.ROLES.code:
-                    for role in roles:
-                        await self.book_dao.add_child_node(bid=book.bid,
-                                                           uid=user_id,
-                                                           parent_node=node,
-                                                           is_leaf=1,
-                                                           name=role.name,
-                                                           content=role.role)
+        # 1. 创建书籍根节点
+        book = await self.create_book_with_tree(
+            title=title, description=summary, uid=user_id, template_id="TPLXIAOSHUO"
+        )
+        if not book:
+            return None
+
+        # 2. 获取一级分类节点
+        nodes = await self.book_dao.get_book_nodes(bid=book.bid, user_id=user_id, max_depth=1)
+
+        # 3. 定义简单字段的映射配置 (类型 -> 对应的内容)
+        # 这样可以处理 outline, writing_style, world_view 这种单点内容
+        simple_fields = {
+            BookNodeCategory.WORLDVIEW: world_view
+        }
+
+        notify_fields = {
+            BookNodeCategory.OUTLINE: outline,
+            BookNodeCategory.WRITING_STYLE: writing_style,
+        }
+
+        for node in nodes:
+            node_type = BookNodeCategory.from_code(code=node.type)
+
+            # A. 处理角色列表 (多条)
+            if node_type == BookNodeCategory.ROLES and roles:
+                for role in roles:
+                    await self.book_dao.add_child_node(
+                        bid=book.bid, uid=user_id, parent_node=node, is_leaf=1,
+                        name=role.name, content=role.role
+                    )
+
+            # B. 处理章节列表 (多条 + 排序)
+            elif node_type == BookNodeCategory.CONTENT and chapters:
+                for chapter in chapters:
+                    await self.book_dao.add_child_node(bid=book.bid, uid=user_id, parent_node=node, is_leaf=1,
+                                                       name=chapter.title, content=chapter.content,
+                                                       order=chapter.index)
+
+            # C. 处理其他简单文本节点 (单条)
+            elif node_type in simple_fields and (content := simple_fields[node_type]):
+                await self.book_dao.add_child_node(
+                    bid=book.bid, uid=user_id, parent_node=node, is_leaf=1,
+                    name=node_type.key, content=content
+                )
+            elif node_type in notify_fields and (content := notify_fields[node_type]):
+                await self.book_dao.update_node_content(node=node, book_len=len(content), content=content)
 
         return book
 
     async def create_book_with_chapters(
             self,
             user_id: int,
-            book_name:str,
-            chapters:List[Chapter],
+            book_name: str,
+            chapters: List[Chapter],
     ) -> Book | None:
-        book = await self.create_book_with_tree(uid=user_id, title=book_name, description="", template_id=DEFAULT_TEMPLATE_ID)
+        book = await self.create_book_with_tree(uid=user_id, title=book_name, description="",
+                                                template_id=DEFAULT_TEMPLATE_ID)
         if book is None:
             raise ServerError(msg=f"创建书籍[{book_name}]失败")
 
@@ -541,7 +574,7 @@ class BookService:
 
         return book
 
-    async def export(self, user_id:int, bid:str) ->str:
+    async def export(self, user_id: int, bid: str) -> str:
         book = await self.book_dao.get_book_by_bid(bid, user_id)
         if book is None:
             raise NotFoundError(msg="小说不存在")
@@ -631,4 +664,3 @@ class BookService:
         except Exception as e:
             logger.error(f"下载函数内部未知错误: {str(e)}")
             raise ServerError(msg="文件下载服务暂不可用")
-

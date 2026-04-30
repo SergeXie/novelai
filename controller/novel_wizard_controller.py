@@ -237,3 +237,4 @@ async def novel_wizard_step(
         # context 为合并后的上下文，可直接传给下一步
         "context": merged_context,
     })
+

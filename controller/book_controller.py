@@ -248,8 +248,14 @@ async def create_book_auto(
         current_user: User = Depends(get_current_user)
 ):
     service = BookService(db)
-    book = await service.auto_create_book(user_id=current_user.pkId, title=req.title, summary=req.summary,
-                                          roles=req.characters)
+    book = await service.auto_create_book(user_id=current_user.pkId,
+                                          title=req.title,
+                                          summary=req.summary,
+                                          roles=req.characters,
+                                          outline=req.fullOutlineText,
+                                          writing_style=req.writingStyle,
+                                          world_view=req.worldView,
+                                          chapters=req.chapters, )
     if not book:
         return ResponseUtil.error(msg="未知错误")
     else:
