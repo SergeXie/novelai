@@ -325,6 +325,7 @@ async def qr_callback(
 
         data = {
             "status": "login",
+            "openid": openid,
             'accessToken': "Bearer " + access_token_jwt,
             "account": user.account,
             "nickname": user.nickname,
@@ -360,12 +361,6 @@ async def qr_callback(
 
         nickname = user_info.get("nickname", "")
         avatar = user_info.get("headimgurl", "")
-
-        print("nickname:{}".format(nickname))
-        print("avatar:{}".format(avatar))
-        # 获取高清头像
-        if avatar:
-            avatar = avatar[:-1] + "0"
 
     except Exception as e:
         print("获取微信用户信息失败:", e)
