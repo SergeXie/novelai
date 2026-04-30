@@ -452,9 +452,6 @@ async def qr_status(state: str, db: AsyncSession = Depends(get_db)):
         }
         return ResponseUtil.success(msg='绑定成功', data=data)
 
-    elif row and row.status == "bind_error":
-        return ResponseUtil.success(msg='绑定失败')
-
     else:
         data =  {"status": False}
         return ResponseUtil.success(data=data)
