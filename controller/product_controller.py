@@ -173,3 +173,14 @@ async def wechat_callback(request: Request, db: AsyncSession = Depends(get_db)):
             return {"code": "SUCCESS", "message": "成功"}
         else:
             return {"code": "FAIL", "message": "失败"}
+
+
+
+@productRouter.get("/qr_callback")
+def qr_callback(code: str = "", state: str = ""):
+    return {
+        "msg": "扫码成功，已回调",
+        "code": code,
+        "state": state
+    }
+
