@@ -242,9 +242,6 @@ async def wechat_qr_login(db: AsyncSession = Depends(get_db)):
     return ResponseUtil.success(data=data)
 
 
-# =====================================================
-# 微信扫码登录回调（异步 SQLAlchemy）
-# =====================================================
 @loginController.get("/qr_callback", name="微信扫码回调")
 async def qr_callback(
     code: str = "",
@@ -254,7 +251,9 @@ async def qr_callback(
     if not code:
         raise HTTPException(400, "缺少code")
 
-    # 1. 微信换 token
+    # =====================================
+    # 1. code 换 access_token / openid
+    # =====================================
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             "https://api.weixin.qq.com/sns/oauth2/access_token",
@@ -268,10 +267,16 @@ async def qr_callback(
 
     data = resp.json()
 
+    if "errcode" in data:
+        raise HTTPException(400, detail=data)
+
+    access_token = data.get("access_token")
     openid = data.get("openid")
     unionid = data.get("unionid")
 
+    # =====================================
     # 2. 查用户
+    # =====================================
     user = None
 
     if unionid:
@@ -286,10 +291,9 @@ async def qr_callback(
         )
         user = result.scalar_one_or_none()
 
-    # =============================
-    # 已注册 → 直接登录
-    # =============================
-
+    # =====================================
+    # 3. 查询扫码状态
+    # =====================================
     login = await db.execute(
         select(WechatLoginState).where(
             WechatLoginState.state == state
@@ -297,12 +301,14 @@ async def qr_callback(
     )
     row = login.scalar_one_or_none()
 
-
+    # =====================================
+    # 已注册 → 登录
+    # =====================================
     if user:
         access_token_expires = timedelta(minutes=settings.jwt_expire_minutes)
         session_id = str(uuid.uuid4())
 
-        access_token = await UserService.create_access_token(
+        access_token_jwt = await UserService.create_access_token(
             data={
                 "pkId": user.pkId,
                 'uuid': user.uuid,
@@ -310,49 +316,74 @@ async def qr_callback(
                 'nickname': user.nickname,
                 'session_id': session_id,
                 "avatar": user.avatar if user.avatar else "",
-
             },
             expires_delta=access_token_expires,
         )
-        print("user:{}".format(user.pkId))
 
-        # 1️ 更新在线状态
         user.onlineStatus = OnlineStatus.ONLINE
-
-        # 2 提交（和生成 token 在同一个事务里）
         await db.flush()
 
-        # 登录成功（返回你需要的最小信息）
-        data =  {
+        data = {
             "status": "login",
-            'accessToken': "Bearer" + " " + access_token,
+            'accessToken': "Bearer " + access_token_jwt,
             "account": user.account,
-            "nickname": user.nickname
+            "nickname": user.nickname,
+            "avatar": user.avatar or ""
         }
-
 
         row.status = "login"
         row.openid = openid
         row.unionid = unionid
         row.token = json.dumps(data)
+
         await db.commit()
 
         return ResponseUtil.success(msg='登录成功', dict_content={'data': data})
 
-    # =============================
-    # 未注册 → 跳注册页
-    # =============================
+    # =====================================
+    # ❗ 未注册 → 获取微信用户信息
+    # =====================================
+    nickname = ""
+    avatar = ""
+
+    try:
+        async with httpx.AsyncClient() as client:
+            user_resp = await client.get(
+                "https://api.weixin.qq.com/sns/userinfo",
+                params={
+                    "access_token": access_token,
+                    "openid": openid
+                }
+            )
+
+        user_info = user_resp.json()
+
+        nickname = user_info.get("nickname", "")
+        avatar = user_info.get("headimgurl", "")
+
+        # 获取高清头像
+        if avatar:
+            avatar = avatar[:-1] + "0"
+
+    except Exception as e:
+        print("获取微信用户信息失败:", e)
+
+    # =====================================
+    # 未注册 → 返回前端注册
+    # =====================================
     data = {
         "status": "register",
         "openid": openid,
-        "unionid": unionid
+        "unionid": unionid,
+        "nickname": nickname,
+        "avatar": avatar
     }
 
     row.status = "register"
     row.openid = openid
     row.unionid = unionid
-    await db.commit()
 
+    await db.commit()
 
     return ResponseUtil.success(data=data)
 
