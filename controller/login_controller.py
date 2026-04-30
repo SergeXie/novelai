@@ -452,6 +452,12 @@ async def qr_status(state: str, db: AsyncSession = Depends(get_db)):
         }
         return ResponseUtil.success(msg='绑定成功', data=data)
 
+    elif row and row.status == "bind_error":
+        data = {
+            "status": row.status,
+        }
+        return ResponseUtil.success(msg='该微信已绑定其他账号', data=data)
+
     else:
         data =  {"status": False}
         return ResponseUtil.success(data=data)
