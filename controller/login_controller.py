@@ -205,7 +205,7 @@ WECHAT_APP_SECRET = "576e309f6d1e2880a0064ac864d92cf1"
 APP_ID = "wxd81a903a6cff7273"
 
 # ⚠️ 必须 HTTPS + 已配置回调域名
-REDIRECT_URI = "http://wenyuanai.com/novelAI/qr_callback"
+REDIRECT_URI = "http://www.wenyuanai.com/novelAi/#/wxCallback"
 
 
 @loginController.get("/wechat/qr_login")
