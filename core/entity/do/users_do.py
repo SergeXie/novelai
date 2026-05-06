@@ -51,6 +51,12 @@ class User(Base):
         comment="微信unionid"
     )
 
+    isBindWechat: Mapped[bool] = mapped_column(
+        default=False,
+        nullable=False,
+        comment="是否绑定微信"
+    )
+
     loginType: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
@@ -120,6 +126,13 @@ class WechatLoginState(Base):
         Text,
         nullable=True,
         comment="登录token"
+    )
+
+    # 用户ID
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        index=True,
+        comment="用户ID"
     )
 
     # 创建时间

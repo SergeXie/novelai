@@ -1,18 +1,14 @@
 import json
-import secrets
 import uuid
 from datetime import timedelta, datetime
 from typing import Optional
 from urllib.parse import quote
-
 import bcrypt
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.responses import RedirectResponse
-
 from common.config.config import settings
 from common.utils.generator import LZSDGenerator
 from common.config.get_db import get_db
@@ -25,6 +21,19 @@ from core.entity.vo.user_schema import ChangePasswordReq
 from service.user_service import UserService
 
 loginController = APIRouter()
+
+# =========================
+# 微信开放平台配置
+# =========================
+WECHAT_APP_ID = "wxd81a903a6cff7273"
+WECHAT_APP_SECRET = "576e309f6d1e2880a0064ac864d92cf1"
+
+# 必须是开放平台 网站应用 AppID
+APP_ID = "wxd81a903a6cff7273"
+
+# ⚠️ 必须 HTTPS + 已配置回调域名
+REDIRECT_URI = "http://wenyuanai.com/novelAi/#/wxCallback"
+
 
 class UserRegisterRequest(BaseModel):
     # 基础注册信息
@@ -152,7 +161,7 @@ async def register(
         nickname=req.nickname,
         avatar="",
         password=hashed_password,
-
+        isBindWechat = True,
         # 微信字段（可为空）
         wechatOpenid=getattr(req, "openid", None),
         wechatUnionid=getattr(req, "unionid", None)
@@ -193,19 +202,6 @@ async def change_password(
 
     return ResponseUtil.success(msg="密码修改成功")
 
-
-
-# =========================
-# 微信开放平台配置
-# =========================
-WECHAT_APP_ID = "wxd81a903a6cff7273"
-WECHAT_APP_SECRET = "576e309f6d1e2880a0064ac864d92cf1"
-
-# 必须是开放平台 网站应用 AppID
-APP_ID = "wxd81a903a6cff7273"
-
-# ⚠️ 必须 HTTPS + 已配置回调域名
-REDIRECT_URI = "http://wenyuanai.com/novelAi/#/wxCallback"
 
 
 @loginController.get("/wechat/qr_login")
@@ -301,92 +297,132 @@ async def qr_callback(
     )
     row = login.scalar_one_or_none()
 
-    # =====================================
-    # 已注册 → 登录
-    # =====================================
-    if user:
-        access_token_expires = timedelta(minutes=settings.jwt_expire_minutes)
-        session_id = str(uuid.uuid4())
+    if not row:
+        raise HTTPException(400, "state无效")
 
-        access_token_jwt = await UserService.create_access_token(
-            data={
-                "pkId": user.pkId,
-                'uuid': user.uuid,
-                'account': user.account,
-                'nickname': user.nickname,
-                'session_id': session_id,
-                "avatar": user.avatar if user.avatar else "",
-            },
-            expires_delta=access_token_expires,
+    # =====================================
+    # 🔥 绑定逻辑（优先处理）
+    # =====================================
+    if row.status == "bind":
+
+        # 1️⃣ 判断微信是否已被其他账号绑定
+        result = await db.execute(
+            select(User).where(User.wechatUnionid == unionid)
         )
+        exist = result.scalar_one_or_none()
 
-        user.onlineStatus = OnlineStatus.ONLINE
-        await db.flush()
+        if exist:
+            row.status = "bind_error"
+            row.token = json.dumps({"msg": "该微信已绑定其他账号"})
+            await db.commit()
+            return ResponseUtil.failure(msg="该微信已被用户绑定")
 
-        data = {
-            "status": "login",
-            'accessToken': "Bearer " + access_token_jwt,
-            "account": user.account,
-            "nickname": user.nickname,
-            "avatar": user.avatar or ""
-        }
+        # 2️⃣ 找当前用户
+        result = await db.execute(
+            select(User).where(User.pkId == row.user_id)
+        )
+        bind_user = result.scalar_one_or_none()
 
-        row.status = "login"
-        row.openid = openid
-        row.unionid = unionid
-        row.token = json.dumps(data)
+        if not bind_user:
+            row.status = "bind_error"
+            await db.commit()
+            return ResponseUtil.failure(msg="用户不存在")
+
+        # 3️⃣ 执行绑定
+        bind_user.wechatOpenid = openid
+        bind_user.wechatUnionid = unionid
+        bind_user.isBindWechat = True
+        row.status = "bind_success"
 
         await db.commit()
 
-        return ResponseUtil.success(msg='登录成功', dict_content={'data': data})
+        data = {
+            "status": "bind_success",
+        }
+        return ResponseUtil.success(msg='绑定成功', data=data)
+    else:
 
-    # =====================================
-    # ❗ 未注册 → 获取微信用户信息
-    # =====================================
-    nickname = ""
-    avatar = ""
+        # =====================================
+        # 已注册 → 登录
+        # =====================================
+        if user:
+            access_token_expires = timedelta(minutes=settings.jwt_expire_minutes)
+            session_id = str(uuid.uuid4())
 
-    try:
-        async with httpx.AsyncClient() as client:
-            user_resp = await client.get(
-                "https://api.weixin.qq.com/sns/userinfo",
-                params={
-                    "access_token": access_token,
-                    "openid": openid
-                }
+            access_token_jwt = await UserService.create_access_token(
+                data={
+                    "pkId": user.pkId,
+                    'uuid': user.uuid,
+                    'account': user.account,
+                    'nickname': user.nickname,
+                    'session_id': session_id,
+                    "avatar": user.avatar if user.avatar else "",
+                },
+                expires_delta=access_token_expires,
             )
 
-        user_info = user_resp.json()
+            user.onlineStatus = OnlineStatus.ONLINE
+            await db.flush()
 
-        nickname = user_info.get("nickname", "")
-        avatar = user_info.get("headimgurl", "")
+            data = {
+                "status": "login",
+                "openid": openid,
+                'accessToken': "Bearer " + access_token_jwt,
+                "account": user.account,
+                "nickname": user.nickname,
+                "avatar": user.avatar or ""
+            }
 
-        # 获取高清头像
-        if avatar:
-            avatar = avatar[:-1] + "0"
+            row.status = "login"
+            row.openid = openid
+            row.unionid = unionid
+            row.token = json.dumps(data)
 
-    except Exception as e:
-        print("获取微信用户信息失败:", e)
+            await db.commit()
 
-    # =====================================
-    # 未注册 → 返回前端注册
-    # =====================================
-    data = {
-        "status": "register",
-        "openid": openid,
-        "unionid": unionid,
-        "nickname": nickname,
-        "avatar": avatar
-    }
+            return ResponseUtil.success(msg='登录成功', dict_content={'data': data})
 
-    row.status = "register"
-    row.openid = openid
-    row.unionid = unionid
+        # =====================================
+        # 未注册 → 获取微信用户信息
+        # =====================================
+        nickname = ""
+        avatar = ""
 
-    await db.commit()
+        try:
+            async with httpx.AsyncClient() as client:
+                user_resp = await client.get(
+                    "https://api.weixin.qq.com/sns/userinfo",
+                    params={
+                        "access_token": access_token,
+                        "openid": openid
+                    }
+                )
 
-    return ResponseUtil.success(data=data)
+            user_info = user_resp.json()
 
+            nickname = user_info.get("nickname", "")
+
+
+        except Exception as e:
+            print("获取微信用户信息失败:", e)
+
+        # =====================================
+        # 未注册 → 返回前端注册
+        # =====================================
+        data = {
+            "status": "register",
+            "openid": openid,
+            "unionid": unionid,
+            "nickname": nickname,
+            "avatar": avatar
+        }
+        row.status = "register"
+        row.openid = openid
+        row.unionid = unionid
+
+        await db.commit()
+
+        return ResponseUtil.success(data=data)
 
 @loginController.get("/wechat/qr_status")
 async def qr_status(state: str, db: AsyncSession = Depends(get_db)):
@@ -399,7 +435,6 @@ async def qr_status(state: str, db: AsyncSession = Depends(get_db)):
 
     row = result.scalar_one_or_none()
 
-
     if row and row.status == "register":
         data = {
             "status": "register",
@@ -411,6 +446,55 @@ async def qr_status(state: str, db: AsyncSession = Depends(get_db)):
     elif row and row.status == "login":
         return ResponseUtil.success(msg='登录成功', dict_content={'data': json.loads(row.token)})
 
+    elif row and row.status == "bind_success":
+        data = {
+            "status": row.status,
+        }
+        return ResponseUtil.success(msg='绑定成功', data=data)
+
+    elif row and row.status == "bind_error":
+        data = {
+            "status": row.status,
+        }
+        return ResponseUtil.success(msg='该微信已绑定其他账号', data=data)
+
     else:
         data =  {"status": False}
         return ResponseUtil.success(data=data)
+
+
+
+@loginController.get("/bind_qr_login", name="用户中心绑定微信")
+async def bind_qr_login(
+    redirect_url: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)  # 你已有登录鉴权
+):
+    state = uuid.uuid4().hex
+
+    expire_time = datetime.utcnow() + timedelta(minutes=5)
+
+    row = WechatLoginState(
+        state=state,
+        status="bind",
+        user_id=current_user.pkId,
+        expireTime=expire_time
+    )
+
+    db.add(row)
+    await db.commit()
+
+    url = (
+        "https://open.weixin.qq.com/connect/qrconnect?"
+        f"appid={WECHAT_APP_ID}"
+        f"&redirect_uri={quote(redirect_url if redirect_url else REDIRECT_URI, safe='')}"
+        "&response_type=code"
+        "&scope=snsapi_login"
+        f"&state={state}"
+        "#wechat_redirect"
+    )
+
+    return ResponseUtil.success(data={
+        "state": state,
+        "url": url
+    })

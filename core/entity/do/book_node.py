@@ -37,9 +37,34 @@ class BookNode(Base):
         comment="扩展配置数据"
     )
 
-    depth: Mapped[int] = mapped_column(Integer)
-    is_leaf: Mapped[int] = mapped_column(Integer)
-    book_len: Mapped[int] = mapped_column(Integer)
+    depth: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment="深度"
+    )
+    is_leaf: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment="节点类型：0父节点 1子节点"
+    )
+    book_len: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment="长度"
+    )
+    order: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment="排序"
+    )
     parent_id: Mapped[Optional[int]] = mapped_column(BigInteger, index=True)
     createTime: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updateTime: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

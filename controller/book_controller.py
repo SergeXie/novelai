@@ -1,12 +1,13 @@
 import json
 import os
+import textwrap
 import uuid
 from typing import Optional, List
 from urllib.parse import urlparse
 
 import httpx
 from cachetools import TTLCache
-from fastapi import APIRouter, Depends, Query, Body
+from fastapi import APIRouter, Depends, Query, Body, BackgroundTasks
 from loguru import logger
 # from openai.resources.skills import content
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,16 +16,15 @@ from ai.adapters.enums import AIProvider, AIAction
 from common.config.get_db import get_db
 from common.exception.errors import RequestError, NotFoundError, ServerError
 from common.response.response_util import ResponseUtil
+from common.utils.text_util import generate_text_sha256_id
 from core.deps.auth import get_current_user, check_user_quota_or_raise
 from core.entity.do.users_do import User
-from core.entity.vo.ai_response import AICompletionResponse
 from core.entity.vo.book_node_schema import BookResp, CreateBookReq, BookNodeDetailResp, UpdateBookNodeReq, \
     EditBookNodeReq, EditBookNodeResp, AddChapterResp, AddBookNodeReq, DeleteBookNodeReq, OfflineBookReq, EditBookReq, \
     HardDeleteBookReq
 from core.entity.vo.bool_vo import AutoCreateBookReq
 from core.entity.vo.confirm_import_req import ConfirmImportRequest
 from core.processor.book_processor import Chapter, NovelProcessor
-from service import ai_service
 from service.ai_prompt_service import PromptService
 from service.ai_service import AIService
 from service.book_service import BookService
@@ -248,8 +248,14 @@ async def create_book_auto(
         current_user: User = Depends(get_current_user)
 ):
     service = BookService(db)
-    book = await service.auto_create_book(user_id=current_user.pkId, title=req.title, summary=req.summary,
-                                          roles=req.characters)
+    book = await service.auto_create_book(user_id=current_user.pkId,
+                                          title=req.title,
+                                          summary=req.summary,
+                                          roles=req.characters,
+                                          outline=req.fullOutlineText,
+                                          writing_style=req.writingStyle,
+                                          world_view=req.worldView,
+                                          chapters=req.chapters, )
     if not book:
         return ResponseUtil.error(msg="未知错误")
     else:
@@ -433,8 +439,10 @@ async def confirm(
         logger.error(f"确认导入失败: {str(e)}")
         raise ServerError(msg="保存书籍失败，请联系管理员")
 
+
 @bookController.post(path="/book/deconstruct", name="拆书")
 async def deconstruct(
+        background_tasks: BackgroundTasks,
         url: str = Body(..., embed=True, description="txt连接"),
         db: AsyncSession = Depends(get_db),
         current_user=Depends(get_current_user)
@@ -443,6 +451,7 @@ async def deconstruct(
     if not content:
         raise NotFoundError(msg="资源不存在")
 
+    book_sha256_id = generate_text_sha256_id(text=content)
 
     tool_key = "wenyuan_deconstructor_2"
     params = {
@@ -452,21 +461,22 @@ async def deconstruct(
     user_prompt = await prompt_service.render_prompt_tool(book=None, tool_key=tool_key, inputs=params)
 
     level = AIProvider.DOUBAO.value
-    check_user_quota_or_raise(frozen_token_length=len(user_prompt)*2, user_info=current_user, level=level)
+    frozen_token_size = len(user_prompt) * 2
+    logger.info(f"[拆书] {textwrap.shorten(user_prompt, width=64, placeholder="...")} 预冻结:{frozen_token_size}")
+    await check_user_quota_or_raise(frozen_token_length=frozen_token_size, user_info=current_user, level=level)
 
     ai_service = AIService(db)
-    request_id, ai_rsp = await ai_service.prepare_and_record_request(
+    request_id, _ = await ai_service.prepare_and_record_request(
         user=current_user,
+        bid=book_sha256_id,
         origin_prompt="拆书",
         user_prompt=user_prompt,
         level=level,
-        action_type=AIAction.Execute,
-        background_tasks=None
+        action_type=AIAction.Deconstruct,
+        background_tasks=background_tasks
     )
-    if ai_rsp:
-        return ResponseUtil.success(data=ai_rsp.content)
-    else:
-        return ResponseUtil.error()
+    return ResponseUtil.success(data=request_id)
+
 
 @bookController.post(path="/book/export", name="导出作品")
 async def export(
@@ -479,6 +489,3 @@ async def export(
     # write_simple_txt(uuid.uuid4().hex + ".txt", text)
     # todo 导出文本上传到外网-->发地址
     return ResponseUtil.success(data=text)
-
-
-

@@ -56,9 +56,9 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             return 0, 0, 0, 0, 0
 
     async def _get_usage_sum(self,
-                            user_id: int,
-                            start_time: datetime = None,
-                            end_time: datetime = None) -> Tuple[int, int, int, int, int]:
+                             user_id: int,
+                             start_time: datetime = None,
+                             end_time: datetime = None) -> Tuple[int, int, int, int, int]:
         """
         高效统计：利用索引下推减少内存扫描，并处理空值。
         """
@@ -194,6 +194,82 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             logger.error(f"Query AILog by bid error: {e}")
             return []
 
+    async def get_invalid_book_destructor_log(self, bid: str) -> AiNovelGenerateLog | None:
+        """
+        获取指定书籍最新的一条成功拆解记录 (status=1)
+        注意：根据你模型中的 comment，成功状态是 1。
+        如果你的业务逻辑中 2 代表特定的 '已完成' 状态，请保持 status=2。
+        """
+        try:
+            # 1. 构造查询语句
+            stmt = (
+                select(AiNovelGenerateLog)
+                .where(
+                    AiNovelGenerateLog.bid == bid,
+                    AiNovelGenerateLog.status == AIGenerateStatus.SUCCESS,  # 这里的状态码请根据你实际逻辑调整
+                    AiNovelGenerateLog.isDelete == 0
+                ).options(
+                    # 显式取消延迟加载，确保详情页能拿到完整内容
+                    undefer(AiNovelGenerateLog.outputContent),
+                    undefer(AiNovelGenerateLog.systemPrompt),
+                    undefer(AiNovelGenerateLog.userPrompt)
+                )
+                # 2. 按照创建时间倒序排列，确保拿到的是最新的一条
+                .order_by(desc(AiNovelGenerateLog.createdAt))
+                # 3. 限制只取第一条
+                .limit(1)
+            )
+
+            # 执行查询
+            result = await self.db.execute(stmt)
+
+            # scalars().first() 会返回对象本身，如果没有结果则返回 None
+            log_entry = result.scalars().first()
+
+            return log_entry
+
+        except Exception as e:
+            # 这里建议记录你的项目日志
+            logger.error(f"查询拆书记录失败: {str(e)}")
+            return None
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    async def sync_ai_log_data(self, source_request_id: str, target_request_id: str) -> Tuple[bool, str] :
+        """
+        将 source_log 的指定字段复制给 target_log 并更新
+        """
+        # 1. 获取源记录和目标记录
+        # 注意：如果 source_log 的 outputContent 是 deferred，这里会自动触发加载
+        source_log = await self.get_log_by_request_id(source_request_id)
+        target_log = await self.get_log_by_request_id(target_request_id)
+
+        if not source_log or not target_log:
+            return False, "记录不存在"
+
+        # 2. 定义需要同步的字段列表
+        fields_to_copy = [
+            "requestInputLength",
+            "outputContent",
+            "outputLength",
+            "tokenEstimate",
+            "status",
+            "totalTokens"
+        ]
+
+        # 3. 执行复制
+        for field in fields_to_copy:
+            value = getattr(source_log, field)
+            setattr(target_log, field, value)
+
+        # 4. 提交到数据库
+        try:
+            await self.db.commit()
+            return True, "更新成功"
+        except Exception as e:
+            await self.db.rollback()
+            return False, f"更新失败: {str(e)}"
+
     async def get_logs_by_paged(
             self,
             user_id: Optional[int] = None,  # 修改为 int 类型提示
@@ -311,9 +387,9 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
 
     @staticmethod
     async def logic_delete(
-        db: AsyncSession,
-        uid:int,
-        request_ids: list
+            db: AsyncSession,
+            uid: int,
+            request_ids: list
     ):
         """
         逻辑删除 AI 记录
