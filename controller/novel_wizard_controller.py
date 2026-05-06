@@ -41,7 +41,7 @@ NOVEL_WIZARD_STEPS: dict[int, dict[str, Any]] = {
             "根据下面的脑洞和前序内容，生成 3-5 个核心角色。\n"
             "脑洞：{idea}\n"
             "前序内容：\n{context_json}\n"
-            "请严格输出 JSON，字段 characters，数组内每个角色包含 name、role、personality、background、goal、conflict。"
+            "请严格输出 JSON，字段 characters，数组内每角色包含 name、content。"
         ),
     },
     3: {
@@ -52,7 +52,7 @@ NOVEL_WIZARD_STEPS: dict[int, dict[str, Any]] = {
             "根据下面的脑洞、角色和前序内容，生成适配故事的世界观设定。\n"
             "脑洞：{idea}\n"
             "前序内容：\n{context_json}\n"
-            "请严格输出 JSON，字段 world，至少包含 era、background、core_rules、major_forces、conflicts。"
+            "请严格输出 JSON，字段 world，数组内每条世界观包含 name、content。"
         ),
     },
     4: {
@@ -63,7 +63,7 @@ NOVEL_WIZARD_STEPS: dict[int, dict[str, Any]] = {
             "根据下面的脑洞、角色、世界观和前序内容，生成写作要求与基调。\n"
             "脑洞：{idea}\n"
             "前序内容：\n{context_json}\n"
-            "请严格输出 JSON，字段 style，至少包含 language_style、pov、pacing、taboo、recommended_length。"
+            "请严格输出 JSON，字段 style，纯文本描述，有且只有一段。"
         ),
     },
     5: {
@@ -71,10 +71,10 @@ NOVEL_WIZARD_STEPS: dict[int, dict[str, Any]] = {
         "key": "book_outline",
         "system_prompt": "你是剧情策划，只输出结构化 JSON，不要解释。",
         "prompt": (
-            "根据下面的脑洞、角色、世界观和写作准则，生成故事大纲。\n"
+            "根据下面的脑洞、角色、世界观和写作准则，生成故事大纲，以卷纲的形式，生成3~5卷的大纲。\n"
             "脑洞：{idea}\n"
             "前序内容：\n{context_json}\n"
-            "请严格输出 JSON，字段 outline，至少包含 theme、main_line、story_arcs。"
+            "请严格输出 JSON，字段 outline，纯文本描述，有且只有一段。"
         ),
     },
     6: {
@@ -86,7 +86,7 @@ NOVEL_WIZARD_STEPS: dict[int, dict[str, Any]] = {
             "脑洞：{idea}\n"
             "章节数：{chapter_count}\n"
             "前序内容：\n{context_json}\n"
-            "请严格输出 JSON，字段 chapters，数组内每章包含 chapter、title、summary、key_event。"
+            "请严格输出 JSON，字段 chapters，数组内每章包含 content。"
         ),
     },
 }
@@ -237,4 +237,3 @@ async def novel_wizard_step(
         # context 为合并后的上下文，可直接传给下一步
         "context": merged_context,
     })
-
