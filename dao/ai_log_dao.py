@@ -285,7 +285,7 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             获取排除大字段后的模型对象列表，并返回总数
             """
         try:
-            offset = (page - 1) * size
+            offset = (page - 1) * pageSize
 
             # 1. 构造过滤条件
             filters = [AiNovelGenerateLog.isDelete == 0]
@@ -308,7 +308,7 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
                 select(AiNovelGenerateLog)
                 .where(and_(*filters))
                 .order_by(desc(AiNovelGenerateLog.createdAt))
-                .limit(size)
+                .limit(pageSize)
                 .offset(offset)
             )
 
