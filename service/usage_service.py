@@ -1,5 +1,6 @@
 from datetime import datetime, time
 
+from dateutil import parser
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,6 +38,19 @@ class UsageService:
         start = datetime.combine(today, time.min)
         end = datetime.combine(today, time.max)
         return start, end
+
+    @staticmethod
+    def parse_query_time(value: str | None, is_end: bool = False) -> datetime | None:
+        if not value:
+            return None
+
+        value = value.strip()
+        parsed_time = parser.parse(value)
+
+        if len(value) <= 10:
+            return datetime.combine(parsed_time.date(), time.max if is_end else time.min)
+
+        return parsed_time
 
     async def get_user_daily_input_output(self, user_id: int) -> tuple[int, int]:
         """获取用户今天累计的输入长度和输出长度。"""
@@ -220,8 +234,26 @@ class UsageService:
             pageSize=size
         )
 
-    async def get_logs_page(self, user_id:int, page:int, size:int):
-        logs, total = await self.ai_log_dao.get_logs_by_paged(user_id=user_id, page=page, size=size)
+    async def get_logs_page(
+            self,
+            user_id: int,
+            page: int,
+            size: int,
+            start_time: str | None = None,
+            end_time: str | None = None,
+            origin_prompt: str | None = None,
+    ):
+        start_time = self.parse_query_time(start_time)
+        end_time = self.parse_query_time(end_time, is_end=True)
+
+        logs, total = await self.ai_log_dao.get_logs_by_paged(
+            user_id=user_id,
+            page=page,
+            size=size,
+            start_time=start_time,
+            end_time=end_time,
+            origin_prompt=origin_prompt,
+        )
 
         list_data = [
             await AIGenerateLogResp.from_orm_model(log, self.model_dao)
