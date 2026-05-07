@@ -238,7 +238,7 @@ class UsageService:
             self,
             user_id: int,
             page: int,
-            size: int,
+            pageSize: int,
             start_time: str | None = None,
             end_time: str | None = None,
             origin_prompt: str | None = None,
@@ -249,7 +249,7 @@ class UsageService:
         logs, total = await self.ai_log_dao.get_logs_by_paged(
             user_id=user_id,
             page=page,
-            size=size,
+            pageSize=pageSize,
             start_time=start_time,
             end_time=end_time,
             origin_prompt=origin_prompt,
@@ -265,7 +265,7 @@ class UsageService:
             list=list_data,
             total=total,
             page=page,
-            pageSize=size
+            pageSize=pageSize
         )
 
     async def get_log_detail(self, request_id: str) -> AIGenerateLogDetailResp:

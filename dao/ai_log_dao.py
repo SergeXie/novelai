@@ -275,7 +275,7 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             user_id: Optional[int] = None,  # 修改为 int 类型提示
             bid: Optional[str] = None,
             page: int = 1,
-            size: int = 10,
+            pageSize: int = 20,
             with_content: bool = False,
             start_time: Optional[datetime] = None,
             end_time: Optional[datetime] = None,

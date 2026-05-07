@@ -124,7 +124,7 @@ async def delete_history(
 @aiController.get("/ai/log/list")
 async def get_log_list(
         page: int = Query(1, ge=1, description="页码"),
-        size: int = Query(20, ge=1, le=50, description="每页数量"),
+        pageSize: int = Query(20, ge=1, le=50, description="每页数量"),
         startTime: str | None = Query(None, description="起始时间"),
         endTime: str | None = Query(None, description="结束时间"),
         originPrompt: str | None = Query(None, description="提示词关键字"),
@@ -135,7 +135,7 @@ async def get_log_list(
     result = await service.get_logs_page(
         user_id=user.pkId,
         page=page,
-        size=size,
+        pageSize=pageSize,
         start_time=startTime,
         end_time=endTime,
         origin_prompt=originPrompt,
