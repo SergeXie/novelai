@@ -1,15 +1,18 @@
 from datetime import datetime, timedelta, timezone
 
+from dateutil.relativedelta import relativedelta
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.config.config import settings
 from common.exception.lzsd_exception import ServiceWarning
+from core.entity.do.membership_token_grant_plan_do import MembershipTokenGrantPlan
 from core.entity.do.user_account_do import UserAccount, AccountLog
 from core.entity.vo.user_vo import AccountInfoResponse
 from core.enums.constants import UserLevel, BizType, ChargeType, AssetType
 from core.enums.token_consume_source import TokenConsumeSource
 from dao.membership_dao import MembershipDAO
+from dao.membership_token_grant_plan_dao import MembershipTokenGrantPlanDAO
 from dao.package_dao import PackageDAO
 from dao.user_account_dao import UserAccountDAO
 from service.usage_service import UsageService
@@ -19,6 +22,201 @@ class AccountService:
     """
     账户服务（发权益）
     """
+
+    @staticmethod
+    def _as_utc_naive(value: datetime) -> datetime:
+        # 项目里 MySQL DateTime 和 scheduler 主要使用 naive UTC，统一后再比较，避免 aware/naive 混用报错。
+        if value.tzinfo is None:
+            return value
+
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+    @staticmethod
+    def _split_monthly_token_allowance(total_amount: int) -> list[int]:
+        # 发放策略：首发 60%，剩余 40% 分 4 周发放；最后一期兜底处理不能整除的余数。
+        initial_amount = total_amount * 60 // 100
+        remaining_amount = total_amount - initial_amount
+        weekly_amount = remaining_amount // 4
+        weekly_amounts = [weekly_amount] * 4
+        weekly_amounts[-1] += remaining_amount - sum(weekly_amounts)
+        return [initial_amount, *weekly_amounts]
+
+    @staticmethod
+    def _membership_cycle_count(level_code: str, duration_days: int) -> int:
+        # 年会员每个月开启一轮新的月度额度周期，月会员/basic 只开启当前订单周期。
+        if level_code == UserLevel.PRO_ANNUAL.value:
+            return 12
+
+        return max(1, duration_days // 30)
+
+    @staticmethod
+    def _build_membership_token_plans(
+            user_id: int,
+            order_no: str,
+            level_code: str,
+            monthly_token_allowance: int,
+            duration_days: int,
+            start_at: datetime,
+            expire_at: datetime,
+    ) -> list[MembershipTokenGrantPlan]:
+        if monthly_token_allowance <= 0:
+            return []
+
+        plans = []
+        cycle_count = AccountService._membership_cycle_count(level_code, duration_days)
+        amounts = AccountService._split_monthly_token_allowance(monthly_token_allowance)
+
+        for cycle_no in range(1, cycle_count + 1):
+            cycle_start = start_at + relativedelta(months=cycle_no - 1)
+
+            if cycle_no > 1:
+                # 新周期开始前先清空上个周期未用完的 monthly_balance，再发本周期首期。
+                plans.append(
+                    MembershipTokenGrantPlan(
+                        user_id=user_id,
+                        order_no=order_no,
+                        level_code=level_code,
+                        cycle_no=cycle_no,
+                        period_no=-1,
+                        plan_type="RESET",
+                        amount=0,
+                        scheduled_at=cycle_start,
+                        membership_expire_at=expire_at,
+                        status="PENDING",
+                        extra={"source": "membership", "reason": "monthly_cycle_reset"},
+                    )
+                )
+
+            for period_no, amount in enumerate(amounts):
+                # period_no=0 是首发 60%，period_no=1-4 是后续每周发放。
+                plans.append(
+                    MembershipTokenGrantPlan(
+                        user_id=user_id,
+                        order_no=order_no,
+                        level_code=level_code,
+                        cycle_no=cycle_no,
+                        period_no=period_no,
+                        plan_type="GRANT",
+                        amount=amount,
+                        scheduled_at=cycle_start + timedelta(days=period_no * 7),
+                        membership_expire_at=expire_at,
+                        status="PENDING",
+                        extra={"source": "membership", "grant_mode": "60_40_weekly"},
+                    )
+                )
+
+        return plans
+
+    @staticmethod
+    def _write_monthly_recharge_log(
+            db: AsyncSession,
+            account: UserAccount,
+            biz_id: str,
+            amount: int,
+            level_code: str,
+            extra: dict | None = None,
+    ) -> None:
+        log = AccountLog(
+            user_id=account.user_id,
+            biz_id=biz_id,
+            biz_type=BizType.ORDER.value,
+            change_type=ChargeType.RECHARGE.value,
+            asset_type=AssetType.MONTHLY.value,
+            amount=amount,
+            balance_after=account.monthly_balance,
+            extra={
+                "source": "membership",
+                "level": level_code,
+                **(extra or {}),
+            }
+        )
+        db.add(log)
+
+    @staticmethod
+    def _write_monthly_reset_log(
+            db: AsyncSession,
+            account: UserAccount,
+            biz_id: str,
+            amount: int,
+            level_code: str,
+            reason: str,
+    ) -> None:
+        if amount <= 0:
+            return
+
+        log = AccountLog(
+            user_id=account.user_id,
+            biz_id=biz_id,
+            biz_type=BizType.SYSTEM.value,
+            change_type=ChargeType.EXPIRE.value,
+            asset_type=AssetType.MONTHLY.value,
+            amount=-amount,
+            balance_after=account.monthly_balance,
+            extra={
+                "level": level_code,
+                "reason": reason,
+            }
+
+        )
+        db.add(log)
+
+    @staticmethod
+    async def issue_membership_token_plan(
+            db: AsyncSession,
+            account: UserAccount,
+            plan: MembershipTokenGrantPlan,
+            now: datetime | None = None,
+    ) -> None:
+        now = now or datetime.utcnow()
+
+        if plan.status != "PENDING":
+            return
+
+        if now > plan.membership_expire_at:
+            # 计划晚于会员订单有效期时不再补发，避免过期权益继续到账。
+            plan.status = "CANCELED"
+            plan.issued_at = now
+            plan.extra = {
+                **(plan.extra or {}),
+                "cancel_reason": "membership_expired",
+            }
+            return
+
+        if plan.plan_type == "RESET":
+            # 年会员新月周期：清掉旧月度余额，总额度同步扣回，再由后续 GRANT 计划补入新月额度。
+            old_monthly = account.monthly_balance or 0
+            account.monthly_balance = 0
+            account.total_amount = max((account.total_amount or 0) - old_monthly, 0)
+            account.last_reset_at = now
+
+            AccountService._write_monthly_reset_log(
+                db=db,
+                account=account,
+                biz_id=f"{plan.order_no}:cycle:{plan.cycle_no}:reset",
+                amount=old_monthly,
+                level_code=plan.level_code,
+                reason="monthly_cycle_reset",
+            )
+        else:
+            # 普通发放：所有会员月度权益都进入 monthly_balance，保持现有余额展示和扣费逻辑不变。
+            account.monthly_balance += plan.amount
+            account.total_amount += plan.amount
+
+            AccountService._write_monthly_recharge_log(
+                db=db,
+                account=account,
+                biz_id=f"{plan.order_no}:cycle:{plan.cycle_no}:period:{plan.period_no}",
+                amount=plan.amount,
+                level_code=plan.level_code,
+                extra={
+                    "cycle_no": plan.cycle_no,
+                    "period_no": plan.period_no,
+                    "grant_mode": "60_40_weekly",
+                },
+            )
+
+        plan.status = "ISSUED"
+        plan.issued_at = now
 
     @staticmethod
     def is_membership_active(account: UserAccount) -> bool:
@@ -159,54 +357,60 @@ class AccountService:
         if not membership:
             raise Exception("会员不存在")
 
-        now = datetime.now(timezone.utc)
+        now = datetime.utcnow()
         duration = timedelta(days=membership.duration_days)
 
         # ==================== 1. 计算过期时间 ====================
         if account.expire_at:
-            expire_at = account.expire_at
-
-            # 如果是 naive → 强制变成 UTC aware
-            if expire_at.tzinfo is None:
-                expire_at = expire_at.replace(tzinfo=timezone.utc)
+            expire_at = AccountService._as_utc_naive(account.expire_at)
         else:
             expire_at = None
 
         if expire_at and expire_at > now:
-            new_expire = expire_at + duration
+            benefit_start = expire_at
         else:
-            new_expire = now + duration
+            benefit_start = now
+
+        new_expire = benefit_start + duration
 
         account.level_code = membership.level_code
         account.expire_at = new_expire
 
         logger.info(f"[会员] level={membership.level_code}, expire={new_expire}")
 
-        # ==================== 2. 发放月度Token ====================
+        # ==================== 2. 创建并执行月度Token分期计划 ====================
 
         if membership.monthly_token_allowance > 0:
-            account.monthly_balance += membership.monthly_token_allowance
-            account.total_amount += membership.monthly_token_allowance
-            # 写流水（MONTHLY）
-            log = AccountLog(
+            # 幂等保护：同一个订单只允许生成一组发放计划，支付回调重试不会重复加额度。
+            if await MembershipTokenGrantPlanDAO.exists_by_order_no(db, order.order_no):
+                logger.info(f"[会员] 发放计划已存在 order_no={order.order_no}")
+                return
+
+            plans = AccountService._build_membership_token_plans(
                 user_id=account.user_id,
-                biz_id=order.order_no,
-                biz_type=BizType.ORDER.value,
-                change_type=ChargeType.RECHARGE.value,
-                asset_type=AssetType.MONTHLY.value,
-                amount=membership.monthly_token_allowance,
-                balance_after=account.monthly_balance,
-                extra={
-                    "source": "membership",
-                    "level": membership.level_code
-                }
+                order_no=order.order_no,
+                level_code=membership.level_code,
+                monthly_token_allowance=membership.monthly_token_allowance,
+                duration_days=membership.duration_days,
+                start_at=now,
+                expire_at=new_expire,
             )
 
-            db.add(log)
+            MembershipTokenGrantPlanDAO.add_all(db, plans)
 
-            logger.info(f"[DEBUG] before: m={account.monthly_balance}, p={account.permanent_balance}")
-            logger.info(f"[DEBUG] after: m={account.monthly_balance}, p={account.permanent_balance}")
-            logger.info(f"[会员] 月度Token +{membership.monthly_token_allowance}")
+            immediate_plans = [
+                plan for plan in plans
+                if plan.scheduled_at <= now and plan.plan_type == "GRANT"
+            ]
+
+            # 订单支付成功时立即执行当前到期的首发计划，让用户马上拿到 60% 月度额度。
+            for plan in immediate_plans:
+                await AccountService.issue_membership_token_plan(db, account, plan, now)
+
+            logger.info(
+                f"[会员] 月度Token首发 +{sum(plan.amount for plan in immediate_plans)}, "
+                f"plans={len(plans)}"
+            )
 
     @staticmethod
     async def _grant_token_package(db: AsyncSession, account: UserAccount, order):

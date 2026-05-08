@@ -4,7 +4,9 @@ from loguru import logger
 from common.config.get_db import get_db
 from core.entity.do.user_account_do import AccountLog
 from core.enums.constants import BizType, ChargeType, AssetType
+from dao.membership_token_grant_plan_dao import MembershipTokenGrantPlanDAO
 from dao.user_account_dao import UserAccountDAO
+from service.account_service import AccountService
 
 scheduler = AsyncIOScheduler()
 
@@ -32,7 +34,8 @@ async def membership_expire_job():
             # =========================
             # 1. 并发保护（防止刚续费）
             # =========================
-            if account.expire_at and account.expire_at > now:
+            expire_at = AccountService._as_utc_naive(account.expire_at) if account.expire_at else None
+            if expire_at and expire_at > now:
                 continue
 
             # =========================
@@ -111,6 +114,45 @@ async def membership_expire_job():
         await db.commit()
 
     logger.info("[定时任务] 会员过期检查完成")
+
+
+@scheduler.scheduled_job("cron", hour=1, minute=10)
+async def membership_token_grant_job():
+    """
+    会员月度 Token 分期发放任务。
+    """
+    logger.info("[定时任务] 开始执行会员Token分期发放")
+
+    async for db in get_db():
+        now = datetime.utcnow()
+        plans = await MembershipTokenGrantPlanDAO.get_due_plans(db, now)
+
+        for plan in plans:
+            account = await UserAccountDAO.get_active_account(db=db, user_id=plan.user_id)
+            if not account:
+                plan.status = "FAILED"
+                plan.issued_at = now
+                plan.extra = {
+                    **(plan.extra or {}),
+                    "failed_reason": "account_not_found",
+                }
+                logger.error(f"[会员Token发放] 账户不存在 user_id={plan.user_id}, plan_id={plan.id}")
+                continue
+
+            try:
+                await AccountService.issue_membership_token_plan(db, account, plan, now)
+            except Exception as e:
+                plan.status = "FAILED"
+                plan.issued_at = now
+                plan.extra = {
+                    **(plan.extra or {}),
+                    "failed_reason": str(e),
+                }
+                logger.exception(f"[会员Token发放] 执行失败 plan_id={plan.id}: {e}")
+
+        await db.commit()
+
+    logger.info("[定时任务] 会员Token分期发放完成")
 
 def start_scheduler():
     scheduler.start()
