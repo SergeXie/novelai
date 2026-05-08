@@ -201,7 +201,7 @@ class UsageService:
 
     async def get_book_chat_history(self, bid: str, page: int, size: int, with_content:bool = False) -> PageResp:
         """分页获取某本书下的 AI 对话历史。"""
-        logs, total = await self.ai_log_dao.get_logs_by_paged(bid=bid, page=page, size=size, with_content=with_content)
+        logs, total = await self.ai_log_dao.get_logs_by_paged(bid=bid, page=page, pageSize=size, with_content=with_content)
 
         list_data = [
             await AIGenerateLogResp.from_orm_model(log, self.model_dao)
