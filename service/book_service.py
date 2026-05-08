@@ -501,11 +501,12 @@ class BookService:
         # 3. 定义简单字段的映射配置 (类型 -> 对应的内容)
         # 这样可以处理 outline, writing_style, world_view 这种单点内容
         simple_fields = {
-            BookNodeCategory.WORLDVIEW: world_view
+            BookNodeCategory.WORLDVIEW: world_view,
+            BookNodeCategory.OUTLINE: outline
+
         }
 
         notify_fields = {
-            BookNodeCategory.OUTLINE: outline,
             BookNodeCategory.WRITING_STYLE: writing_style,
         }
 
