@@ -412,6 +412,7 @@ async def qr_callback(
         row.status = "register"
         row.openid = openid
         row.unionid = unionid
+        row.nickname = nickname
 
         await db.commit()
 
@@ -428,11 +429,11 @@ async def qr_status(state: str, db: AsyncSession = Depends(get_db)):
 
     row = result.scalar_one_or_none()
 
-    if row and row.status == "register":
         data = {
             "status": "register",
             "openid": row.openid,
-            "unionid": row.unionid
+            "unionid": row.unionid,
+            "nickname": row.nickname,
         }
         return ResponseUtil.success(data=data)
 

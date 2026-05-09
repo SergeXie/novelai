@@ -121,6 +121,8 @@ class WechatLoginState(Base):
         comment="微信unionid"
     )
 
+    nickname: Mapped[str] = mapped_column(String(64), nullable=True, comment="昵称")
+
     # 登录成功后给前端
     token: Mapped[str] = mapped_column(
         Text,
