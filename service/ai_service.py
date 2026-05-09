@@ -118,7 +118,7 @@ class AIService:
                 start_time = now.replace(hour=9, minute=0, second=0, microsecond=0)
                 end_time = now.replace(hour=19, minute=0, second=0, microsecond=0)
                 if start_time <= now <= end_time:
-                    output_content = "当前访问人数过多😭，疯狂加服务器中，请稍后再试。"
+                    output_content = "当前访问人数过多，疯狂加服务器中，请切换模型或者稍后再试。"
                     logger.info(output_content)
                     # 限制时间直接返回 None
                     # 记录日志时也保存 output_content
