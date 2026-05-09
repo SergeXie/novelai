@@ -519,7 +519,7 @@ async def export(
 @bookController.get("/book/deconstruct/list", summary="拆书生成记录列表")
 async def get_deconstruct_generate_list(
     page: int = Query(1, ge=1, description="页码"),
-    pageSize: int = Query(20, ge=1, le=100, description="每页数量"),
+    pageSize: int = Query(20, ge=1, le=999, description="每页数量"),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user)
 
