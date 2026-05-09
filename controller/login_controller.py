@@ -436,6 +436,7 @@ async def qr_status(state: str, db: AsyncSession = Depends(get_db)):
 
     row = result.scalar_one_or_none()
 
+    if row and row.status == "register":
         data = {
             "status": "register",
             "openid": row.openid,
