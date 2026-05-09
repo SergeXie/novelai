@@ -51,6 +51,12 @@ class UserRegisterRequest(BaseModel):
         description="密码"
     )
 
+    nickname: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="昵称"
+    )
 
     # 微信注册时携带（普通注册可不传）
     openid: Optional[str] = Field(
@@ -153,6 +159,7 @@ async def register(
         uuid=LZSDGenerator.generate_user_uid(),
         account=req.account,
         avatar="",
+        nickname=req.nickname,
         password=hashed_password,
         isBindWechat = True,
         # 微信字段（可为空）
