@@ -240,7 +240,7 @@ async def reuse_book_destructor_data(
         async with get_db_context() as db:
             dao = AILogDAO(db=db)
             reuse_log = await dao.get_invalid_book_destructor_log(bid=sha256_id)
-            if log:
+            if log and reuse_log:
                 await dao.sync_ai_log_data(source_request_id=reuse_log.requestId, target_request_id=log.requestId)
                 logger.info(f"[拆书]{sha256_id} 复用成功{reuse_log.requestId}--->{log.requestId}")
                 return True

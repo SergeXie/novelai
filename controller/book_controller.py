@@ -18,6 +18,7 @@ from common.exception.errors import RequestError, NotFoundError, ServerError
 from common.response.response_util import ResponseUtil
 from common.utils.text_util import generate_text_sha256_id
 from core.deps.auth import get_current_user, check_user_quota_or_raise
+from core.entity.do.book_deconstruct_record_do import BookDeconstructRecord
 from core.entity.do.users_do import User
 from core.entity.vo.book_node_schema import BookResp, CreateBookReq, BookNodeDetailResp, UpdateBookNodeReq, \
     EditBookNodeReq, EditBookNodeResp, AddChapterResp, AddBookNodeReq, DeleteBookNodeReq, OfflineBookReq, EditBookReq, \
@@ -448,6 +449,9 @@ async def deconstruct(
         current_user=Depends(get_current_user)
 ):
     content = await BookService.download_novel_content(url=url)
+
+    title = await BookService.extract_book_title(url=url)
+
     if not content:
         raise NotFoundError(msg="资源不存在")
 
@@ -475,6 +479,27 @@ async def deconstruct(
         action_type=AIAction.Deconstruct,
         background_tasks=background_tasks
     )
+
+    # 6. 创建拆书记录
+    deconstruct_record = BookDeconstructRecord(
+        userId=current_user.pkId,
+        requestId=request_id,
+        bookHash=book_sha256_id,
+        title=title,
+        sourceUrl=url,
+    )
+
+    db.add(deconstruct_record)
+
+    await db.commit()
+
+    logger.info(
+        f"[拆书记录创建成功] "
+        f"user:{current_user.pkId} "
+        f"requestId:{request_id}"
+    )
+
+    print("request_id:{}".format(request_id))
     return ResponseUtil.success(data=request_id)
 
 
@@ -489,3 +514,33 @@ async def export(
     # write_simple_txt(uuid.uuid4().hex + ".txt", text)
     # todo 导出文本上传到外网-->发地址
     return ResponseUtil.success(data=text)
+
+
+@bookController.get("/book/deconstruct/list", summary="拆书生成记录列表")
+async def get_deconstruct_generate_list(
+    page: int = Query(1, ge=1, description="页码"),
+    pageSize: int = Query(20, ge=1, le=100, description="每页数量"),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)
+
+):
+    data = await BookService.get_deconstruct_generate_list(
+        db=db,
+        user_id=current_user.pkId,
+        page=page,
+        pageSize=pageSize
+    )
+
+    return ResponseUtil.success(data=data)
+
+
+@bookController.post("/book/deconstruct/delete", summary="逻辑删除拆书历史记录")
+async def delete_deconstruct_record(
+        requestId: str = Body(..., embed=True, description="拆书任务requestId"),
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user)
+
+):
+    await BookService.delete_by_request_id(db, requestId, userId=current_user.pkId)
+
+    return ResponseUtil.success(msg="删除成功")
