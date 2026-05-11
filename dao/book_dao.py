@@ -2,13 +2,15 @@ from datetime import datetime
 from typing import List, Optional
 
 from loguru import logger
-from sqlalchemy import select, and_, update, delete, insert
+from sqlalchemy import select, and_, update, delete, insert, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.utils.generator import LZSDGenerator
 from common.utils.text_util import strip_html_tags
+from core.entity.do.book_deconstruct_record_do import BookDeconstructRecord
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
+from core.entity.do.generate_log import AiNovelGenerateLog
 from core.enums.node_type import BookNodeCategory
 from core.processor.book_processor import Chapter
 
@@ -214,6 +216,7 @@ class BookDAO:
             *,
             name: str | None,
             data: dict | None = None,
+            content: str | None = None
     ) -> BookNode:
         """
         更新节点名称 / 正文
@@ -222,6 +225,8 @@ class BookDAO:
             node.name = name
         if data is not None:
             node.data = data
+        if content is not None:
+            node.content = content
 
         self.db.add(node)
         await self.db.commit()
@@ -267,7 +272,8 @@ class BookDAO:
             name: str,
             data: dict | None = None,
             content: str | None = None,
-            category:BookNodeCategory = BookNodeCategory.NORMAL
+            category:BookNodeCategory = BookNodeCategory.NORMAL,
+            order:int = 0,
     ) -> BookNode:
         """
         新增章节（自动补正文根节点）
@@ -287,9 +293,10 @@ class BookDAO:
             name=name,
             is_leaf=is_leaf,
             depth=_depth,
-            data=data,
+            data=data or {},
             content=content,
-            type=_type
+            type=_type,
+            order=order,
         )
         self.db.add(node)
         await self.db.flush()
@@ -460,3 +467,57 @@ class BookDAO:
         await self.db.execute(
             delete(Book).where(and_(Book.bid == bid, Book.uid == uid))
         )
+
+    @staticmethod
+    async def get_deconstruct_list_dao(
+            db: AsyncSession,
+            user_id: int,
+            page: int,
+            pageSize: int
+    ):
+        # =========================
+        # 查询总数
+        # =========================
+        count_stmt = (
+            select(func.count())
+            .select_from(BookDeconstructRecord)
+            .where(
+                BookDeconstructRecord.userId == user_id,
+                BookDeconstructRecord.isDelete == 0
+            )
+        )
+
+        total_result = await db.execute(count_stmt)
+
+        total = total_result.scalar() or 0
+
+        # =========================
+        # 查询分页数据
+        # =========================
+        stmt = (
+            select(
+                BookDeconstructRecord.id,
+                BookDeconstructRecord.requestId,
+                BookDeconstructRecord.title,
+                BookDeconstructRecord.sourceUrl,
+                BookDeconstructRecord.createdAt,
+
+                AiNovelGenerateLog.status,
+                AiNovelGenerateLog.errorMsg
+            )
+            .join(
+                AiNovelGenerateLog,
+                AiNovelGenerateLog.requestId == BookDeconstructRecord.requestId
+            )
+            .where(
+                BookDeconstructRecord.userId == user_id,
+                BookDeconstructRecord.isDelete == 0
+            )
+            .order_by(desc(BookDeconstructRecord.createdAt))
+            .offset((page - 1) * pageSize)
+            .limit(pageSize)
+        )
+
+        result = await db.execute(stmt)
+
+        return result.all(), total

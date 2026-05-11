@@ -1,5 +1,6 @@
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
-from typing import List, Optional
 
 # 定义单个角色
 class Character(BaseModel):
@@ -33,3 +34,24 @@ class RefineRequest(BaseModel):
     original_content: str = Field(..., description="待修改的原始内容")
     suggestion: str = Field(..., description="用户的修改建议")
     max_tokens: int = Field(2000, description="生成长度限制")
+
+
+class NovelWizardStepRequest(BaseModel):
+    step: int = Field(..., ge=1, le=6, description="向导步骤，1-6")
+    idea: str = Field(..., description="初步脑洞")
+    context: Dict[str, Any] | str = Field(default_factory=dict, description="前序步骤上下文，支持对象或字符串")
+    level: int = Field(2, description="模型等级")
+    temperature: float = Field(0.8, description="采样温度")
+    max_tokens: int = Field(2000, description="生成长度限制")
+    chapter_count: int = Field(5, ge=1, le=100, description="第6步章节数量")
+    wizardId: Optional[str] = Field(None, description="向导会话ID")
+
+
+class NovelWizardStepResponse(BaseModel):
+    wizardId: str
+    requestId: str
+    step: int
+    stepName: str
+    content: str
+    parsedContent: Optional[Any] = None
+    context: Dict[str, Any] = Field(default_factory=dict)

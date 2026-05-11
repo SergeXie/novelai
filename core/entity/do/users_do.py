@@ -1,6 +1,7 @@
 import enum
+from datetime import datetime
 
-from sqlalchemy import BigInteger, String, Enum, DateTime, func
+from sqlalchemy import BigInteger, String, Enum, DateTime, func, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.db_mysql import Base
@@ -36,10 +37,119 @@ class User(Base):
     status: Mapped[AccountStatus] = mapped_column(Enum(AccountStatus), nullable=False, default=AccountStatus.ACTIVE,
                                                   comment="帐号状态")
 
+    wechatOpenid: Mapped[str] = mapped_column(
+        String(64),
+        nullable=True,
+        unique=True,
+        comment="微信开放平台openid"
+    )
+
+    wechatUnionid: Mapped[str] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+        comment="微信unionid"
+    )
+
+    isBindWechat: Mapped[bool] = mapped_column(
+        default=False,
+        nullable=False,
+        comment="是否绑定微信"
+    )
+
+    loginType: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="account",
+        comment="登录方式 account/wechat"
+    )
+
+    lastLoginTime: Mapped[DateTime] = mapped_column(
+        DateTime,
+        nullable=True,
+        comment="最后登录时间"
+    )
+
     createTime: Mapped[DateTime] = mapped_column(DateTime, nullable=False, server_default=func.current_timestamp(),
                                                   comment="创建时间")
 
     updateTime: Mapped[DateTime] = mapped_column(DateTime, nullable=False, server_default=func.current_timestamp(),
                                                   onupdate=func.current_timestamp(), comment="更新时间")
+
+
+class WechatLoginState(Base):
+    __tablename__ = "mc_wechat_login_state"
+
+    # 主键ID
+    pkId: Mapped[int] = mapped_column(
+        BigInteger,
+        primary_key=True,
+        autoincrement=True,
+        comment="主键ID"
+    )
+
+    # 本次二维码唯一标识
+    state: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        unique=True,
+        index=True,
+        comment="二维码唯一state"
+    )
+
+    # waiting / success / register / expired
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="waiting",
+        index=True,
+        comment="状态"
+    )
+
+    # 微信身份信息（未注册时使用）
+    openid: Mapped[str] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+        comment="微信openid"
+    )
+
+    unionid: Mapped[str] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+        comment="微信unionid"
+    )
+
+    nickname: Mapped[str] = mapped_column(String(64), nullable=True, comment="昵称")
+
+    # 登录成功后给前端
+    token: Mapped[str] = mapped_column(
+        Text,
+        nullable=True,
+        comment="登录token"
+    )
+
+    # 用户ID
+    user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        index=True,
+        comment="用户ID"
+    )
+
+    # 创建时间
+    createTime: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        server_default=func.current_timestamp(),
+        comment="创建时间"
+    )
+
+    # 过期时间（建议5分钟）
+    expireTime: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        comment="过期时间"
+    )
 
 

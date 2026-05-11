@@ -8,11 +8,13 @@ from common.config.config import settings
 from common.exception.handle import handle_exception
 from controller.ai_chat_controller import aiChatController
 from controller.ai_controller import aiController
+from controller.novel_wizard_controller import novelWizardController
 from controller.ai_template_controller import aiTemplateController
 from controller.book_controller import bookController
 from controller.login_controller import loginController
 from controller.product_controller import productRouter
 from controller.ai_prompt_controller import promptController
+from controller.pv_controller import Pvrouter
 from controller.template_controller import templateController
 from controller.user_controller import userController
 from core.scheduler.membership_scheduler import start_scheduler, shutdown_scheduler
@@ -95,7 +97,9 @@ def register_router(app: FastAPI):
         {'router': templateController, 'tags': ['书籍模板类型（作品类型）']},
         {'router': productRouter, 'tags': ['产品中心']},
         {'router': aiTemplateController, 'tags': ['提示词模板']},
-        {'router': aiChatController, 'tags': ['AI聊天']}
+        {'router': aiChatController, 'tags': ['AI聊天']},
+        {'router': novelWizardController, 'tags': ['小说向导']},
+        {'router': Pvrouter, 'tags': ['PV统计']},
     ]
 
     for controller in controller_list:

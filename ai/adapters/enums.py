@@ -11,6 +11,7 @@ class AIProvider(IntEnum):
     GPT = 6
     ZHIPU = 7
     CLAUDETHINKING = 8
+    MIMO = 9
 
     @classmethod
     def parse(cls, value: int | None) -> "AIProvider":
@@ -24,7 +25,7 @@ class AIProvider(IntEnum):
         try:
             return cls(value)
         except ValueError:
-            # 当 value 不在 0-8 范围内时，返回默认供应商
+            # 当 value 不在已定义范围内时，返回默认供应商
             return cls.DOUBAO
 
 class AIAction(str, Enum):
@@ -32,8 +33,9 @@ class AIAction(str, Enum):
     Generate = "generate"
     Render = "render"
     WorkFlow = "workflow"
-    Execute = "execute",
+    Execute = "execute"
     Chat = "chat"
+    Deconstruct = "deconstruct"
 
     @classmethod
     def _missing_(cls, value):
