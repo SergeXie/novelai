@@ -80,10 +80,17 @@ class McPVLog(Base):
 
     # 完整User-Agent
     user_agent = Column(
-        Text,
+        String(128),
         nullable=True,
         comment="完整UA信息"
     )
+
+    sub = Column(
+        String(100),
+        nullable=True,
+        comment="子分类/维度"
+    )
+
 
     # 创建时间
     created_at = Column(
