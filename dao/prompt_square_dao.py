@@ -1,4 +1,4 @@
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import or_
@@ -127,7 +127,7 @@ class PromptSquareDAO:
             cover_img="",
             engine_type=PromptEngineType.JINJA2.value,
             input_schema={},
-            use_count=0
+            use_count=0,
         )
 
         db.add(prompt)
@@ -214,12 +214,39 @@ class PromptSquareDAO:
         prompt.category = req.category
         prompt.content = req.content
         prompt.description = req.description
-        prompt.status = req.status
+        prompt.status = 0
 
         db.add(prompt)
         await db.commit()
         await db.refresh(prompt)
         return prompt
+
+    @staticmethod
+    async def update_audit_status(
+            db: AsyncSession,
+            prompt_id: int,
+            status: int,
+            audit_reason: str = ""
+    ) -> bool:
+        """
+        更新提示词模板的审核状态和原因
+        :param prompt_id: 模板ID
+        :param status: 状态值 (0:下架, 1:上架, 2:审核中, 3:审核失败)
+        :param audit_reason: 审核原因
+        """
+        stmt = (
+            update(PromptSquare)
+            .where(PromptSquare.id == prompt_id)
+            .values(
+                status=status,
+                audit_reason=audit_reason
+            )
+        )
+        result = await db.execute(stmt)
+        # 记得在调用方执行 db.commit()，或者在此处执行
+        # await db.commit()
+        return result.rowcount > 0
+
 
     @staticmethod
     async def delete(

@@ -72,7 +72,7 @@ class ModelValidatorException(Exception):
 
 class BusinessException(Exception):
     """所有业务异常的基类"""
-    def __init__(self, message: str, code: int):
+    def __init__(self, message: str, code: int = 400):
         self.message = message
         self.code = code
         super().__init__(self.message)

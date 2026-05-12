@@ -26,3 +26,6 @@ class PVCreateRequest(BaseModel):
 
     # 完整UA
     user_agent: Optional[str] = None
+
+    # 子分类/维度
+    sub: Optional[str] = None
