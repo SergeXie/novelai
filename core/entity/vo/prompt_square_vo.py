@@ -34,6 +34,8 @@ class PromptItem(BaseModel):
     # 状态
     status: int
 
+    audit_reason:str
+
     # 时间
     created_at: datetime
     updated_at: datetime

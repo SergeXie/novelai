@@ -1,6 +1,8 @@
+from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
+
 
 class Character(BaseModel):
     """角色卡模型"""
@@ -32,3 +34,18 @@ class AutoCreateBookReq(BaseModel):
 
     writingStyle: Optional[str] = Field("", description="写作手法")
     worldView: Optional[str] = Field("", description="世界观")
+
+class BookAssetVO(BaseModel):
+    """
+    拆书资产展示对象 (VO)
+    仅展示标题、创建时间以及用于前端定位的 requestId
+    """
+    title: str
+    created_at: datetime
+    request_id: str  # 建议保留此字段，方便前端点击列表项时反查详情
+
+    # Pydantic v2 配置，允许从 SQLAlchemy 模型直接转换
+    model_config = ConfigDict(from_attributes=True)
+
+    # 如果需要自定义时间格式输出（例如：2026-04-30 14:00:00）
+    # 可以添加一个验证器或在前端处理

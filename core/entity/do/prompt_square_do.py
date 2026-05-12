@@ -93,6 +93,12 @@ class PromptSquare(Base):
         comment="使用/收藏次数"
     )
 
+    audit_reason: Mapped[str] = mapped_column(
+        String(255),
+        default="",
+        comment="审核原因"
+    )
+
     status: Mapped[int] = mapped_column(
         Integer,
         default=1,
