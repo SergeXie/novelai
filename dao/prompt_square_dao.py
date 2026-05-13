@@ -215,7 +215,7 @@ class PromptSquareDAO:
         prompt.category = req.category
         prompt.content = req.content
         prompt.description = req.description
-        prompt.status = 0
+        prompt.status = UserCustomPromptStatus.PENDING.code
 
         db.add(prompt)
         await db.commit()
