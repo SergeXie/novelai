@@ -29,17 +29,17 @@ class OrderDAO(BaseDAO[Order]):
 
         #  时间筛选
         if start_time:
-            condition.append(Order.created_at >= start_time)
+            condition.append(Order.paid_at >= start_time)
 
         if end_time:
-            condition.append(Order.created_at <= end_time)
+            condition.append(Order.paid_at <= end_time)
 
         # ==================== 查询数据 ====================
 
         stmt = (
             select(Order)
             .where(and_(*condition))
-            .order_by(desc(Order.created_at))
+            .order_by(desc(Order.paid_at))
             .offset((page - 1) * page_size)
             .limit(page_size)
         )

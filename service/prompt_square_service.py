@@ -1,9 +1,13 @@
+from fastapi import BackgroundTasks
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.adapters.enums import AIAction
+from common.config.get_db import get_db, get_db_context
 from common.exception.errors import NotFoundError, ServerError
-from common.exception.lzsd_exception import SensitiveWordException
+from common.exception.lzsd_exception import SensitiveWordException, BusinessException
 from common.modules.book_exporter import BookExporter
+from core.entity.do.prompt_square_do import PromptSquare
 from core.entity.do.users_do import User
 from core.entity.vo.prompt_square_vo import (
     PromptItem,
@@ -16,7 +20,7 @@ from service.ai_service import AIService
 from service.book_service import BookService
 from service.content_audit_service import get_content_audit_service
 
-
+tag_list = ["大纲", "脑洞", "扩写", "金手指", "剧本"]
 class PromptSquareService:
 
     @staticmethod
@@ -36,7 +40,6 @@ class PromptSquareService:
         user_id: int = None,
         promptType: str = "public",   # 新增
         title: str | None = None,
-
     ):
         """
         获取公开提示词列表
@@ -71,13 +74,13 @@ class PromptSquareService:
         return items, total
 
     @staticmethod
-    async def get_public_categories(db: AsyncSession):
+    async def get_public_categories(db: AsyncSession)->list[str]:
         """
         获取公开提示词分类列表
         """
-        categories = await PromptSquareDAO.get_public_categories(db)
+        # categories = await PromptSquareDAO.get_public_categories(db)
 
-        return [category for category in categories if category]
+        return tag_list
 
     @staticmethod
     async def create_user_prompt(
@@ -87,34 +90,51 @@ class PromptSquareService:
             category: str,
             description: str,
             content: str,
+            background_tasks: BackgroundTasks
     ) -> PromptItem:
-        # todo 校验category
+        if category in tag_list:
+            raise BusinessException(msg="分类不存在")
 
-        # 将需要审核的字段聚合
-        audit_fields = [title, description, content]
+        prompt = await PromptSquareDAO.create_user_prompt(db=db, user_id=user_id, title=title, category=category,
+                                                          description=description, content=content)
+        background_tasks.add_task(
+            PromptSquareService.run_audit_in_background,
+            prompt.id,
+            [title, description, content]
+        )
+        return PromptSquareService._to_prompt_item(prompt)
+
+    @staticmethod
+    # 后台审核
+    async def run_audit_in_background(prompt_id: int, texts: list):
+        logger.info("后台审核提示词：" + str(texts))
+
+        final_text = ",".join(texts)
 
         audit_service = get_content_audit_service()
-        for text in audit_fields:
-            result = await audit_service.audit_user_instruction(text=text)
-            if not result.passed:
-                # 可以在 Exception 中传入具体是哪个字段违规
-                raise SensitiveWordException(message=result.reason)
+        status = 1
+        reason = "审核通过"
+        result = await audit_service.audit_user_instruction(text=final_text)
+        if not result.passed:
+            status = 2
+            reason = result.reason
 
-        prompt = await PromptSquareDAO.create_user_prompt(db=db, user_id=user_id, title=title, category=category, description=description, content=content)
-        return PromptSquareService._to_prompt_item(prompt)
+        async with get_db_context() as db:  # 注意：后台任务需要自己开启新的 DB session
+            logger.info("后台审核提示词完毕：{}, {}, {}", prompt_id, status, reason)
+            await PromptSquareDAO.update_audit_status(db, prompt_id, status, reason)
+
 
     @staticmethod
     async def update_user_prompt(
             db: AsyncSession,
             user_id: int,
-            req: PromptSquareUpdateReq
+            req: PromptSquareUpdateReq,
+            background_tasks: BackgroundTasks
     ) -> PromptItemDetail | None:
         """
         更新提示词（只能更新自己的）
         """
-
         prompt = await PromptSquareDAO.get_template_by_key(db, req.template_key)
-
         if not prompt:
             return None
 
@@ -128,7 +148,20 @@ class PromptSquareService:
         # ==================== 执行更新 ====================
         prompt = await PromptSquareDAO.update_user_prompt(db, prompt, req)
 
+        background_tasks.add_task(
+            PromptSquareService.run_audit_in_background,
+            prompt.id,
+            [prompt.title, prompt.description, prompt.content]
+        )
+
         return PromptSquareService._to_promp_detail_item(prompt)
+
+    @staticmethod
+    async def get_template_by_key(db: AsyncSession, template_key: str) -> PromptSquare | None:
+        entity = await PromptSquareDAO.get_template_by_key(db, template_key)
+        if entity.status in [0, 1]:
+            entity = None
+        return entity
 
     @staticmethod
     async def get_user_prompt_detail(

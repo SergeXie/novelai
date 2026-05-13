@@ -275,14 +275,17 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             user_id: Optional[int] = None,  # 修改为 int 类型提示
             bid: Optional[str] = None,
             page: int = 1,
-            size: int = 10,
-            with_content: bool = False
+            pageSize: int = 20,
+            with_content: bool = False,
+            start_time: Optional[datetime] = None,
+            end_time: Optional[datetime] = None,
+            origin_prompt: Optional[str] = None,
     ) -> Tuple[list[AiNovelGenerateLog], int]:
         """
             获取排除大字段后的模型对象列表，并返回总数
             """
         try:
-            offset = (page - 1) * size
+            offset = (page - 1) * pageSize
 
             # 1. 构造过滤条件
             filters = [AiNovelGenerateLog.isDelete == 0]
@@ -290,6 +293,14 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
                 filters.append(AiNovelGenerateLog.userId == user_id)
             if bid:
                 filters.append(AiNovelGenerateLog.bid == bid)
+            if start_time:
+                filters.append(AiNovelGenerateLog.createdAt >= start_time)
+            if end_time:
+                filters.append(AiNovelGenerateLog.createdAt <= end_time)
+            if origin_prompt:
+                origin_prompt = origin_prompt.strip()
+                if origin_prompt:
+                    filters.append(AiNovelGenerateLog.originPrompt.contains(origin_prompt, autoescape=True))
 
             # 2. 查询对象列表（使用 defer 排除所有 LongText 字段）
             # 这样加载到内存中的对象非常轻量
@@ -297,7 +308,7 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
                 select(AiNovelGenerateLog)
                 .where(and_(*filters))
                 .order_by(desc(AiNovelGenerateLog.createdAt))
-                .limit(size)
+                .limit(pageSize)
                 .offset(offset)
             )
 

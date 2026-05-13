@@ -1,3 +1,4 @@
+import datetime
 import textwrap
 
 from loguru import logger
@@ -105,7 +106,41 @@ class AIService:
 
         input_user_prompt = user_prompt
 
-        # 1. 记录初始请求
+        # ================================
+        # 检查本地模型时间限制
+        # ================================
+        output_content = ""
+        if level == 0:  # 本地部署模型
+            now = datetime.datetime.now()
+            weekday = now.weekday()  # 0=周一, 6=周日
+            # 工作日限制：周一到周五 09:00~19:00
+            if weekday < 7:
+                start_time = now.replace(hour=9, minute=0, second=0, microsecond=0)
+                end_time = now.replace(hour=19, minute=0, second=0, microsecond=0)
+                if start_time <= now <= end_time:
+                    output_content = "当前访问人数过多，疯狂加服务器中，请切换模型或者稍后再试。"
+                    logger.info(output_content)
+                    # 限制时间直接返回 None
+                    # 记录日志时也保存 output_content
+                    log = await usage_service.record(
+                        user_id=user_id,
+                        request_id=request_id,
+                        level=level,
+                        node_ids=correlation,
+                        bid=bid,
+                        status=AIGenerateStatus.SUCCESS,
+                        origin_prompt=origin_prompt,
+                        system_prompt=final_system_prompt,
+                        user_prompt=input_user_prompt,
+                        temperature=final_temperature,
+                        output_content=output_content,
+                        action_type=AIAction(action_type),
+                    )
+                    return request_id, None
+
+        # ================================
+        # 正常记录日志
+        # ================================
         log = await usage_service.record(
             user_id=user_id,
             request_id=request_id,
@@ -116,11 +151,13 @@ class AIService:
             system_prompt=final_system_prompt,
             user_prompt=input_user_prompt,
             temperature=final_temperature,
-            output_content="",
+            output_content=output_content,
             action_type=AIAction(action_type),
         )
 
-        # 2. 任务分发逻辑
+        # ================================
+        # 任务分发逻辑
+        # ================================
         task_kwargs = {
             "request_id": request_id,
             "ai_level": level,
@@ -134,12 +171,12 @@ class AIService:
         }
 
         if background_tasks is not None:
-            # 异步模式：交给 FastAPI 后台进程，函数立即返回 request_id
+            # 异步模式：交给 FastAPI 后台任务
             background_tasks.add_task(async_generate_task, **task_kwargs)
             logger.info(f"任务 {request_id} 已加入后台队列")
             return request_id, None
         else:
-            # 同步模式：直接等待异步任务执行完毕（阻塞当前请求）
+            # 同步模式：阻塞等待 AI 执行完成
             logger.info(f"任务 {request_id} 正在同步执行...")
             ai_rsp = await async_generate_task(**task_kwargs)
             return request_id, ai_rsp
@@ -240,7 +277,7 @@ async def reuse_book_destructor_data(
         async with get_db_context() as db:
             dao = AILogDAO(db=db)
             reuse_log = await dao.get_invalid_book_destructor_log(bid=sha256_id)
-            if log:
+            if log and reuse_log:
                 await dao.sync_ai_log_data(source_request_id=reuse_log.requestId, target_request_id=log.requestId)
                 logger.info(f"[拆书]{sha256_id} 复用成功{reuse_log.requestId}--->{log.requestId}")
                 return True

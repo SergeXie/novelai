@@ -54,7 +54,7 @@ class UserRegisterRequest(BaseModel):
     nickname: str = Field(
         ...,
         min_length=1,
-        max_length=64,
+        max_length=255,
         description="昵称"
     )
 
@@ -158,8 +158,8 @@ async def register(
     user = User(
         uuid=LZSDGenerator.generate_user_uid(),
         account=req.account,
-        nickname=req.nickname,
         avatar="",
+        nickname=req.nickname,
         password=hashed_password,
         isBindWechat = True,
         # 微信字段（可为空）
@@ -419,6 +419,7 @@ async def qr_callback(
         row.status = "register"
         row.openid = openid
         row.unionid = unionid
+        row.nickname = nickname
 
         await db.commit()
 
@@ -439,7 +440,8 @@ async def qr_status(state: str, db: AsyncSession = Depends(get_db)):
         data = {
             "status": "register",
             "openid": row.openid,
-            "unionid": row.unionid
+            "unionid": row.unionid,
+            "nickname": row.nickname,
         }
         return ResponseUtil.success(data=data)
 

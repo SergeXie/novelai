@@ -24,7 +24,6 @@ async def execute(
         maxTokens: Optional[int] = Body(None),
         user=Depends(get_current_user),
         db=Depends(get_db)):
-
     # 额度监测
     await check_user_quota_or_raise(frozen_token_length=(len(userPrompt) + 3000), user_info=user)
 
@@ -46,13 +45,13 @@ async def execute(
 
 @aiTemplateController.get("/publicPromptList", name="提示词广场模板库")
 async def get_public_private_prompt_list(
-    page: int = Query(1, ge=1),
-    pageSize: int = Query(10, le=50),
-    category: Optional[str] = Query(None),
-    promptType: str = Query("public"),
-    title: Optional[str] = Query(None),  # 新增
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
+        page: int = Query(1, ge=1),
+        pageSize: int = Query(10, le=50),
+        category: Optional[str] = Query(None),
+        promptType: str = Query("public"),
+        title: Optional[str] = Query(None),  # 新增
+        db: AsyncSession = Depends(get_db),
+        user=Depends(get_current_user)
 ):
     """
     获取提示词列表（支持筛选：公开 / 我的）
@@ -73,7 +72,7 @@ async def get_public_private_prompt_list(
 
 @aiTemplateController.get("/publicCategories", name="获取提示词分类")
 async def get_public_prompt_categories(
-    db: AsyncSession = Depends(get_db)
+        db: AsyncSession = Depends(get_db)
 ):
     """
     获取提示词广场分类列表，按 category 去重
@@ -84,39 +83,41 @@ async def get_public_prompt_categories(
 
 @aiTemplateController.post("/createPromptSquare", name="创建用户提示词广场")
 async def create_user_prompt_square(
-    req: PromptSquareCreateReq,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
+        req: PromptSquareCreateReq,
+        background_tasks: BackgroundTasks,
+        db: AsyncSession = Depends(get_db),
+        user=Depends(get_current_user),
 ):
     """
     创建用户自己的提示词广场数据
     """
-    data = await PromptSquareService.create_user_prompt(db, user.pkId, title=req.title, description=req.description, category=req.category, content=req.content)
+    data = await PromptSquareService.create_user_prompt(db, user_id=user.pkId, title=req.title,
+                                                        description=req.description, category=req.category,
+                                                        content=req.content,
+                                                        background_tasks=background_tasks)
     return ResponseUtil.success(data=data)
+
 
 @aiTemplateController.get("/detail", name="获取用户提示词详情")
 async def get_user_prompt_detail(
-    template_key: str,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
+        template_key: str,
+        db: AsyncSession = Depends(get_db),
+        user=Depends(get_current_user)
 ):
     """
     获取提示词详情（支持公开 / 官方 / 自己）
     """
-
     data = await PromptSquareService.get_user_prompt_detail(db, user.pkId, template_key)
-
     if not data:
         return ResponseUtil.failure(msg="提示词不存在或无权限查看")
-
     return ResponseUtil.success(data=data)
 
 
 @aiTemplateController.post("/updatePromptSquare", name="修改用户提示词")
 async def update_user_prompt_square(
-    req: PromptSquareUpdateReq,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
+        req: PromptSquareUpdateReq,
+        db: AsyncSession = Depends(get_db),
+        user=Depends(get_current_user)
 ):
     """
     修改用户自己的提示词广场数据
@@ -129,9 +130,9 @@ async def update_user_prompt_square(
 
 @aiTemplateController.post("/deletePromptSquare", name="删除用户提示词")
 async def delete_user_prompt_square(
-    req: PromptSquareDetailReq,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
+        req: PromptSquareDetailReq,
+        db: AsyncSession = Depends(get_db),
+        user=Depends(get_current_user)
 ):
     """
     删除用户自己的提示词（物理删除）
@@ -151,12 +152,12 @@ async def delete_user_prompt_square(
 
 @aiTemplateController.get("/myFavorList", name="我的收藏列表")
 async def get_my_favor_list(
-    page: int = Query(1, ge=1),
-    pageSize: int = Query(20, le=50),
-    title: Optional[str] = Query(None),  # 新增
-    category: Optional[str] = Query(None),
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
+        page: int = Query(1, ge=1),
+        pageSize: int = Query(20, le=50),
+        title: Optional[str] = Query(None),  # 新增
+        category: Optional[str] = Query(None),
+        db: AsyncSession = Depends(get_db),
+        user=Depends(get_current_user)
 ):
     data, total = await PromptSquareService.get_my_favor_list(
         db,
@@ -173,9 +174,9 @@ async def get_my_favor_list(
 
 @aiTemplateController.post("/favor", name="收藏提示词")
 async def favor_prompt(
-    req: PromptSquareDetailReq,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
+        req: PromptSquareDetailReq,
+        db: AsyncSession = Depends(get_db),
+        user=Depends(get_current_user)
 ):
     success = await PromptSquareService.favor(
         db,
@@ -188,9 +189,9 @@ async def favor_prompt(
 
 @aiTemplateController.post("/unfavor", name="取消收藏提示词")
 async def unfavor_prompt(
-    req: PromptSquareDetailReq,
-    db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user)
+        req: PromptSquareDetailReq,
+        db: AsyncSession = Depends(get_db),
+        user=Depends(get_current_user)
 ):
     success = await PromptSquareService.unfavor(
         db,
@@ -199,4 +200,3 @@ async def unfavor_prompt(
     )
 
     return ResponseUtil.success()
-

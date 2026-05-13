@@ -1,18 +1,22 @@
 import io
+import os
 from typing import List, Optional
-
+from urllib.parse import urlparse, unquote
 import httpx
 from loguru import logger
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from common.exception.errors import ServerError, NotFoundError, RequestError
 from common.exception.lzsd_exception import ServiceWarning
 from common.modules.html_text_extractor import quick_html_to_text
 from common.utils.text_util import strip_html_tags
+from core.entity.do.book_deconstruct_record_do import BookDeconstructRecord
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
+from core.entity.vo.base_vo import PageResp
 from core.entity.vo.book_node_schema import NodeTreeSchema
 from core.entity.vo.bool_vo import Character, ChapterData
+from core.entity.vo.generate_log_vo import BookDeconstructItemVO
 from core.enums.node_type import BookNodeCategory
 from core.processor.book_processor import Chapter
 from dao.book_dao import BookDAO
@@ -25,6 +29,26 @@ class BookService:
     def __init__(self, db: AsyncSession):
         self.book_dao = BookDAO(db)
         self.db = db
+
+    @staticmethod
+    async def extract_book_title(url: str) -> str:
+        """
+        从 txt url 提取书名
+        """
+
+        # 解析 path
+        path = urlparse(url).path
+
+        # 获取文件名
+        filename = os.path.basename(path)
+
+        # URL 解码
+        filename = unquote(filename)
+
+        # 去掉扩展名
+        title = os.path.splitext(filename)[0]
+
+        return title
 
     async def get_book_by_bid(self, bid: str, user_id: int) -> Optional[Book]:
         if bid:
@@ -501,11 +525,12 @@ class BookService:
         # 3. 定义简单字段的映射配置 (类型 -> 对应的内容)
         # 这样可以处理 outline, writing_style, world_view 这种单点内容
         simple_fields = {
-            BookNodeCategory.WORLDVIEW: world_view
+            BookNodeCategory.WORLDVIEW: world_view,
+            BookNodeCategory.OUTLINE: outline
+
         }
 
         notify_fields = {
-            BookNodeCategory.OUTLINE: outline,
             BookNodeCategory.WRITING_STYLE: writing_style,
         }
 
@@ -664,3 +689,59 @@ class BookService:
         except Exception as e:
             logger.error(f"下载函数内部未知错误: {str(e)}")
             raise ServerError(msg="文件下载服务暂不可用")
+
+    @staticmethod
+    async def get_deconstruct_generate_list(
+            db: AsyncSession,
+            user_id: int,
+            page: int,
+            pageSize: int
+    ):
+        rows, total = await BookDAO.get_deconstruct_list_dao(
+            db=db,
+            user_id=user_id,
+            page=page,
+            pageSize=pageSize
+        )
+
+        list_data = [
+            BookDeconstructItemVO(
+                requestId=row.requestId,
+                title=row.title,
+                status=row.status,
+                createdAt=row.createdAt
+            )
+            for row in rows
+        ]
+
+        return PageResp(
+            list=list_data,
+            total=total,
+            page=page,
+            pageSize=pageSize
+        )
+
+
+    @staticmethod
+    async def get_by_request_id(db: AsyncSession, request_id: str, userId:int) -> BookDeconstructRecord | None:
+        stmt = select(BookDeconstructRecord).where(
+            BookDeconstructRecord.requestId == request_id,
+            BookDeconstructRecord.userId == userId
+        )
+        result = await db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def logical_delete(db: AsyncSession, record: BookDeconstructRecord):
+        record.isDelete = 1
+        db.add(record)
+        await db.commit()
+        return True
+
+    @staticmethod
+    async def delete_by_request_id(db: AsyncSession, request_id: str, userId:int):
+        record = await BookService.get_by_request_id(db, request_id, userId)
+        if not record:
+            raise ServerError(msg="拆书记录不存在")
+        await BookService.logical_delete(db, record)
+        return True
