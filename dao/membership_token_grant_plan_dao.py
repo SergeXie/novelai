@@ -40,7 +40,7 @@ class MembershipTokenGrantPlanDAO:
                 MembershipTokenGrantPlan.period_no.asc(),
                 MembershipTokenGrantPlan.id.asc(),
             )
-            .with_for_update(skip_locked=True)
+            .with_for_update()  # 去掉 skip_locked
             .limit(limit)
         )
         result = await db.execute(stmt)
