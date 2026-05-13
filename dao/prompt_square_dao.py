@@ -45,7 +45,7 @@ class PromptSquareDAO:
             # 我的发布
             condition = (PromptSquare.author_id == user_id)
         else:
-            filter_status = status if status else UserCustomPromptStatus.AVAILABLE
+            filter_status = status if status is not None else UserCustomPromptStatus.AVAILABLE
             condition = (PromptSquare.status == filter_status.code)
 
         if category:
@@ -123,7 +123,7 @@ class PromptSquareDAO:
             category=category,
             content=content,
             description=description,
-            status=UserCustomPromptStatus.PENDING.value,
+            status=UserCustomPromptStatus.PENDING.code,
             author_id=user_id,
             cover_img="",
             engine_type=PromptEngineType.JINJA2.value,
