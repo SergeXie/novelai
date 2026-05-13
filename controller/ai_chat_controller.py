@@ -111,7 +111,7 @@ async def multi_completions(
         db=db,
         gid=gid,
         current_user=current_user,
-        content=content
+        content=chat_content
     )
     temperature = 0.7
     ai_srv = AIService(db=db)
@@ -167,7 +167,7 @@ async def get_tools(db=Depends(get_db)):
 
 
 @aiChatController.get("/quickTools", summary="")
-async def get_tools(db=Depends(get_db)):
+async def get_quick_tools(db=Depends(get_db)):
     category = "快捷工具"
     tools_list, _ = await PromptSquareService.get_public_list(db=db, category=category, page=1, pageSize=100)
     return ResponseUtil.success(data=tools_list)

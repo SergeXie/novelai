@@ -5,32 +5,27 @@ from common.config.config import settings
 from common.config.get_db import get_db_context
 from common.modules.book_exporter import BookExporter
 from database.db_mysql import async_engine
+from demo import fix_book_node
+from demo.fix_book_node import repair_book_node_data
 from service.book_service import BookService
 
-
 async def main():
-    bid = "07eb925abde34316929367eac46903b2"
-    user_id = 41
+    """
+    主入口：管理数据库上下文并调用修复函数
+    """
+    try:
+        # 1. 使用异步上下文管理器获取 session
+        async with get_db_context() as db:
+            print("数据库连接成功，开始修复数据...")
+            # 2. 将 db (AsyncSession) 传入修复函数
+            await repair_book_node_data(db)
+            print("任务执行完毕。")
 
-    print("📝 数据准备就绪，开始导出...\n")
-
-    # B. 测试导出功能
-    async with get_db_context() as db:
-        book_service = BookService(db)
-        book = await book_service.get_book_by_bid(bid=bid, user_id=user_id)
-        nodes = await book_service.get_basic_nodes(bid=bid, user_id=user_id)
-        leaf_ids = [node.id for node in nodes]
-        print(nodes)
-        exporter = BookExporter(db)
-        markdown_result = await exporter.export_to_markdown(book=book,  leaf_node_ids=leaf_ids)
-
-    print("\n--- 导出的内容如下 ---")
-    print(markdown_result)
-    print("----------------------\n")
-
-
-    await async_engine.dispose()
+        await async_engine.dispose()
+    except Exception as e:
+        print(f"程序运行出错: {e}")
 
 
 if __name__ == "__main__":
+    # 3. 使用 asyncio.run 启动顶层异步任务
     asyncio.run(main())
