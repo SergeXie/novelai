@@ -13,6 +13,7 @@ from core.entity.vo.prompt_square_vo import (
     PromptItem,
     PromptSquareUpdateReq, PromptItemDetail, PromptDetailResp, PromptListItemResp,
 )
+from core.enums.constants import UserCustomPromptStatus
 from core.enums.prompt_sys_var import PromptEngineType
 from dao.prompt_square_dao import PromptSquareDAO
 from service.ai_prompt_service import PromptService
@@ -21,6 +22,8 @@ from service.book_service import BookService
 from service.content_audit_service import get_content_audit_service
 
 tag_list = ["大纲", "脑洞", "扩写", "金手指", "剧本"]
+
+
 class PromptSquareService:
 
     @staticmethod
@@ -33,13 +36,14 @@ class PromptSquareService:
 
     @staticmethod
     async def get_public_list(
-        db: AsyncSession,
-        page: int,
-        pageSize: int,
-        category: str | None = None,
-        user_id: int = None,
-        promptType: str = "public",   # 新增
-        title: str | None = None,
+            db: AsyncSession,
+            page: int,
+            pageSize: int,
+            category: str | None = None,
+            user_id: int = None,
+            promptType: str = "public",  # 新增
+            title: str | None = None,
+            status:UserCustomPromptStatus | None = None,
     ):
         """
         获取公开提示词列表
@@ -52,7 +56,8 @@ class PromptSquareService:
             category,
             user_id,
             promptType,
-            title
+            title,
+            status
         )
 
         items = []
@@ -74,7 +79,7 @@ class PromptSquareService:
         return items, total
 
     @staticmethod
-    async def get_public_categories(db: AsyncSession)->list[str]:
+    async def get_public_categories(db: AsyncSession) -> list[str]:
         """
         获取公开提示词分类列表
         """
@@ -122,7 +127,6 @@ class PromptSquareService:
         async with get_db_context() as db:  # 注意：后台任务需要自己开启新的 DB session
             logger.info("后台审核提示词完毕：{}, {}, {}", prompt_id, status, reason)
             await PromptSquareDAO.update_audit_status(db, prompt_id, status, reason)
-
 
     @staticmethod
     async def update_user_prompt(
@@ -285,7 +289,7 @@ class PromptSquareService:
             return request_id
 
         except Exception as e:
-            raise ServerError(msg = "AI生成失败:{}".format(e))
+            raise ServerError(msg="AI生成失败:{}".format(e))
 
     @staticmethod
     async def get_my_favor_list(
@@ -294,7 +298,7 @@ class PromptSquareService:
             page: int,
             page_size: int,
             title: str | None = None,
-            category:str | None = None
+            category: str | None = None
     ):
         """
         我的收藏列表
@@ -325,7 +329,6 @@ class PromptSquareService:
 
         return result, total
 
-
     @staticmethod
     async def favor(db: AsyncSession, user_id: int, template_key: str) -> bool:
         """
@@ -351,4 +354,3 @@ class PromptSquareService:
         await PromptSquareDAO.delete_by_user_and_key(db, user_id, template_key)
 
         return True
-
