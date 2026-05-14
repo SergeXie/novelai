@@ -346,7 +346,6 @@ class AccountService:
         await AccountService.claim_due_bonus_plans(db, user_id, now)
         account = await UserAccountDAO.get_active_account(db=db, user_id=user_id)
         plans = await MembershipTokenGrantPlanDAO.get_current_bonus_plans(db, user_id, now)
-        print("plans:{}".format(plans))
         items = [
             BonusGrantItem(
                 id=plan.id,
