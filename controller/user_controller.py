@@ -14,6 +14,7 @@ from core.deps.auth import get_current_user, check_user_quota_or_raise
 from core.entity.do.users_do import User
 from core.entity.vo.user_vo import UpdateNicknameRequest
 from dao.user_dao import UserDAO
+from service.account_service import AccountService
 from service.usage_service import UsageService
 from service.user_service import UserService
 
@@ -46,6 +47,8 @@ async def user_info(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user)
 ):
+    await AccountService.claim_due_bonus_plans(db, user.pkId)
+
     m = settings.MULTIPLIER
     usage_service = UsageService(db)
 

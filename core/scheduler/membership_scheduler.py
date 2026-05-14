@@ -50,6 +50,8 @@ async def membership_expire_job():
             # 3. 记录旧值（必须在修改前）
             # =========================
             old_monthly = account.monthly_balance or 0
+            old_monthly_total = account.monthly_total_amount or 0
+            old_bonus = account.bonus_balance or 0
 
             # =========================
             # 4. 降级会员
@@ -60,12 +62,15 @@ async def membership_expire_job():
             # 5. 清空月度额度
             # =========================
             account.monthly_balance = 0
+            account.monthly_total_amount = 0
+            account.bonus_balance = 0
+            account.bonus_total_amount = 0
 
             # =========================
             # 6. 同步总额度（防负数）
             # =========================
             account.total_amount = max(
-                (account.total_amount or 0) - old_monthly,
+                (account.total_amount or 0) - old_monthly_total,
                 0
             )
 
@@ -108,6 +113,24 @@ async def membership_expire_job():
 
                 db.add(log)
 
+            if old_bonus > 0:
+                log = AccountLog(
+                    user_id=account.user_id,
+                    biz_id=f"expire_bonus_{account.user_id}_{int(now.timestamp())}",
+                    biz_type=BizType.SYSTEM.value,
+                    change_type=ChargeType.EXPIRE.value,
+                    asset_type=AssetType.BONUS.value,
+                    amount=-old_bonus,
+                    balance_after=account.bonus_balance,
+                    extra={
+                        "old_level": old_level,
+                        "new_level": "free",
+                        "reason": "membership_bonus_expired"
+                    }
+                )
+
+                db.add(log)
+
         # =========================
         # 9. 提交事务
         # =========================
@@ -125,7 +148,8 @@ async def membership_token_grant_job():
 
     async for db in get_db():
         now = datetime.utcnow()
-        plans = await MembershipTokenGrantPlanDAO.get_due_plans(db, now)
+        # BASE/RESET 是系统计划，可以自动执行；BONUS 必须等用户登录/上线后领取。
+        plans = await MembershipTokenGrantPlanDAO.get_due_system_plans(db, now)
 
         for plan in plans:
             account = await UserAccountDAO.get_active_account(db=db, user_id=plan.user_id)

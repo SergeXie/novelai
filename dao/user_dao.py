@@ -66,6 +66,7 @@ class UserDAO:
             permanent_amount:int,
             total_amount:int,
             balance_snapshot:dict,
+            bonus_amount:int = 0,
     ):
         """
         写账户流水
@@ -77,6 +78,7 @@ class UserDAO:
             request_id=request_id,
             action_type="CONSUME",
             monthly_amount=monthly_amount,
+            bonus_amount=bonus_amount,
             permanent_amount=permanent_amount,
             total_amount=total_amount,
             balance_snapshot=balance_snapshot

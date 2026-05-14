@@ -33,12 +33,14 @@ class ChargeType(Enum):
 class AssetType(Enum):
     MONTHLY = "MONTHLY"
     PERMANENT = "PERMANENT"
+    BONUS = "BONUS"
 
     @classmethod
     def get_descriptions(cls):
         return {
             cls.MONTHLY: "月会员",
-            cls.PERMANENT: "Token包"
+            cls.PERMANENT: "Token包",
+            cls.BONUS: "补给奖励"
         }
 
 class UserCustomPromptStatus(Enum):

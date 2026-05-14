@@ -32,6 +32,7 @@ class AIUserAssets(BaseModel):
     daily_limit: int = Field(..., description="系统配置的每日免费额度上限")
     used_free: int = Field(..., description="今日已消耗的免费 Token 数")
     monthly_balance: int = Field(..., description="月度会员剩余额度")
+    bonus_balance: int = Field(default=0, description="补给奖励剩余额度")
     permanent_balance: int = Field(..., description="永久点数剩余余额")
 
     @computed_field(return_type=int)

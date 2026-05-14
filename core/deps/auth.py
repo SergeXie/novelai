@@ -9,6 +9,7 @@ from common.exception.lzsd_exception import AuthException, IllegalBookAccessExce
 from core.entity.do.users_do import User
 from core.entity.vo.login_vo import CurrentUser
 from dao.book_dao import BookDAO
+from dao.user_account_dao import UserAccountDAO
 from dao.user_dao import UserDAO
 from service.account_service import AccountService
 from service.usage_service import UsageService
@@ -102,11 +103,16 @@ async def check_user_quota_or_raise(frozen_token_length: int, user_info: User, l
     async with get_db_context() as db:
         usage_service = UsageService(db)
 
-        # 1. 获取付费账户余额
-        account = await AccountService.get_account_info(db=db, user_id=user_id)
-        user_paid_balance = account.total_amount if account else 0
+        # 1. 获取可用付费/奖励账户余额。这里使用原始账户余额，避免把每日免费额度混入付费额度判断。
+        account = await UserAccountDAO.get_active_account(db=db, user_id=user_id)
+        user_paid_balance = (
+            (account.monthly_balance or 0)
+            + (account.bonus_balance or 0)
+            + (account.permanent_balance or 0)
+        ) if account else 0
 
-        if account.level == "free" and level:
+        user_level = AccountService.get_user_level(account) if account else "free"
+        if user_level == "free" and level:
             if level not in [0, 2]:  # TODO 0 执笔 2 才女
                 raise InsufficientTokenException("免费用户只能使用执笔与才女模型")
 

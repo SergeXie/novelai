@@ -194,6 +194,10 @@ class AiNovelGenerateLog(Base):
         Integer, default=0, comment="本次消耗的会员月度额度"
     )
 
+    bonusDeduct: Mapped[int] = mapped_column(
+        Integer, default=0, comment="本次消耗的补给奖励额度"
+    )
+
     permanentDeduct: Mapped[int] = mapped_column(
         Integer, default=0, comment="本次消耗的永久充值额度"
     )

@@ -12,6 +12,7 @@ from service.content_audit_service import get_content_audit_service
 from dao.user_dao import UserDAO
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
+from service.account_service import AccountService
 
 
 class UserService:
@@ -121,6 +122,7 @@ class UserService:
 
         # 1️ 更新在线状态
         user.onlineStatus = OnlineStatus.ONLINE
+        await AccountService.claim_due_bonus_plans(db, user.pkId)
 
         # 3️ 提交（和生成 token 在同一个事务里）
         await db.flush()

@@ -25,8 +25,8 @@ class MembershipTokenGrantPlan(Base):
     level_code: Mapped[str] = mapped_column(String(32), nullable=False, comment="会员等级")
 
     cycle_no: Mapped[int] = mapped_column(Integer, nullable=False, comment="第几个月周期，从1开始")
-    period_no: Mapped[int] = mapped_column(Integer, nullable=False, comment="周期内期数，-1=清零，0=首发，1-4=周发")
-    plan_type: Mapped[str] = mapped_column(String(16), nullable=False, default="GRANT", comment="计划类型 GRANT/RESET")
+    period_no: Mapped[int] = mapped_column(Integer, nullable=False, comment="周期内期数，-1=清零，0=基础额度，1-4=周五补给")
+    plan_type: Mapped[str] = mapped_column(String(16), nullable=False, default="BASE", comment="计划类型 BASE/BONUS/RESET")
 
     amount: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="本期发放Token数量")
     scheduled_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True, comment="计划执行时间")
