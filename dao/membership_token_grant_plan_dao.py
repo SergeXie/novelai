@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Sequence
 
 from sqlalchemy import select
@@ -104,34 +104,34 @@ class MembershipTokenGrantPlanDAO:
             user_id: int,
             now: datetime,
     ) -> list[MembershipTokenGrantPlan]:
-        current_cycle = (
-            select(
-                MembershipTokenGrantPlan.order_no,
-                MembershipTokenGrantPlan.cycle_no,
-            )
-            .where(
-                MembershipTokenGrantPlan.user_id == user_id,
-                MembershipTokenGrantPlan.plan_type == "BONUS",
-                MembershipTokenGrantPlan.scheduled_at <= now,
-                MembershipTokenGrantPlan.membership_expire_at > now,
-            )
-            .order_by(MembershipTokenGrantPlan.scheduled_at.desc())
-            .limit(1)
-            .subquery()
-        )
-
         stmt = (
             select(MembershipTokenGrantPlan)
-            .join(
-                current_cycle,
-                (MembershipTokenGrantPlan.order_no == current_cycle.c.order_no)
-                & (MembershipTokenGrantPlan.cycle_no == current_cycle.c.cycle_no)
-            )
             .where(
                 MembershipTokenGrantPlan.user_id == user_id,
                 MembershipTokenGrantPlan.plan_type == "BONUS",
+                MembershipTokenGrantPlan.membership_expire_at > now,
             )
-            .order_by(MembershipTokenGrantPlan.period_no.asc())
+            .order_by(
+                MembershipTokenGrantPlan.scheduled_at.asc(),
+                MembershipTokenGrantPlan.order_no.asc(),
+                MembershipTokenGrantPlan.cycle_no.asc(),
+                MembershipTokenGrantPlan.period_no.asc(),
+            )
         )
         result = await db.execute(stmt)
-        return list(result.scalars().all())
+        plans = list(result.scalars().all())
+
+        if not plans:
+            return []
+
+        cycles: dict[tuple[str, int], list[MembershipTokenGrantPlan]] = {}
+        for plan in plans:
+            cycles.setdefault((plan.order_no, plan.cycle_no), []).append(plan)
+
+        for cycle_plans in cycles.values():
+            last_bonus_at = max(plan.scheduled_at for plan in cycle_plans)
+            # 展示当前仍在补给窗口内的周期；若首个周五还没到，也会命中第一组未来周期。
+            if now <= last_bonus_at + timedelta(days=1):
+                return sorted(cycle_plans, key=lambda plan: plan.period_no)
+
+        return sorted(list(cycles.values())[-1], key=lambda plan: plan.period_no)
