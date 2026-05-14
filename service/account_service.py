@@ -417,7 +417,7 @@ class AccountService:
         total = max(total or 0, 0)
         available = max(available or 0, 0)
         used = max(total - available, 0)
-        used_percent = int(used * 100 / total) if total > 0 else 0
+        used_percent = AccountService._calc_used_percent(used, total)
 
         return AssetUsageItem(
             key=key,
@@ -427,6 +427,14 @@ class AccountService:
             used=used,
             usedPercent=used_percent,
         )
+
+    @staticmethod
+    def _calc_used_percent(used: int, total: int) -> int:
+        # 有消耗但不足 1% 时返回 1，避免前端看起来像完全没用过。
+        if used <= 0 or total <= 0:
+            return 0
+
+        return max(1, int(used * 100 / total))
 
     @staticmethod
     def _build_usage_overview(
@@ -451,8 +459,7 @@ class AccountService:
         total_amount = sum(item.total for item in items)
         available_amount = sum(item.available for item in items)
         used_amount = sum(item.used for item in items)
-        used_percent = int(used_amount * 100 / total_amount) if total_amount > 0 else 0
-
+        used_percent = AccountService._calc_used_percent(used_amount, total_amount)
         return UsageOverview(
             availableAmount=available_amount,
             totalAmount=total_amount,
@@ -489,6 +496,7 @@ class AccountService:
             return AccountInfoResponse(
                 level=UserLevel.FREE.value,
                 level_name=UserLevel.get_descriptions()[UserLevel.FREE],
+                permanent_balance=0,
                 **usage_overview.model_dump(),
             )
 
@@ -510,6 +518,7 @@ class AccountService:
             level=account.level_code if account else TokenConsumeSource.FREE.value,
             level_name=membership.level_name if membership else "免费用户",
             expire_at=account.expire_at if account else None,
+            permanent_balance=account.permanent_balance,
             **usage_overview.model_dump(),
         )
 
