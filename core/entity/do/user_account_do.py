@@ -49,11 +49,32 @@ class UserAccount(Base):
         comment="月度Token余额（会员赠送，每月重置）"
     )
 
+    monthly_total_amount: Mapped[int] = mapped_column(
+        BigInteger,
+        default=0,
+        nullable=False,
+        comment="current membership-cycle paid monthly token total"
+    )
+
     permanent_balance: Mapped[int] = mapped_column(
         Integer,
         default=0,
         nullable=False,
         comment="永久Token余额（充值获得）"
+    )
+
+    permanent_total_amount: Mapped[int] = mapped_column(
+        BigInteger,
+        default=0,
+        nullable=False,
+        comment="lifetime purchased permanent token total"
+    )
+
+    bonus_balance: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="补给奖励Token余额（会员周五赠送，每月清零）"
     )
 
     # ==================== 统计 ====================
@@ -70,6 +91,13 @@ class UserAccount(Base):
         default=0,
         nullable=False,
         comment="总额度"
+    )
+
+    bonus_total_amount: Mapped[int] = mapped_column(
+        BigInteger,
+        default=0,
+        nullable=False,
+        comment="当前周期补给奖励总额度"
     )
 
     last_reset_at: Mapped[Optional[datetime]] = mapped_column(

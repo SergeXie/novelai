@@ -10,6 +10,7 @@ from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user
 from core.entity.vo.base_vo import PageResp
 from core.entity.vo.order_schema_vo import CreateOrderRequest, CreateOrderResponse
+from core.entity.vo.user_vo import BonusGrantListResponse
 from service.account_service import AccountService
 from service.order_service import OrderService
 from service.payment.payment_service import PaymentService
@@ -28,6 +29,15 @@ async def get_amounts(
 
     data = await AccountService.get_account_info(db, user.pkId)
 
+    return ResponseUtil.success(data=data)
+
+
+@productRouter.get("/bonus/list", name="周五补给列表", response_model=BonusGrantListResponse)
+async def get_bonus_list(
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    data = await AccountService.get_current_bonus_list(db, user.pkId)
     return ResponseUtil.success(data=data)
 
 @productRouter.get("/history", name="历史订购")

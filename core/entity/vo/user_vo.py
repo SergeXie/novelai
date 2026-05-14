@@ -36,6 +36,24 @@ class UserInfoModel(BaseModel):
     lastLoginTime: Optional[datetime] = Field(default=datetime.now(), description='在线状态')
 
 
+class AssetUsageItem(BaseModel):
+    key: str
+    name: str
+    total: int = 0
+    available: int = 0
+    used: int = 0
+    usedPercent: int = 0
+
+
+class UsageOverview(BaseModel):
+    availableAmount: int = 0
+    totalAmount: int = 0
+    usedAmount: int = 0
+    usedPercent: int = 0
+    status: str = "normal"
+    totalItems: List[AssetUsageItem] = Field(default_factory=list)
+
+
 class AccountInfoResponse(BaseModel):
     """
     我的资产信息
@@ -44,11 +62,12 @@ class AccountInfoResponse(BaseModel):
     level: str
     level_name: str
     expire_at: Optional[datetime] = None
-    monthly_balance: Optional[int] = 0
-    permanent_balance: Optional[int] = 0
-    remaining_balance: Optional[int] = 0
-    total_consumed: Optional[int] = 0  # 已使用
-    total_amount: Optional[int] = 0  # 总量
+    availableAmount: int = 0
+    totalAmount: int = 0
+    usedAmount: int = 0
+    usedPercent: int = 0
+    status: str = "normal"
+    totalItems: List[AssetUsageItem] = Field(default_factory=list)
 
     @field_serializer('expire_at')
     def serialize_paid_at(self, expire_at: Optional[datetime], _info):
@@ -56,4 +75,24 @@ class AccountInfoResponse(BaseModel):
             return None
         # 这里定义你想要的格式，例如：2026-03-31 11:05:22
         return expire_at.strftime('%Y-%m-%d %H:%M:%S')
+
+
+class BonusGrantItem(BaseModel):
+    id: int
+    orderNo: str
+    cycleNo: int
+    periodNo: int
+    amount: int
+    date: str
+    scheduledAt: str
+    issuedAt: Optional[str] = None
+    status: str
+    rawStatus: str
+    canClaim: bool = False
+
+
+class BonusGrantListResponse(BaseModel):
+    availableAmount: int = 0
+    weeklyAmount: int = 0
+    list: List[BonusGrantItem] = Field(default_factory=list)
 
