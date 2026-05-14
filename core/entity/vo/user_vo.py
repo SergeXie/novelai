@@ -62,6 +62,7 @@ class AccountInfoResponse(BaseModel):
     level: str
     level_name: str
     expire_at: Optional[datetime] = None
+    permanent_balance: int = 0
     availableAmount: int = 0
     totalAmount: int = 0
     usedAmount: int = 0
