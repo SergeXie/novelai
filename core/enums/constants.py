@@ -47,9 +47,12 @@ class UserCustomPromptStatus(Enum):
     UNAVAILABLE = (-1, "不可用")
     PENDING = (0, "待审核")
     AVAILABLE = (1, "可用")
+    INVALID = (2, "审核不通过")
+    TOOLS = (10, "多轮对话工具")
+    QUICK_TOOLS = (11, "快捷工具")
 
-    def __init__(self, value, label):
-        self._value_ = value
+    def __init__(self, code, label):
+        self.code = code
         self.label = label
 
 if __name__ == '__main__':
