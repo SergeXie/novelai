@@ -417,7 +417,12 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
         await db.commit()
 
     @staticmethod
-    async def sum_free_tokens(db: AsyncSession, user_id: int, start_time: datetime) -> int:
+    async def sum_free_tokens(
+            db: AsyncSession,
+            user_id: int,
+            start_time: datetime,
+            end_time: datetime | None = None,
+    ) -> int:
         """
         统计指定用户自 start_time 以来消耗的免费 Token 总数
         """
@@ -444,6 +449,9 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
         )
 
         # 执行查询
+        if end_time:
+            stmt = stmt.where(AiNovelGenerateLog.createdAt < end_time)
+
         result = await db.execute(stmt)
         # scalar() 直接返回聚合后的单个数值
         return result.scalar() or 0

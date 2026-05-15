@@ -5,6 +5,10 @@ ALTER TABLE `mc_user_accounts`
 ALTER TABLE `ai_novel_generate_log`
   ADD COLUMN `bonusDeduct` INT NOT NULL DEFAULT 0 COMMENT '本次消耗的补给奖励额度' AFTER `monthlyDeduct`;
 
+ALTER TABLE `ai_novel_generate_log`
+  MODIFY COLUMN `consumeSource` VARCHAR(32) NOT NULL DEFAULT 'free'
+  COMMENT '消费来源：free/monthly/bonus/permanent/mixed/system';
+
 ALTER TABLE `mc_token_usage_logs`
   ADD COLUMN `bonus_amount` INT NOT NULL DEFAULT 0 COMMENT '补给奖励额度变动' AFTER `monthly_amount`;
 

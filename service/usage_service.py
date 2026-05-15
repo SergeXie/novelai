@@ -1,6 +1,7 @@
 from datetime import datetime, time
 
 from dateutil import parser
+from dateutil.relativedelta import relativedelta
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,6 +41,13 @@ class UsageService:
         return start, end
 
     @staticmethod
+    def get_month_range():
+        today = datetime.now().date()
+        start = datetime.combine(today.replace(day=1), time.min)
+        end = start + relativedelta(months=1)
+        return start, end
+
+    @staticmethod
     def parse_query_time(value: str | None, is_end: bool = False) -> datetime | None:
         if not value:
             return None
@@ -68,6 +76,19 @@ class UsageService:
         """获取用户历史累计的输入长度和输出长度。"""
         intput_total_count, output_total_count, actualAmount, freeDeduct, permanentDeduct = await self.ai_log_dao.get_usage_sum(user_id)
         return intput_total_count, output_total_count
+
+    async def get_user_monthly_input_output(self, user_id: int) -> tuple[int, int]:
+        start, end = self.get_month_range()
+        intput_count, output_count, _, _, _ = await self.ai_log_dao.get_usage_sum(user_id, start, end)
+        return intput_count, output_count
+
+    async def get_user_monthly_free_used(self, user_id: int) -> int:
+        start, end = self.get_month_range()
+        return int(await AILogDAO.sum_free_tokens(self.db, user_id=user_id, start_time=start, end_time=end))
+
+    async def get_user_monthly_free_remaining(self, user_id: int) -> int:
+        used_free = await self.get_user_monthly_free_used(user_id)
+        return max(0, settings.USER_MONTHLY_FREE_TOKEN_LIMIT - used_free)
 
     async def get_platform_daily_consumption(self):
         start, end = self.get_today_range()
@@ -279,12 +300,11 @@ class UsageService:
         account = await UserAccountDAO.get_active_account(db=self.db, user_id=user_id)
 
         # 2. 调用之前的 LogDAO 统计今日消耗
-        today_start = datetime.combine(datetime.now().date(), time.min)
-        used_tokens = await AILogDAO.sum_free_tokens(self.db, user_id=user_id, start_time=today_start)
+        used_tokens = await self.get_user_monthly_free_used(user_id)
 
         # 3. 转化为 BaseModel 返回
         return AIUserAssets(
-            daily_limit=settings.USER_DAILY_TOKEN_LIMIT,
+            daily_limit=settings.USER_MONTHLY_FREE_TOKEN_LIMIT,
             used_free=used_tokens,
             monthly_balance=account.monthly_balance if account.monthly_balance else 0,
             bonus_balance=account.bonus_balance if account.bonus_balance else 0,
@@ -324,11 +344,9 @@ class UsageService:
         # A. 【首先】抵扣每日免费额度 (Free)
         # 注意：免费额度通常由 settings.USER_DAY_LIMIT 减去 今日已用 算出
         # 假设你的 check_quota 逻辑里已经算过了，这里我们需要知道用户今天还能免单多少
-        input_total, output_total = await self.get_user_daily_input_output(user_id)
-        user_already_used_weighted = int((input_total + output_total) * multiplier)
+        free_used = await self.get_user_monthly_free_used(user_id)
         # 计算今天剩余可用的免费额度
-        free_limit_remaining = max(0, settings.USER_DAILY_TOKEN_LIMIT - user_already_used_weighted)
-        print("本次使用的额度：{}".format(remaining_to_pay))
+        free_limit_remaining = max(0, settings.USER_MONTHLY_FREE_TOKEN_LIMIT - free_used)
         if free_limit_remaining > 0 and remaining_to_pay > 0:
             free_deduct = min(free_limit_remaining, remaining_to_pay)
             log_entry.freeDeduct = free_deduct
