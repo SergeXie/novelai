@@ -53,8 +53,9 @@ async def user_info(
     usage_service = UsageService(db)
 
     # ===== 当天 =====
-    todayInputChars, todayOutputChars = await usage_service.get_user_daily_input_output(user.pkId)
-    todayInputChars, todayOutputChars = float(todayInputChars) * m, float(todayInputChars) * m
+    todayInputChars, todayOutputChars = await usage_service.get_user_monthly_input_output(user.pkId)
+    todayInputChars, todayOutputChars = float(todayInputChars) * m, float(todayOutputChars) * m
+    monthFreeUsed = await usage_service.get_user_monthly_free_used(user.pkId)
 
     # ===== 累计 =====
     totalInputChars, totalOutputChars = await usage_service.get_user_total_input_output(user.pkId)
@@ -75,7 +76,7 @@ async def user_info(
     # totalOutputChars 账号至今累计生成输出的字符总数
     # totalUsedChars 账号至今累计消耗的总字符数
 
-    user_daily_token_limit = settings.USER_DAILY_TOKEN_LIMIT
+    user_daily_token_limit = settings.USER_MONTHLY_FREE_TOKEN_LIMIT
 
     query_user = await UserDAO.get_by_uuid(db, user_uuid=user.uuid)
 
@@ -92,8 +93,14 @@ async def user_info(
         "todayTotalChars": todayTotalChars,
         "todayLimit": user_daily_token_limit,
         "todayRemainingChars": max(
-            user_daily_token_limit - todayTotalChars, 0
+            user_daily_token_limit - monthFreeUsed, 0
         ),
+        "monthInputChars": todayInputChars,
+        "monthOutputChars": todayOutputChars,
+        "monthTotalChars": todayTotalChars,
+        "monthFreeUsed": monthFreeUsed,
+        "monthLimit": user_daily_token_limit,
+        "monthRemainingChars": max(user_daily_token_limit - monthFreeUsed, 0),
         # ===== 累计用量 =====
         "totalInputChars": totalInputChars,
         "totalOutputChars": totalOutputChars,

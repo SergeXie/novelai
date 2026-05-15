@@ -477,13 +477,12 @@ class AccountService:
 
         # =============计算个人每天免费额度===================
         usage_service = UsageService(db)
-        input_total, output_total = await usage_service._get_user_daily_input_output(user_id)
-        user_already_used_weighted = int((input_total + output_total) * settings.MULTIPLIER)
+        free_used = await usage_service.get_user_monthly_free_used(user_id)
         # 计算今天剩余可用的免费额度
-        free_limit_remaining = max(0, settings.USER_DAILY_TOKEN_LIMIT - user_already_used_weighted)
+        free_limit_remaining = max(0, settings.USER_MONTHLY_FREE_TOKEN_LIMIT - free_used)
         usage_overview = AccountService._build_usage_overview(
             account=None,
-            free_total=settings.USER_DAILY_TOKEN_LIMIT,
+            free_total=settings.USER_MONTHLY_FREE_TOKEN_LIMIT,
             free_available=free_limit_remaining,
         )
         # ==================== 1. 获取账户 ====================
@@ -507,7 +506,7 @@ class AccountService:
 
         usage_overview = AccountService._build_usage_overview(
             account=account,
-            free_total=settings.USER_DAILY_TOKEN_LIMIT,
+            free_total=settings.USER_MONTHLY_FREE_TOKEN_LIMIT,
             free_available=free_limit_remaining,
         )
 
