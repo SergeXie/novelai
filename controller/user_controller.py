@@ -85,8 +85,8 @@ async def user_info(
         "isBindWechat": query_user.isBindWechat if query_user else 0,
         "userId": user.pkId,
         "account": user.account,
-        "nickname": user.nickname,
-        "avatar": user.avatar,
+        "nickname": query_user.nickname if query_user else user.nickname,
+        "avatar": query_user.avatar if query_user else user.avatar,
         # ===== 当天用量 =====
         "todayInputChars": todayInputChars,
         "todayOutputChars": todayOutputChars,
