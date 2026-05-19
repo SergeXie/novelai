@@ -65,6 +65,12 @@ class Book(Base):
         comment="书籍简介",
     )
 
+    coverUrl: Mapped[str | None] = mapped_column(
+        String(512),
+        nullable=True,
+        comment="书籍封面图片地址",
+    )
+
     status: Mapped[int] = mapped_column(
         SmallInteger,
         nullable=False,

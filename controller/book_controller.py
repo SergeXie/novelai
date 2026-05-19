@@ -234,6 +234,7 @@ async def create_book(
         description=req.description,
         uid=current_user.pkId,
         template_id=req.template_id,
+        coverUrl=req.coverUrl,
     )
 
     # 显式序列化（你现在已经统一这么做）
@@ -282,6 +283,7 @@ async def edit_book(
         title=req.title,
         bookType=req.bookType,
         description=req.description,
+        coverUrl=req.coverUrl,
     )
 
     # 显式走 Pydantic v2（现在的标准做法）
