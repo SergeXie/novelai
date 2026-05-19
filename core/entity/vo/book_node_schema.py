@@ -5,6 +5,8 @@ from typing import List, Optional, Dict, Any
 from fastapi import Query
 from pydantic import BaseModel, Field, field_serializer, ConfigDict, field_validator
 
+from common.config.config import settings
+
 class NodeTreeSchema(BaseModel):
     id: int
     bid: str
@@ -45,6 +47,7 @@ class CreateBookReq(BaseModel):
     template_id: Optional[str] = None
     title: str
     description: Optional[str] = None
+    coverUrl: Optional[str] = Field(default=None, max_length=512, description="书籍封面图片地址")
 
 
 class BookResp(BaseModel):
@@ -55,6 +58,7 @@ class BookResp(BaseModel):
     title: str
     bookType:str
     description: Optional[str]
+    coverUrl: Optional[str] = None
     status: int
     wordCount: int
     template_id: Optional[str]
@@ -65,6 +69,20 @@ class BookResp(BaseModel):
     @field_serializer("createTime", "updateTime", mode="plain")
     def serialize_datetime(self, value: datetime) -> str:
         return value.strftime("%Y-%m-%d %H:%M:%S")
+
+    @field_serializer("coverUrl", mode="plain")
+    def serialize_cover_url(self, value: Optional[str]) -> Optional[str]:
+        if not value:
+            return value
+
+        if value.startswith("http://") or value.startswith("https://"):
+            return value
+
+        cloud_address = (settings.CLOUD_ADDRESS or "").rstrip("/")
+        if not cloud_address:
+            return value
+
+        return f"{cloud_address}/{value.lstrip('/')}"
 
     # 关键点 2：model_config（不是 class Config）
     model_config = ConfigDict(
@@ -189,6 +207,7 @@ class EditBookReq(BaseModel):
     bookType: Optional[str] = None
     title: Optional[str] = None
     description: Optional[str] = None
+    coverUrl: Optional[str] = Field(default=None, max_length=512, description="书籍封面图片地址")
 
 
 
