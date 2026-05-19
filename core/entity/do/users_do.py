@@ -28,7 +28,7 @@ class User(Base):
     uuid: Mapped[str] = mapped_column(String(36), nullable=False, unique=True, comment="唯一标识符")
     account: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, comment="账户")
     nickname: Mapped[str] = mapped_column(String(64), nullable=False, comment="昵称")
-    avatar: Mapped[str] = mapped_column(String(64), nullable=False, comment="头像")
+    avatar: Mapped[str] = mapped_column(String(255), nullable=False, comment="头像")
 
     password: Mapped[str] = mapped_column(String(128), nullable=False, comment="密码")
     onlineStatus: Mapped[OnlineStatus] = mapped_column(Enum(OnlineStatus), nullable=False,
