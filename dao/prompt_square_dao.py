@@ -1,4 +1,3 @@
-from openai.resources.skills import content
 from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased

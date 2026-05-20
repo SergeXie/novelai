@@ -256,7 +256,8 @@ class UsageService:
             status=status,
             error_msg=error_msg,
             output_content=image_url,
-            output_length=len(image_url),
+            output_length=50000,  # 文生图通常按单次固定 token 计算
+            total_tokens=50000,  # 文生图通常按单次固定 token计算
         )
 
     async def get_book_chat_history(self, bid: str, page: int, size: int, with_content:bool = False) -> PageResp:
