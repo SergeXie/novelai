@@ -10,6 +10,7 @@ from ai.adapters.claude import ClaudeAdapter
 from ai.adapters.claude_thinking import ClaudeThinkingAdapter
 from ai.adapters.deep_seek import DeepSeekAdapter
 from ai.adapters.doubao import DoubaoAdapter
+from ai.adapters.doubao_image import DoubaoImageAdapter
 from ai.adapters.doubao_plus import DoubaoPlusAdapter
 from ai.adapters.enums import AIProvider
 from ai.adapters.gpt import GPTAdapter
@@ -96,6 +97,9 @@ class AINexus:
             AIProvider.ZHIPU: GLMAdapter(),
             AIProvider.CLAUDETHINKING: ClaudeThinkingAdapter(),
             AIProvider.MIMO: MimoAdapter(),
+        }
+        self._image_adapters = {
+            AIProvider.DOUBAOIMAGE: DoubaoImageAdapter(),
         }
 
         # Ollama 走异步队列，避免并发直接打到本地模型服务
@@ -218,6 +222,32 @@ class AINexus:
             normalized_messages.append({"role": role, "content": content})
 
         return normalized_messages
+
+    def _get_image_adapter(self, provider: AIProvider):
+        adapter = self._image_adapters.get(provider)
+        if not adapter:
+            raise ValueError(f"暂不支持该图片模型: {provider}")
+        return adapter
+
+    async def generate_image(
+        self,
+        prompt: str,
+        provider: AIProvider = AIProvider.DOUBAOIMAGE,
+        size: str = "2K",
+        n: int = 1,
+        watermark: bool = False,
+        response_format: str = "url",
+        extra_body: Optional[dict] = None,
+    ) -> str:
+        adapter = self._get_image_adapter(provider)
+        return await adapter.generate_image(
+            prompt=prompt,
+            size=size,
+            n=n,
+            watermark=watermark,
+            response_format=response_format,
+            extra_body=extra_body,
+        )
 
     async def generate_novel_text(
         self,

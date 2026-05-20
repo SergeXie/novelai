@@ -87,6 +87,7 @@ class Settings(BaseSettings):
     PUBLIC_KEY_ID: str = Field(alias="PUBLIC_KEY_ID", default="")
 
     CLOUD_ADDRESS: str = Field(alias="CLOUD_ADDRESS", default="")
+    IMAGE_DOWNLOAD_URL: str = Field(alias="IMAGE_DOWNLOAD_URL", default="http://8.138.95.62:8000/downloadFile")
 
     UPLOAD_USERS_DIR: str = Field(alias="UPLOAD_USERS_DIR", default="")
     WEB_SEARCH_API_KEY: str = Field(alias="WEB_SEARCH_API_KEY", default="")

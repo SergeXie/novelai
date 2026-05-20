@@ -1,6 +1,9 @@
 ### Build Script
     python -m PyInstaller --hidden-import aiomysql -n "novelAI" .\main.py
 ---
+#### 20260520
+> 增加文生图接口。  
+
 
 #### 20260412
 > 增加ai生成日志分页；  
