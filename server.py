@@ -8,6 +8,7 @@ from common.config.config import settings
 from common.exception.handle import handle_exception
 from controller.ai_chat_controller import aiChatController
 from controller.ai_controller import aiController
+from controller.ai_image_controller import aiImageController
 from controller.novel_wizard_controller import novelWizardController
 from controller.ai_template_controller import aiTemplateController
 from controller.book_controller import bookController
@@ -90,6 +91,7 @@ def register_router(app: FastAPI):
     controller_list = [
         {'router': loginController, 'tags': ['登录接口']},
         {'router': aiController, 'tags': ['AI']},
+        {'router': aiImageController, 'tags': ['AI文生图']},
         {'router': promptController, 'tags': ['提示词']},
         {'router': aiTemplateController, 'tags': ['提示词广场模板']},
         {'router': bookController, 'tags': ['作品服务接口']},

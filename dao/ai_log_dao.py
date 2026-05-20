@@ -153,16 +153,53 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
                } if ai_rsp else {})
         }
         try:
-            async with self.db.begin():
-                stmt = (
-                    update(AiNovelGenerateLog)
-                    .where(AiNovelGenerateLog.requestId == request_id)
-                    .values(update_fields)
-                )
-                result = await self.db.execute(stmt)
-                return result.rowcount > 0
+            stmt = (
+                update(AiNovelGenerateLog)
+                .where(AiNovelGenerateLog.requestId == request_id)
+                .values(update_fields)
+            )
+            result = await self.db.execute(stmt)
+            await self.db.flush()
+            return result.rowcount > 0
         except Exception as e:
             logger.error(f"Dao update_output_by_request_id Transaction Failed: {e}")
+            return False
+
+    async def update_request_result_by_request_id(
+            self,
+            request_id: str,
+            status: AIGenerateStatus,
+            error_msg: str = "",
+            output_content: str | None = None,
+            output_length: int | None = None,
+            request_input_length: int | None = None,
+            total_tokens: int | None = None,
+    ) -> bool:
+        update_fields = {
+            "status": status.value if hasattr(status, "value") else status,
+            "errorMsg": error_msg,
+        }
+
+        if output_content is not None:
+            update_fields["outputContent"] = output_content
+        if output_length is not None:
+            update_fields["outputLength"] = output_length
+        if request_input_length is not None:
+            update_fields["requestInputLength"] = request_input_length
+        if total_tokens is not None:
+            update_fields["totalTokens"] = total_tokens
+
+        try:
+            stmt = (
+                update(AiNovelGenerateLog)
+                .where(AiNovelGenerateLog.requestId == request_id)
+                .values(update_fields)
+            )
+            result = await self.db.execute(stmt)
+            await self.db.flush()
+            return result.rowcount > 0
+        except Exception as e:
+            logger.error(f"Dao update_request_result_by_request_id Transaction Failed: {e}")
             return False
 
     # 假设你的类名已统一为 AiNovelGenerateLog

@@ -12,6 +12,7 @@ class AIProvider(IntEnum):
     ZHIPU = 7
     CLAUDETHINKING = 8
     MIMO = 9
+    DOUBAOIMAGE = 10
 
     @classmethod
     def parse(cls, value: int | None) -> "AIProvider":

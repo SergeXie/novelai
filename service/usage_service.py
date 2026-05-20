@@ -157,16 +157,8 @@ class UsageService:
         return ""
 
     async def get_book_invalid_destructor_log(self, bid: str):
-        """根据 request_id 查询生成内容，常用于前端轮询结果。"""
-        log_record = await self.ai_log_dao.get_log_by_request_id(request_id=request_id)
-
-        if log_record and log_record.userId == user_id:
-            if log_record.status == AIGenerateStatus.SUCCESS:
-                return log_record.outputContent
-            elif log_record.status == AIGenerateStatus.FAILED:
-                return "生成失败，请切换模型或者稍后重试"
-
-        return ""
+        """获取指定书籍最近一条可复用的拆书记录。"""
+        return await self.ai_log_dao.get_invalid_book_destructor_log(bid=bid)
 
     async def get_log_by_request_id(self, request_id: str) -> AiNovelGenerateLog | None:
         return await self.ai_log_dao.get_log_by_request_id(request_id=request_id)
@@ -198,6 +190,51 @@ class UsageService:
             logger.error(f"RequestId: {request_id} 内容更新失败")
 
         return success
+
+    async def update_request_result_by_request_id(
+            self,
+            request_id: str,
+            status: AIGenerateStatus,
+            error_msg: str = "",
+            output_content: str | None = None,
+            output_length: int | None = None,
+            request_input_length: int | None = None,
+            total_tokens: int | None = None,
+    ) -> bool:
+        if not request_id:
+            return False
+
+        success = await self.ai_log_dao.update_request_result_by_request_id(
+            request_id=request_id,
+            status=status,
+            error_msg=error_msg,
+            output_content=output_content,
+            output_length=output_length,
+            request_input_length=request_input_length,
+            total_tokens=total_tokens,
+        )
+
+        if success:
+            logger.info(f"RequestId: {request_id} 请求结果更新成功")
+        else:
+            logger.error(f"RequestId: {request_id} 请求结果更新失败")
+
+        return success
+
+    async def update_image_output_by_request_id(
+            self,
+            request_id: str,
+            image_url: str,
+            status: AIGenerateStatus = AIGenerateStatus.SUCCESS,
+            error_msg: str = "",
+    ) -> bool:
+        return await self.update_request_result_by_request_id(
+            request_id=request_id,
+            status=status,
+            error_msg=error_msg,
+            output_content=image_url,
+            output_length=len(image_url),
+        )
 
     async def get_book_chat_history(self, bid: str, page: int, size: int, with_content:bool = False) -> PageResp:
         """分页获取某本书下的 AI 对话历史。"""
