@@ -93,6 +93,7 @@ class BookDAO:
             bookType: str,
             description: str | None,
             template_id: str | None,
+            coverUrl: str | None = None,
     ) -> Book:
         """
         创建书籍记录
@@ -103,6 +104,7 @@ class BookDAO:
             title=title,
             bookType=bookType,
             description=description,
+            coverUrl=coverUrl,
             status=0,  # 默认草稿
             wordCount=0,
             template_id=template_id

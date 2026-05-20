@@ -1,6 +1,7 @@
 from datetime import datetime, time
 
 from dateutil import parser
+from dateutil.relativedelta import relativedelta
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,6 +41,13 @@ class UsageService:
         return start, end
 
     @staticmethod
+    def get_month_range():
+        today = datetime.now().date()
+        start = datetime.combine(today.replace(day=1), time.min)
+        end = start + relativedelta(months=1)
+        return start, end
+
+    @staticmethod
     def parse_query_time(value: str | None, is_end: bool = False) -> datetime | None:
         if not value:
             return None
@@ -69,6 +77,19 @@ class UsageService:
         intput_total_count, output_total_count, actualAmount, freeDeduct, permanentDeduct = await self.ai_log_dao.get_usage_sum(user_id)
         return intput_total_count, output_total_count
 
+    async def get_user_monthly_input_output(self, user_id: int) -> tuple[int, int]:
+        start, end = self.get_month_range()
+        intput_count, output_count, _, _, _ = await self.ai_log_dao.get_usage_sum(user_id, start, end)
+        return intput_count, output_count
+
+    async def get_user_monthly_free_used(self, user_id: int) -> int:
+        start, end = self.get_month_range()
+        return int(await AILogDAO.sum_free_tokens(self.db, user_id=user_id, start_time=start, end_time=end))
+
+    async def get_user_monthly_free_remaining(self, user_id: int) -> int:
+        used_free = await self.get_user_monthly_free_used(user_id)
+        return max(0, settings.USER_MONTHLY_FREE_TOKEN_LIMIT - used_free)
+
     async def get_platform_daily_consumption(self):
         start, end = self.get_today_range()
         return await self.ai_log_dao.get_platform_usage_sum(start, end)
@@ -94,6 +115,7 @@ class UsageService:
             consumeSource:TokenConsumeSource = TokenConsumeSource.FREE,
             freeDeduct:int = 0,
             monthlyDeduct:int = 0,
+            bonusDeduct:int = 0,
             permanentDeduct:int = 0,
             tokenEstimate: int = 0,
     ) -> AiNovelGenerateLog:
@@ -140,6 +162,7 @@ class UsageService:
             consume_source=consumeSource,
             freeDeduct=freeDeduct,
             monthlyDeduct=monthlyDeduct,
+            bonusDeduct=bonusDeduct,
             permanentDeduct=permanentDeduct,
         )
         return await self.ai_log_dao.create_ai_generate_log(log_obj=log)
@@ -314,14 +337,14 @@ class UsageService:
         account = await UserAccountDAO.get_active_account(db=self.db, user_id=user_id)
 
         # 2. 调用之前的 LogDAO 统计今日消耗
-        today_start = datetime.combine(datetime.now().date(), time.min)
-        used_tokens = await AILogDAO.sum_free_tokens(self.db, user_id=user_id, start_time=today_start)
+        used_tokens = await self.get_user_monthly_free_used(user_id)
 
         # 3. 转化为 BaseModel 返回
         return AIUserAssets(
-            daily_limit=settings.USER_DAILY_TOKEN_LIMIT,
+            daily_limit=settings.USER_MONTHLY_FREE_TOKEN_LIMIT,
             used_free=used_tokens,
             monthly_balance=account.monthly_balance if account.monthly_balance else 0,
+            bonus_balance=account.bonus_balance if account.bonus_balance else 0,
             permanent_balance=account.permanent_balance if account.permanent_balance else 0,
         )
 
@@ -358,11 +381,9 @@ class UsageService:
         # A. 【首先】抵扣每日免费额度 (Free)
         # 注意：免费额度通常由 settings.USER_DAY_LIMIT 减去 今日已用 算出
         # 假设你的 check_quota 逻辑里已经算过了，这里我们需要知道用户今天还能免单多少
-        input_total, output_total = await self.get_user_daily_input_output(user_id)
-        user_already_used_weighted = int((input_total + output_total) * multiplier)
+        free_used = await self.get_user_monthly_free_used(user_id)
         # 计算今天剩余可用的免费额度
-        free_limit_remaining = max(0, settings.USER_DAILY_TOKEN_LIMIT - user_already_used_weighted)
-        print("本次使用的额度：{}".format(remaining_to_pay))
+        free_limit_remaining = max(0, settings.USER_MONTHLY_FREE_TOKEN_LIMIT - free_used)
         if free_limit_remaining > 0 and remaining_to_pay > 0:
             free_deduct = min(free_limit_remaining, remaining_to_pay)
             log_entry.freeDeduct = free_deduct
@@ -370,7 +391,16 @@ class UsageService:
             # 免费额度是虚拟限额，不需要在 account 表里减扣，只需记录在 log
             logger.info("免费额度：{}".format(free_limit_remaining))
 
-        # B. 【其次】抵扣月度额度 (Monthly)
+        # B. 【其次】抵扣补给奖励额度 (Bonus)
+        if account and account.bonus_balance > 0 and remaining_to_pay > 0:
+            bonus_deduct = min(account.bonus_balance, remaining_to_pay)
+            log_entry.bonusDeduct = bonus_deduct
+            account.bonus_balance -= bonus_deduct
+            account.total_consumed += bonus_deduct
+            remaining_to_pay -= bonus_deduct
+            logger.info("抵扣补给奖励额度")
+
+        # C. 【再次】抵扣月度额度 (Monthly)
         if account and account.monthly_balance > 0 and remaining_to_pay > 0:
             monthly_deduct = min(account.monthly_balance, remaining_to_pay)
             log_entry.monthlyDeduct = monthly_deduct
@@ -378,10 +408,8 @@ class UsageService:
             account.total_consumed += monthly_deduct
             remaining_to_pay -= monthly_deduct
             logger.info("抵扣月度额度")
-            await self.consume_tokens(account, actual_amount, user_id, request_id)
 
-
-        # C. 【最后】抵扣永久额度 (Permanent)
+        # D. 【最后】抵扣永久额度 (Permanent)
         if account and account.permanent_balance > 0 and remaining_to_pay > 0:
             perm_deduct = min(account.permanent_balance, remaining_to_pay)
             log_entry.permanentDeduct = perm_deduct
@@ -389,7 +417,17 @@ class UsageService:
             account.total_consumed += perm_deduct
             remaining_to_pay -= perm_deduct
             logger.info("抵扣永久额度")
-            await self.consume_tokens(account, actual_amount, user_id, request_id)
+
+        if account:
+            await self.consume_tokens(
+                account=account,
+                actual_amount=actual_amount,
+                user_id=user_id,
+                request_id=request_id,
+                monthly_amount=log_entry.monthlyDeduct,
+                bonus_amount=log_entry.bonusDeduct,
+                permanent_amount=log_entry.permanentDeduct,
+            )
 
         # --- 3. 核心修正：判定 TokenConsumeSource ---
 
@@ -397,6 +435,7 @@ class UsageService:
         used_sources_count = sum([
             1 if log_entry.freeDeduct > 0 else 0,
             1 if log_entry.monthlyDeduct > 0 else 0,
+            1 if log_entry.bonusDeduct > 0 else 0,
             1 if log_entry.permanentDeduct > 0 else 0
         ])
 
@@ -406,6 +445,8 @@ class UsageService:
             log_entry.consume_source = TokenConsumeSource.FREE
         elif log_entry.monthlyDeduct > 0:
             log_entry.consume_source = TokenConsumeSource.MEMBER_MONTHLY
+        elif log_entry.bonusDeduct > 0:
+            log_entry.consume_source = TokenConsumeSource.BONUS
         elif log_entry.permanentDeduct > 0:
             log_entry.consume_source = TokenConsumeSource.PERMANENT
         else:
@@ -416,23 +457,32 @@ class UsageService:
         # 记得更新 account 表的相关余额
         await self.db.commit()
 
-    async def consume_tokens(self, account, actual_amount, user_id, request_id):
+    async def consume_tokens(
+            self,
+            account,
+            actual_amount,
+            user_id,
+            request_id,
+            monthly_amount: int = 0,
+            bonus_amount: int = 0,
+            permanent_amount: int = 0,
+    ):
         # 新增额外流水
-        consume_monthly = min(account.monthly_balance, actual_amount)
-        consume_permanent = actual_amount - consume_monthly
         await UserDAO.create_log(
             db=self.db,
             user_id=user_id,
             request_id=request_id,
-            monthly_amount=consume_monthly,
-            permanent_amount=consume_permanent,
+            monthly_amount=monthly_amount,
+            bonus_amount=bonus_amount,
+            permanent_amount=permanent_amount,
             total_amount=actual_amount,
             balance_snapshot={
                 "monthly": account.monthly_balance,
+                "bonus": account.bonus_balance,
                 "permanent": account.permanent_balance
             }
         )
 
         logger.info(
-            f"[扣费] 成功 user_id={user_id}, monthly={consume_monthly}, permanent={consume_permanent}"
+            f"[扣费] 成功 user_id={user_id}, monthly={monthly_amount}, bonus={bonus_amount}, permanent={permanent_amount}"
         )

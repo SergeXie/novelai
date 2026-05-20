@@ -33,21 +33,26 @@ class ChargeType(Enum):
 class AssetType(Enum):
     MONTHLY = "MONTHLY"
     PERMANENT = "PERMANENT"
+    BONUS = "BONUS"
 
     @classmethod
     def get_descriptions(cls):
         return {
             cls.MONTHLY: "月会员",
-            cls.PERMANENT: "Token包"
+            cls.PERMANENT: "Token包",
+            cls.BONUS: "补给奖励"
         }
 
 class UserCustomPromptStatus(Enum):
     UNAVAILABLE = (-1, "不可用")
     PENDING = (0, "待审核")
     AVAILABLE = (1, "可用")
+    INVALID = (2, "审核不通过")
+    TOOLS = (10, "多轮对话工具")
+    QUICK_TOOLS = (11, "快捷工具")
 
-    def __init__(self, value, label):
-        self._value_ = value
+    def __init__(self, code, label):
+        self.code = code
         self.label = label
 
 if __name__ == '__main__':

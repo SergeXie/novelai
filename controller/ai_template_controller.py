@@ -115,6 +115,7 @@ async def get_user_prompt_detail(
 
 @aiTemplateController.post("/updatePromptSquare", name="修改用户提示词")
 async def update_user_prompt_square(
+        background_tasks: BackgroundTasks,
         req: PromptSquareUpdateReq,
         db: AsyncSession = Depends(get_db),
         user=Depends(get_current_user)
@@ -122,7 +123,7 @@ async def update_user_prompt_square(
     """
     修改用户自己的提示词广场数据
     """
-    data = await PromptSquareService.update_user_prompt(db, user.pkId, req)
+    data = await PromptSquareService.update_user_prompt(db, user.pkId, req, background_tasks)
     if not data:
         return ResponseUtil.failure(msg="提示词不存在或无权限修改")
     return ResponseUtil.success(data=data)

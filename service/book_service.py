@@ -31,6 +31,31 @@ class BookService:
         self.db = db
 
     @staticmethod
+    def normalize_cover_path(cover_url: str | None) -> str | None:
+        """Store only the cover resource path, e.g. http://host/files/a.jpg -> /files/a.jpg."""
+        if cover_url is None:
+            return None
+
+        cover_url = cover_url.strip()
+        if not cover_url:
+            return ""
+
+        parsed_url = urlparse(cover_url)
+        cover_path = parsed_url.path if parsed_url.scheme and parsed_url.netloc else cover_url
+        cover_path = cover_path.strip()
+
+        if not cover_path:
+            raise ServiceWarning("封面地址无效")
+
+        if not cover_path.startswith("/"):
+            cover_path = f"/{cover_path}"
+
+        if len(cover_path) > 512:
+            raise ServiceWarning("封面地址不能超过512个字符")
+
+        return cover_path
+
+    @staticmethod
     async def extract_book_title(url: str) -> str:
         """
         从 txt url 提取书名
@@ -176,7 +201,8 @@ class BookService:
             uid: int,
             title: str,
             description: str | None,
-            template_id: str
+            template_id: str,
+            coverUrl: str | None = None,
     ) -> Book:
         """
         创建书籍 + 初始化标准树结构
@@ -190,7 +216,8 @@ class BookService:
             title=title,
             bookType=template.tpl_name,
             description=description,
-            template_id=template_id
+            template_id=template_id,
+            coverUrl=self.normalize_cover_path(coverUrl),
         )
 
         template_data = template.data  # JSON
@@ -218,6 +245,7 @@ class BookService:
             title: str | None,
             bookType: str | None,
             description: str | None,
+            coverUrl: str | None = None,
     ):
         """
         编辑书籍信息
@@ -242,6 +270,9 @@ class BookService:
 
         if description is not None:
             values["description"] = description
+
+        if coverUrl is not None:
+            values["coverUrl"] = self.normalize_cover_path(coverUrl)
 
         values["template_id"] = template_id
         # 3️ 更新

@@ -18,6 +18,7 @@ from core.deps.token_utils import TokenManager
 from core.entity.do.users_do import User, OnlineStatus, WechatLoginState
 from core.entity.vo.login_vo import UserLogin
 from core.entity.vo.user_schema import ChangePasswordReq
+from service.account_service import AccountService
 from service.user_service import UserService
 
 loginController = APIRouter()
@@ -362,6 +363,7 @@ async def qr_callback(
             )
 
             user.onlineStatus = OnlineStatus.ONLINE
+            await AccountService.claim_due_bonus_plans(db, user.pkId)
             await db.flush()
 
             data = {

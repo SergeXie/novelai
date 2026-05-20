@@ -1,3 +1,4 @@
+from openai.resources.skills import content
 from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
@@ -31,6 +32,7 @@ class PromptSquareDAO:
             user_id: int | None = None,
             promptType:str = "public",
             title: str | None = None,
+            status:UserCustomPromptStatus | None = None,
     ):
 
         """
@@ -42,10 +44,9 @@ class PromptSquareDAO:
         if promptType == "mine":
             # 我的发布
             condition = (PromptSquare.author_id == user_id)
-
         else:
-            # 公开广场
-            condition = (PromptSquare.status == UserCustomPromptStatus.AVAILABLE.value)
+            filter_status = status if status is not None else UserCustomPromptStatus.AVAILABLE
+            condition = (PromptSquare.status == filter_status.code)
 
         if category:
             condition = condition & (PromptSquare.category == category)
@@ -122,7 +123,7 @@ class PromptSquareDAO:
             category=category,
             content=content,
             description=description,
-            status=UserCustomPromptStatus.PENDING.value,
+            status=UserCustomPromptStatus.PENDING.code,
             author_id=user_id,
             cover_img="",
             engine_type=PromptEngineType.JINJA2.value,
@@ -214,7 +215,7 @@ class PromptSquareDAO:
         prompt.category = req.category
         prompt.content = req.content
         prompt.description = req.description
-        prompt.status = 0
+        prompt.status = UserCustomPromptStatus.PENDING.code
 
         db.add(prompt)
         await db.commit()

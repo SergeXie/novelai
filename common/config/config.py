@@ -120,4 +120,9 @@ class Settings(BaseSettings):
     def is_prod(self) -> bool:
         return self.ENV_MODE.lower() in ("production", "prod")
 
+    @property
+    def USER_MONTHLY_FREE_TOKEN_LIMIT(self) -> int:
+        # Monthly free quota reuses the existing env value to avoid an immediate deploy config change.
+        return self.USER_DAILY_TOKEN_LIMIT
+
 settings = Settings()
