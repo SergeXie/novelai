@@ -1,12 +1,26 @@
-# service/pv_service.py
-
-from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import Request
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from core.entity.vo.pv_vo import PVCreateRequest
 from dao.pv_dao import PVDao
 
 
 class PVService:
+    @staticmethod
+    def get_real_ip(request: Request) -> str:
+        """
+        Prefer proxy headers set by Nginx, then fall back to the direct client IP.
+        X-Forwarded-For may contain multiple IPs; the first one is the original client.
+        """
+        x_forwarded_for = request.headers.get("x-forwarded-for")
+        if x_forwarded_for:
+            return x_forwarded_for.split(",")[0].strip()
+
+        x_real_ip = request.headers.get("x-real-ip")
+        if x_real_ip:
+            return x_real_ip.strip()
+
+        return request.client.host if request.client else ""
 
     @staticmethod
     async def create_pv(
@@ -14,26 +28,13 @@ class PVService:
         request: Request,
         data: PVCreateRequest,
     ):
-        """
-        创建PV记录
-
-        :param db: 数据库会话
-        :param request: 请求对象
-        :param data: 前端传递的数据
-        :return:
-        """
-
-        # 1️⃣ 把 Pydantic 模型转换为 dict
-        # exclude_unset=True 只保留前端实际传的字段，避免 None 覆盖默认值
+        """Create PV record."""
         pv_data = data.dict(exclude_unset=True)
-
-        # 2️⃣ 后端动态字段
         pv_data.update({
-            "ip": request.client.host,  # 自动获取访问IP
+            "ip": PVService.get_real_ip(request),
         })
-        
-        # 调用DAO层创建数据
+
         return await PVDao.create(
             db=db,
-            data=pv_data
+            data=pv_data,
         )
