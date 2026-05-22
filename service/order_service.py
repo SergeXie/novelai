@@ -19,6 +19,29 @@ class OrderService:
     ORDER_EXPIRE_MINUTES = 30  # 订单过期时间（分钟）
 
     @staticmethod
+    async def cancel_expired_pending_orders(
+            db: AsyncSession,
+            user_id: int | None = None,
+    ) -> int:
+        """
+        Cancel PENDING orders that have exceeded the configured payment window.
+        """
+        expired_before = datetime.datetime.utcnow() - datetime.timedelta(
+            minutes=OrderService.ORDER_EXPIRE_MINUTES
+        )
+
+        count = await OrderDAO.cancel_expired_pending_orders(
+            db=db,
+            expired_before=expired_before,
+            user_id=user_id,
+        )
+
+        if count:
+            logger.info(f"[订单过期] 已关闭过期待支付订单 count={count}, user_id={user_id}")
+
+        return count
+
+    @staticmethod
     async def get_order_list(
             db,
             user_id: int,
@@ -30,6 +53,8 @@ class OrderService:
         """
         获取订单列表（支持时间筛选）
         """
+
+        await OrderService.cancel_expired_pending_orders(db, user_id=user_id)
 
         records, total = await OrderDAO.list_orders(
             db,
@@ -69,6 +94,14 @@ class OrderService:
 
         if not order:
             return None
+
+        if order.status == "PENDING":
+            expire_time = order.created_at + datetime.timedelta(
+                minutes=OrderService.ORDER_EXPIRE_MINUTES
+            )
+            if datetime.datetime.utcnow() >= expire_time:
+                await OrderDAO.update_order_status(db, order, "CANCELLED")
+                order.status = "CANCELLED"
 
         # ==================== 1. 已支付直接返回 ====================
 

@@ -1,4 +1,4 @@
-from sqlalchemy import select, desc, func
+from sqlalchemy import select, desc, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import and_
 
@@ -105,6 +105,31 @@ class OrderDAO(BaseDAO[Order]):
         """
         order.status = status
         await db.flush()
+
+    @staticmethod
+    async def cancel_expired_pending_orders(
+        db: AsyncSession,
+        expired_before,
+        user_id: int | None = None,
+    ) -> int:
+        """
+        Close pending orders created before the expire boundary.
+        """
+        conditions = [
+            Order.status == "PENDING",
+            Order.created_at <= expired_before,
+        ]
+
+        if user_id is not None:
+            conditions.append(Order.user_id == user_id)
+
+        result = await db.execute(
+            update(Order)
+            .where(and_(*conditions))
+            .values(status="CANCELLED")
+        )
+        await db.flush()
+        return result.rowcount or 0
 
     @staticmethod
     async def get_by_order_no(db: AsyncSession, order_no: str):
