@@ -179,7 +179,7 @@ async def membership_token_grant_job():
 
     logger.info("[定时任务] 会员Token分期发放完成")
 
-@scheduler.scheduled_job("interval", hour=1, minute=15)
+@scheduler.scheduled_job("cron", hour=1, minute=15)
 async def order_expire_job():
     """
     Cancel unpaid orders after the 30-minute payment window.
