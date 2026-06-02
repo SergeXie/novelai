@@ -25,14 +25,14 @@ class PaymentService:
 
     async def generate_pay_url(self, order, return_url: str) -> str:
         pay_method = order.pay_method
-        logger.info(f"[支付调度] 开始处理支付 method={pay_method}, order_no={order.order_no}")
+        logger.info(f"[payment] generate url method={pay_method}, order_no={order.order_no}")
 
         if pay_method not in self.payment_map:
-            logger.error(f"[支付调度] 不支持的支付方式 {pay_method}")
-            raise ValueError("不支持的支付方式")
+            logger.error(f"[payment] unsupported pay method={pay_method}")
+            raise ValueError("unsupported pay method")
 
         pay_url = await self.payment_map[pay_method].generate_pay_url(order, return_url)
-        logger.info(f"[支付调度] 支付链接生成完成 order_no={order.order_no}")
+        logger.info(f"[payment] url generated order_no={order.order_no}")
         return pay_url
 
     @staticmethod
@@ -48,11 +48,11 @@ class PaymentService:
     async def handle_alipay_callback(self, db, data) -> bool:
         data = self._normalize_alipay_data(data)
         if not data:
-            logger.error("[回调] 支付宝回调参数为空或格式错误")
+            logger.error("[alipay callback] empty or invalid payload")
             return False
 
-        logger.info("[回调] 开始处理支付宝回调")
-        logger.info(f"sign字段: {data.get('sign')}")
+        logger.info("[alipay callback] start")
+        logger.info(f"[alipay callback] sign={data.get('sign')}")
 
         signature = data.get("sign")
         verify_data = {
@@ -63,17 +63,17 @@ class PaymentService:
         service = self.payment_map["alipay"]
 
         logger.info(
-            f"[回调] 支付宝验签上下文 app_id={data.get('app_id')}, "
+            f"[alipay callback] verify context app_id={data.get('app_id')}, "
             f"out_trade_no={data.get('out_trade_no')}, sign_type={data.get('sign_type')}, "
             f"keys={sorted(verify_data.keys())}"
         )
 
         success = service.alipay.verify(verify_data, signature)
         if not success:
-            logger.error("[回调] 支付宝验签失败")
+            logger.error("[alipay callback] verify failed")
             return False
 
-        logger.info("[回调] 支付宝验签成功")
+        logger.info("[alipay callback] verify success")
 
         order_no = data.get("out_trade_no")
         trade_status = data.get("trade_status")
@@ -81,29 +81,29 @@ class PaymentService:
         total_amount = data.get("total_amount")
 
         if trade_status not in ("TRADE_SUCCESS", "TRADE_FINISHED"):
-            logger.warning(f"[回调] 非成功状态 {trade_status}")
+            logger.warning(f"[alipay callback] non-success trade_status={trade_status}")
             return False
 
         order = await OrderDAO.get_by_order_no(db, order_no)
         if not order:
-            logger.error(f"[回调] 订单不存在 order_no={order_no}")
+            logger.error(f"[alipay callback] order not found order_no={order_no}")
             return False
 
         if order.status == "PAID":
-            logger.info(f"[回调] 订单已处理 order_no={order_no}")
+            logger.info(f"[alipay callback] order already handled order_no={order_no}")
             return True
 
         if float(total_amount) != float(order.pay_amount):
-            logger.error(f"[回调] 金额不一致 order_no={order.order_no}")
+            logger.error(f"[alipay callback] amount mismatch order_no={order.order_no}")
             return False
 
         order.status = "PAID"
         order.third_party_no = data.get("trade_no")
         order.paid_at = parse_and_format_date(gmt_payment) if gmt_payment else parse_and_format_date()
 
-        logger.info(f"[回调] 订单支付完成 order_no={order.order_no}, paid_at={order.paid_at}")
+        logger.info(f"[alipay callback] order paid order_no={order.order_no}, paid_at={order.paid_at}")
         await AccountService.grant_order_benefits(db, order)
-        logger.info(f"[回调] 权益发放完成 order_no={order_no}")
+        logger.info(f"[alipay callback] benefits granted order_no={order_no}")
         return True
 
     @staticmethod
@@ -119,7 +119,7 @@ class PaymentService:
     async def handle_wechat_callback(self, db, body: dict) -> bool:
         resource = body.get("resource")
         if not resource:
-            logger.error("[微信回调] resource 为空")
+            logger.error("[wechat callback] empty resource")
             return False
 
         data = self._decrypt_wechat(
@@ -128,25 +128,25 @@ class PaymentService:
             associated_data=resource.get("associated_data"),
         )
 
-        logger.info(f"[微信回调] 解密后数据: {data}")
+        logger.info(f"[wechat callback] decrypted data={data}")
 
         if data.get("trade_state") != "SUCCESS":
-            logger.warning(f"[微信回调] 非成功状态 {data.get('trade_state')}")
+            logger.warning(f"[wechat callback] non-success trade_state={data.get('trade_state')}")
             return False
 
         order_no = data.get("out_trade_no")
         order = await OrderDAO.get_by_order_no(db, order_no)
         if not order:
-            logger.error(f"[微信回调] 订单不存在: {order_no}")
+            logger.error(f"[wechat callback] order not found order_no={order_no}")
             return False
 
         if order.status == "PAID":
-            logger.info(f"[微信回调] 已处理: {order_no}")
+            logger.info(f"[wechat callback] order already handled order_no={order_no}")
             return True
 
         total = data.get("amount", {}).get("total")
         if int(total) != int(order.pay_amount * 100):
-            logger.error(f"[微信回调] 金额不一致 order_no={order_no}")
+            logger.error(f"[wechat callback] amount mismatch order_no={order_no}")
             return False
 
         order.status = "PAID"
@@ -156,7 +156,7 @@ class PaymentService:
         if success_time:
             order.paid_at = datetime.fromisoformat(success_time.replace("Z", "+00:00"))
 
-        logger.info(f"[微信回调] 订单支付成功: {order_no}")
+        logger.info(f"[wechat callback] order paid order_no={order_no}")
         await AccountService.grant_order_benefits(db, order)
-        logger.info(f"[微信回调] 权益发放完成: {order_no}")
+        logger.info(f"[wechat callback] benefits granted order_no={order_no}")
         return True

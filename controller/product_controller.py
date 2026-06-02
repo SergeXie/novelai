@@ -128,8 +128,7 @@ async def alipay_callback(request: Request, db: AsyncSession = Depends(get_db)):
         if "application/json" in content_type:
             payload = await request.json()
         else:
-            form = await request.form()
-            payload = dict(form) if form else await request.body()
+            payload = await request.body()
 
         callback_data = _parse_alipay_callback_body(content_type, payload)
         logger.info(f"支付宝回调参数: {callback_data}")
