@@ -1,4 +1,5 @@
 from urllib.parse import parse_qsl
+import json
 
 from fastapi import APIRouter, Depends, Request
 from loguru import logger
@@ -115,6 +116,12 @@ def _parse_alipay_callback_body(content_type: str, raw_payload) -> dict:
         raw_payload = raw_payload.decode("utf-8")
 
     if isinstance(raw_payload, str):
+        raw_payload = raw_payload.strip()
+        if raw_payload.startswith('"') and raw_payload.endswith('"'):
+            try:
+                raw_payload = json.loads(raw_payload)
+            except json.JSONDecodeError:
+                raw_payload = raw_payload[1:-1]
         return dict(parse_qsl(raw_payload, keep_blank_values=True))
 
     logger.warning(f"[支付宝回调] 不支持的参数类型: {type(raw_payload)} content_type={content_type}")

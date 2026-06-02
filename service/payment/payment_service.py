@@ -38,10 +38,22 @@ class PaymentService:
     @staticmethod
     def _normalize_alipay_data(data) -> dict:
         if isinstance(data, dict):
-            return dict(data)
+            normalized = dict(data)
+            cleaned = {}
+            for key, value in normalized.items():
+                clean_key = key.strip('"') if isinstance(key, str) else key
+                clean_value = value.strip('"') if isinstance(value, str) else value
+                cleaned[clean_key] = clean_value
+            return cleaned
         if isinstance(data, bytes):
             data = data.decode("utf-8")
         if isinstance(data, str):
+            data = data.strip()
+            if data.startswith('"') and data.endswith('"'):
+                try:
+                    data = json.loads(data)
+                except json.JSONDecodeError:
+                    data = data[1:-1]
             return dict(parse_qsl(data, keep_blank_values=True))
         return {}
 
