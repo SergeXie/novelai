@@ -1,21 +1,14 @@
-from sqlalchemy import (
-    Integer,
-    String,
-    DateTime,
-    DECIMAL,
-    SmallInteger,
-    Index,
-    func,
-)
+from datetime import datetime
+from decimal import Decimal
+
+from sqlalchemy import DECIMAL, DateTime, Index, Integer, SmallInteger, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.db_mysql import Base
 
 
 class McAiModel(Base):
-    """
-    AI 模型表 ORM
-    """
+    """AI model config ORM."""
 
     __tablename__ = "mc_ai_models"
     __table_args__ = (
@@ -40,68 +33,88 @@ class McAiModel(Base):
     model_name: Mapped[str] = mapped_column(
         String(128),
         nullable=False,
-        comment="显示名称",
+        comment="显示名称，如：豆包-Pro",
     )
 
     model_identifier: Mapped[str] = mapped_column(
         String(128),
         nullable=False,
-        comment="实际调用模型ID",
+        comment="实际调用的模型ID，如：ep-2026-xxx",
     )
 
     provider: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        comment="供应商",
+        comment="供应商：doubao, deepseek, openai",
     )
 
-    multiplier: Mapped[float] = mapped_column(
-        DECIMAL(10, 2),
-        nullable=False,
-        server_default="1.00",
-        comment="计费倍率",
+    multiplier: Mapped[Decimal] = mapped_column(
+        DECIMAL(10, 1),
+        nullable=True,
+        server_default="1.0",
+        comment="计费倍率，默认1.0",
     )
 
-    # 新增字段：最大生成 Token 数
     max_tokens: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
         server_default="4096",
-        comment="单次请求最大生成长度"
+        comment="该模型允许的最大生成Token数",
     )
 
-    # 新增字段：最大上下文窗口
+    temperature: Mapped[Decimal] = mapped_column(
+        DECIMAL(10, 1),
+        nullable=False,
+        server_default="0.7",
+        comment="模型温度",
+    )
+
     context_window: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
         server_default="32768",
-        comment="模型支持的最大上下文总长"
+        comment="该模型支持的最大上下文窗口(输入+输出)",
     )
 
-    weight: Mapped[float] = mapped_column(
+    base_url: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        server_default="",
+        comment="模型服务Base URL",
+    )
+
+    api_key: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        server_default="",
+        comment="模型服务API Key",
+    )
+
+    weight: Mapped[int] = mapped_column(
         Integer,
-        comment="权重从大到小"
+        nullable=False,
+        server_default="0",
+        comment="权重",
     )
-
 
     status: Mapped[int] = mapped_column(
         SmallInteger,
-        nullable=False,
+        nullable=True,
         server_default="1",
         comment="状态：1-启用, 0-下架",
     )
 
-    createTime: Mapped[DateTime] = mapped_column(
+    createTime: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
         server_default=func.current_timestamp(),
         comment="创建时间",
     )
 
-    updateTime: Mapped[DateTime] = mapped_column(
+    updateTime: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
         server_default=func.current_timestamp(),
         onupdate=func.current_timestamp(),
-        comment="更新时间",
+        comment="自动更新时间",
     )
