@@ -16,7 +16,13 @@ class AiModelResp(BaseModel):
     id: int
     level: int
     model_name: str
+    provider: str
     multiplier: Decimal
+    max_tokens: int
+    temperature: Decimal
+    context_window: int
+    weight: int
+    status: int
 
     model_config = ConfigDict(from_attributes=True)
 

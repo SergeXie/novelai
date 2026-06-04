@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ai.adapters.enums import AIProvider, AIAction, AIGenerateStatus
 from ai.ai_nexus import get_ai_nexus
 from common.config.config import settings
+from common.exception.lzsd_exception import ServiceWarning
 from common.utils.generator import LZSDGenerator
 from common.config.get_db import get_db_context
 from core.entity.do.generate_log import AiNovelGenerateLog
@@ -29,6 +30,30 @@ class AIService:
 
     async def fill_context_with_adapter(self, data: list):
         self.fill_context = data or []
+
+    @staticmethod
+    def _snapshot_model_config(model) -> dict:
+        return {
+            "id": model.id,
+            "level": model.level,
+            "model_name": model.model_name,
+            "model_identifier": model.model_identifier,
+            "provider": model.provider,
+            "multiplier": float(model.multiplier or 1),
+            "max_tokens": int(model.max_tokens or 4096),
+            "temperature": float(model.temperature or 0.7),
+            "context_window": int(model.context_window or 32768),
+            "base_url": model.base_url,
+            "api_key": model.api_key,
+            "weight": model.weight,
+            "status": model.status,
+        }
+
+    async def get_model_config_by_level(self, level: int, *, only_enabled: bool = True) -> dict:
+        model = await AiModelDAO(self.db).get_model_by_level(level)
+        if not model or (only_enabled and model.status != 1):
+            raise ServiceWarning(f"模型不可用 level={level}")
+        return self._snapshot_model_config(model)
 
     async def build_chat_context_messages(
             self,
@@ -230,9 +255,12 @@ class AIService:
         if correlation is None:
             correlation = []
 
+        model_config = await self.get_model_config_by_level(level)
+
         final_system_prompt = system_prompt or settings.ai_system_prompt
-        final_temperature = temperature or settings.ai_temperature
-        final_max_tokens = max_tokens or settings.ai_max_tokens
+        final_temperature = temperature if temperature is not None else model_config["temperature"]
+        model_max_tokens = model_config["max_tokens"]
+        final_max_tokens = min(max_tokens or model_max_tokens, model_max_tokens)
 
         usage_service = UsageService(self.db)
 
@@ -242,33 +270,33 @@ class AIService:
         # 检查本地模型时间限制
         # ================================
         output_content = ""
-        if level == 0:  # 本地部署模型
-            now = datetime.datetime.now()
-            weekday = now.weekday()  # 0=周一, 6=周日
-            # 工作日限制：周一到周五 09:00~19:00
-            if weekday < 7:
-                start_time = now.replace(hour=9, minute=0, second=0, microsecond=0)
-                end_time = now.replace(hour=19, minute=0, second=0, microsecond=0)
-                if start_time <= now <= end_time:
-                    output_content = "当前访问人数过多，疯狂加服务器中，请切换模型或者稍后再试。"
-                    logger.info(output_content)
-                    # 限制时间直接返回 None
-                    # 记录日志时也保存 output_content
-                    log = await usage_service.record(
-                        user_id=user_id,
-                        request_id=request_id,
-                        level=level,
-                        node_ids=correlation,
-                        bid=bid,
-                        status=AIGenerateStatus.SUCCESS,
-                        origin_prompt=origin_prompt,
-                        system_prompt=final_system_prompt,
-                        user_prompt=input_user_prompt,
-                        temperature=final_temperature,
-                        output_content=output_content,
-                        action_type=AIAction(action_type),
-                    )
-                    return request_id, None
+        # if level == 0:  # 本地部署模型
+        #     now = datetime.datetime.now()
+        #     weekday = now.weekday()  # 0=周一, 6=周日
+        #     # 工作日限制：周一到周五 09:00~19:00
+        #     if weekday < 7:
+        #         start_time = now.replace(hour=9, minute=0, second=0, microsecond=0)
+        #         end_time = now.replace(hour=19, minute=0, second=0, microsecond=0)
+        #         if start_time <= now <= end_time:
+        #             output_content = "当前访问人数过多，疯狂加服务器中，请切换模型或者稍后再试。"
+        #             logger.info(output_content)
+        #             # 限制时间直接返回 None
+        #             # 记录日志时也保存 output_content
+        #             log = await usage_service.record(
+        #                 user_id=user_id,
+        #                 request_id=request_id,
+        #                 level=level,
+        #                 node_ids=correlation,
+        #                 bid=bid,
+        #                 status=AIGenerateStatus.SUCCESS,
+        #                 origin_prompt=origin_prompt,
+        #                 system_prompt=final_system_prompt,
+        #                 user_prompt=input_user_prompt,
+        #                 temperature=final_temperature,
+        #                 output_content=output_content,
+        #                 action_type=AIAction(action_type),
+        #             )
+        #             return request_id, None
 
         # ================================
         # 正常记录日志
@@ -298,6 +326,7 @@ class AIService:
             "temperature": final_temperature,
             "max_tokens": final_max_tokens,
             "enable_web_search": enable_web_search,
+            "model_config": model_config,
             "log": log,
             "context": self.fill_context,
         }
@@ -334,12 +363,14 @@ async def async_generate_task(
         context: list,
         log: AiNovelGenerateLog,
         enable_web_search: bool = False,
+        model_config: dict | None = None,
 ) -> AICompletionResponse | None:
     """后台异步执行 AI 调用并更新结果"""
     nexus = get_ai_nexus()
     ai_provider = AIProvider.parse(value=ai_level)
     # 构造待尝试的 provider 序列
     providers_to_try = [ai_provider]
+    provider_model_configs = {ai_provider: model_config}
     ai_rsp = None
     error_msg = ""
 
@@ -349,6 +380,7 @@ async def async_generate_task(
 
     for i, current_provider in enumerate(providers_to_try):
         try:
+            current_model_config = provider_model_configs.get(current_provider)
             logger.info(
                 f"[{current_provider.name}] req:{request_id} 开始生成 提示词:{textwrap.shorten(input_user_prompt, width=32, placeholder="...")} temperature:{temperature} max_tokens:{max_tokens}")
             normalized_context = await nexus.fill_context_with_adapter(
@@ -364,6 +396,7 @@ async def async_generate_task(
                 max_tokens=max_tokens,
                 context_messages=normalized_context,
                 enable_web_search=enable_web_search,
+                model_config=current_model_config,
             )
             logger.info(
                 f"【{current_provider.name}】req:{request_id} 生成结束 返回:{textwrap.shorten(ai_rsp.content, width=20, placeholder="...")}")
@@ -373,6 +406,9 @@ async def async_generate_task(
             # 如果还有重试机会，且符合降级条件
             if i == 0 and ai_level > 0 and _should_retry_with_level2(e):
                 fallback = AIProvider.DOUBAO
+                if fallback not in provider_model_configs:
+                    async with get_db_context() as db:
+                        provider_model_configs[fallback] = await AIService(db).get_model_config_by_level(fallback.value)
                 providers_to_try.append(fallback)
                 logger.warning(f"Req {request_id}: 命中特定错误，准备降级至 {fallback}")
                 continue

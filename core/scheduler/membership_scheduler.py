@@ -7,6 +7,7 @@ from core.enums.constants import BizType, ChargeType, AssetType
 from dao.membership_token_grant_plan_dao import MembershipTokenGrantPlanDAO
 from dao.user_account_dao import UserAccountDAO
 from service.account_service import AccountService
+from service.order_service import OrderService
 
 scheduler = AsyncIOScheduler()
 
@@ -177,6 +178,23 @@ async def membership_token_grant_job():
         await db.commit()
 
     logger.info("[定时任务] 会员Token分期发放完成")
+
+@scheduler.scheduled_job("cron", hour=1, minute=15)
+async def order_expire_job():
+    """
+    Cancel unpaid orders after the 30-minute payment window.
+    """
+    logger.info("[定时任务] 开始执行订单过期检查")
+
+    async for db in get_db():
+        count = await OrderService.cancel_expired_pending_orders(db)
+        await db.commit()
+
+        if count:
+            logger.info(f"[定时任务] 订单过期检查完成，关闭订单数={count}")
+
+    logger.info("[定时任务] 订单过期检查结束")
+
 
 def start_scheduler():
     scheduler.start()

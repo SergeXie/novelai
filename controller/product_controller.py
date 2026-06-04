@@ -1,15 +1,16 @@
-from fastapi import APIRouter, Depends
+from urllib.parse import parse_qsl
+import json
+
+from fastapi import APIRouter, Depends, Request
 from loguru import logger
-from openai.types.responses import Response
-from sqlalchemy.ext.asyncio import AsyncSession, result
-from fastapi import Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.config.config import settings
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user
 from core.entity.vo.base_vo import PageResp
-from core.entity.vo.order_schema_vo import CreateOrderRequest, CreateOrderResponse
+from core.entity.vo.order_schema_vo import CreateOrderRequest
 from core.entity.vo.user_vo import BonusGrantListResponse
 from service.account_service import AccountService
 from service.order_service import OrderService
@@ -18,17 +19,13 @@ from service.product_service import ProductService
 
 productRouter = APIRouter(prefix="/order")
 
+
 @productRouter.get("/amounts", name="我的资产")
 async def get_amounts(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    """
-    我的资产信息
-    """
-
     data = await AccountService.get_account_info(db, user.pkId)
-
     return ResponseUtil.success(data=data)
 
 
@@ -40,6 +37,7 @@ async def get_bonus_list(
     data = await AccountService.get_current_bonus_list(db, user.pkId)
     return ResponseUtil.success(data=data)
 
+
 @productRouter.get("/history", name="历史订购")
 async def get_orders_history(
     page: int = 1,
@@ -49,44 +47,28 @@ async def get_orders_history(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    """
-    历史订单列表（支持时间筛选）
-    """
-
     data, total = await OrderService.get_order_list(
         db,
         user.pkId,
         page,
         pageSize,
         startTime,
-        endTime
+        endTime,
     )
 
     rsp_data = PageResp(
-            page=page,
-            pageSize=pageSize,
-            total=total,
-            list=data
-        )
-
+        page=page,
+        pageSize=pageSize,
+        total=total,
+        list=data,
+    )
     return ResponseUtil.success(data=rsp_data)
 
-@productRouter.get("/plans", response_model=Response, name="产品列表")
+
+@productRouter.get("/plans", name="产品列表")
 async def get_product_list(
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    获取产品列表接口
-
-    功能：
-    - 返回所有在售会员包
-    - 返回所有在售Token包
-
-    使用场景：
-    - 前端购买页展示
-    - 会员中心
-    """
-
     result = await ProductService.get_product_list(db)
     return ResponseUtil.success(data=result)
 
@@ -97,14 +79,6 @@ async def create_order_(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    """
-    创建订单接口
-
-    功能：
-    - 防重复订单
-    - 30分钟过期控制
-    - 支持会员/Token包
-    """
     if settings.is_dev:
         result = req
         result.return_url = req.return_url + "&code=200"
@@ -121,16 +95,11 @@ async def create_order_(
     return ResponseUtil.success(data=result)
 
 
-
-@productRouter.get("/status", name="微信订单查询")
+@productRouter.get("/status", name="订单查询")
 async def get_order_status(
     order_no: str,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    查询订单状态
-    """
-
     data = await OrderService.query_order_status(db, order_no)
 
     if not data:
@@ -139,51 +108,56 @@ async def get_order_status(
     return ResponseUtil.success(data=data)
 
 
+def _parse_alipay_callback_body(content_type: str, raw_payload) -> dict:
+    if isinstance(raw_payload, dict):
+        return raw_payload
+
+    if isinstance(raw_payload, bytes):
+        raw_payload = raw_payload.decode("utf-8")
+
+    if isinstance(raw_payload, str):
+        raw_payload = raw_payload.strip()
+        if raw_payload.startswith('"') and raw_payload.endswith('"'):
+            try:
+                raw_payload = json.loads(raw_payload)
+            except json.JSONDecodeError:
+                raw_payload = raw_payload[1:-1]
+        return dict(parse_qsl(raw_payload, keep_blank_values=True))
+
+    logger.warning(f"[支付宝回调] 不支持的参数类型: {type(raw_payload)} content_type={content_type}")
+    return {}
+
+
 @productRouter.post("/callback", name="支付宝回调")
 async def alipay_callback(request: Request, db: AsyncSession = Depends(get_db)):
-    """
-    支付宝异步回调
-    """
+    async with db.begin():
+        content_type = request.headers.get("content-type", "")
+        if "application/json" in content_type:
+            payload = await request.json()
+        else:
+            payload = await request.body()
 
-    async with db.begin():  #  事务开始
-
-        req_json = await request.json()
-
-        raw_body = req_json
-
-        logger.info(f"支付宝回调参数: {raw_body}")
+        callback_data = _parse_alipay_callback_body(content_type, payload)
+        logger.info(f"支付宝回调参数: {callback_data}")
 
         service = PaymentService()
-        result = await service.handle_alipay_callback(db, raw_body)
+        result = await service.handle_alipay_callback(db, callback_data)
 
-        if result:
-            return "success"
-        else:
-            return "fail"
+        return "success" if result else "fail"
 
 
 @productRouter.post("/wechatCallback", name="微信支付回调")
 async def wechat_callback(request: Request, db: AsyncSession = Depends(get_db)):
-    """
-    微信支付回调
-    """
-
-    async with db.begin():  #  事务开始
-
+    async with db.begin():
         body = await request.json()
-
         logger.info(f"[微信回调] 原始数据: {body}")
 
         service = PaymentService()
-
         result = await service.handle_wechat_callback(db, body)
 
         if result:
-            # 微信要求返回这个
             return {"code": "SUCCESS", "message": "成功"}
-        else:
-            return {"code": "FAIL", "message": "失败"}
-
+        return {"code": "FAIL", "message": "失败"}
 
 
 @productRouter.get("/qr_callback")
@@ -191,6 +165,5 @@ def qr_callback(code: str = "", state: str = ""):
     return {
         "msg": "扫码成功，已回调",
         "code": code,
-        "state": state
+        "state": state,
     }
-
