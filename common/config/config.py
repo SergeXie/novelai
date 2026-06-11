@@ -86,12 +86,19 @@ class Settings(BaseSettings):
     PUBLIC_KEY: str = Field(alias="PUBLIC_KEY", default="")
     PUBLIC_KEY_ID: str = Field(alias="PUBLIC_KEY_ID", default="")
 
+    # WeChat open platform login config.
+    WECHAT_APP_ID: str = Field(alias="WECHAT_APP_ID", default="")
+    WECHAT_APP_SECRET: str = Field(alias="WECHAT_APP_SECRET", default="")
+    APP_ID: str = Field(alias="APP_ID", default="")
+    REDIRECT_URI: str = Field(alias="REDIRECT_URI", default="")
+
     CLOUD_ADDRESS: str = Field(alias="CLOUD_ADDRESS", default="")
     IMAGE_DOWNLOAD_URL: str = Field(alias="IMAGE_DOWNLOAD_URL", default="http://8.138.95.62:8000/downloadFile")
 
     UPLOAD_USERS_DIR: str = Field(alias="UPLOAD_USERS_DIR", default="")
     WEB_SEARCH_API_KEY: str = Field(alias="WEB_SEARCH_API_KEY", default="")
     WEB_SEARCH_URL: str = Field(alias="WEB_SEARCH_URL", default="https://open.feedcoopapi.com/search_api/web_search")
+    INTERNAL_ORDER_SECRET: str = Field(alias="INTERNAL_ORDER_SECRET", default="")
 
     @field_validator("ai_system_prompt", mode="after")
     @classmethod
