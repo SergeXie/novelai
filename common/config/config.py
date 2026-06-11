@@ -90,7 +90,7 @@ class Settings(BaseSettings):
     WECHAT_APP_ID: str = Field(alias="WECHAT_APP_ID", default="")
     WECHAT_APP_SECRET: str = Field(alias="WECHAT_APP_SECRET", default="")
     APP_ID: str = Field(alias="APP_ID", default="")
-    REDIRECT_URI: str = Field(alias="REDIRECT_URI", default="")
+    REDIRECT_URI: str = Field(alias="REDIRECT_URI", default="http://wenyuanai.com/novelAi/#/wxCallback")
 
     CLOUD_ADDRESS: str = Field(alias="CLOUD_ADDRESS", default="")
     IMAGE_DOWNLOAD_URL: str = Field(alias="IMAGE_DOWNLOAD_URL", default="http://8.138.95.62:8000/downloadFile")
