@@ -95,9 +95,9 @@ class AIGenerateLogDetailResp(AIGenerateLogResp):
     def _format_detail_output(action_type: str, output_content: str | None) -> str:
         action = (action_type or "").lower()
         if action in {"workflow", "workflow_step"}:
-            return "格式化输出内容"
+            return "格式化生成内容"
         if action == "execute":
-            return "模版化输出内容"
+            return "模版化生成内容"
         return output_content or ""
 
     @classmethod

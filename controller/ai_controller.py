@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, BackgroundTasks, Query
+﻿from fastapi import APIRouter, Depends, BackgroundTasks, Query
 
 from ai.adapters.enums import AIAction
 from common.config.get_db import get_db
@@ -128,6 +128,7 @@ async def get_log_list(
         startTime: str | None = Query(None, description="起始时间"),
         endTime: str | None = Query(None, description="结束时间"),
         originPrompt: str | None = Query(None, description="提示词关键字"),
+        actionType: str | None = Query(None, description="行为类型"),
         user=Depends(get_current_user),
         db=Depends(get_db)
 ):
@@ -139,8 +140,10 @@ async def get_log_list(
         start_time=startTime,
         end_time=endTime,
         origin_prompt=originPrompt,
+        action_type=actionType,
     )
     return ResponseUtil.success(data=result)
+
 
 @aiController.get("/ai/log/detail")
 async def get_log_detail(requestId: str, db=Depends(get_db), _=Depends(get_current_user)):

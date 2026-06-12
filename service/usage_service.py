@@ -303,6 +303,7 @@ class UsageService:
             start_time: str | None = None,
             end_time: str | None = None,
             origin_prompt: str | None = None,
+            action_type: str | None = None,
     ):
         start_time = self.parse_query_time(start_time)
         end_time = self.parse_query_time(end_time, is_end=True)
@@ -314,6 +315,7 @@ class UsageService:
             start_time=start_time,
             end_time=end_time,
             origin_prompt=origin_prompt,
+            action_type=action_type,
         )
 
         list_data = [
