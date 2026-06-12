@@ -251,7 +251,7 @@ class UsageService:
             status: AIGenerateStatus = AIGenerateStatus.SUCCESS,
             error_msg: str = "",
     ) -> bool:
-        return await self.update_request_result_by_request_id(
+        success = await self.update_request_result_by_request_id(
             request_id=request_id,
             status=status,
             error_msg=error_msg,
@@ -259,6 +259,13 @@ class UsageService:
             output_length=50000,  # 文生图通常按单次固定 token 计算
             total_tokens=50000,  # 文生图通常按单次固定 token计算
         )
+        if success and status == AIGenerateStatus.SUCCESS:
+            await self.record_consumption(
+                request_id=request_id,
+                total_tokens=50000,
+                multiplier=settings.MULTIPLIER
+            )
+        return success
 
     async def get_book_chat_history(self, bid: str, page: int, size: int, with_content:bool = False) -> PageResp:
         """分页获取某本书下的 AI 对话历史。"""
