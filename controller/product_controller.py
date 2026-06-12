@@ -1,16 +1,17 @@
-from urllib.parse import parse_qsl
+﻿from urllib.parse import parse_qsl
 import json
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Header, Request
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.config.config import settings
 from common.config.get_db import get_db
+from common.exception.lzsd_exception import ServiceWarning
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user
 from core.entity.vo.base_vo import PageResp
-from core.entity.vo.order_schema_vo import CreateOrderRequest
+from core.entity.vo.order_schema_vo import CreateInternalOrderRequest, CreateOrderRequest
 from core.entity.vo.user_vo import BonusGrantListResponse
 from service.account_service import AccountService
 from service.order_service import OrderService
@@ -91,6 +92,34 @@ async def create_order_(
             pay_method=req.pay_method,
             return_url=req.return_url,
         )
+
+    return ResponseUtil.success(data=result)
+
+
+
+@productRouter.post("/internal/pay", name="内部下单")
+async def create_internal_order(
+    req: CreateInternalOrderRequest,
+    x_internal_token: str | None = Header(None, alias="X-Internal-Token"),
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    if settings.INTERNAL_ORDER_SECRET:
+        if x_internal_token != settings.INTERNAL_ORDER_SECRET:
+            raise ServiceWarning("内部下单密钥错误")
+    elif settings.is_prod:
+        raise ServiceWarning("生产环境未配置 INTERNAL_ORDER_SECRET，禁止内部下单")
+
+    target_user_id = req.user_id or user.pkId
+    result = await OrderService.create_internal_order(
+        db=db,
+        user_id=target_user_id,
+        order_type=req.order_type,
+        target_code=req.target_code,
+        operator_user_id=user.pkId,
+        pay_amount=req.pay_amount,
+        remark=req.remark,
+    )
 
     return ResponseUtil.success(data=result)
 

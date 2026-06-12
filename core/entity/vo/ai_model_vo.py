@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -91,6 +91,15 @@ class AIGenerateLogDetailResp(AIGenerateLogResp):
     outputContent: str
     originPrompt: str
 
+    @staticmethod
+    def _format_detail_output(action_type: str, output_content: str | None) -> str:
+        action = (action_type or "").lower()
+        if action in {"workflow", "workflow_step"}:
+            return "格式化生成内容"
+        if action == "execute":
+            return "模版化生成内容"
+        return output_content or ""
+
     @classmethod
     async def from_orm_model(cls, log: "AiNovelGenerateLog", model_dao: "AiModelDAO") -> "AIGenerateLogDetailResp":
         # 调用公共逻辑获取字典，而不是获取实例
@@ -98,7 +107,7 @@ class AIGenerateLogDetailResp(AIGenerateLogResp):
 
         # 补全详情特有字段
         data.update({
-            "outputContent": log.outputContent or "",
+            "outputContent": cls._format_detail_output(log.actionType, log.outputContent),
             "originPrompt": log.originPrompt or ""
         })
 

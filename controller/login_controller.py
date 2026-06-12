@@ -1,4 +1,4 @@
-import json
+﻿import json
 import uuid
 from datetime import timedelta, datetime
 from typing import Optional
@@ -23,17 +23,6 @@ from service.user_service import UserService
 
 loginController = APIRouter()
 
-# =========================
-# 微信开放平台配置
-# =========================
-WECHAT_APP_ID = "wxd81a903a6cff7273"
-WECHAT_APP_SECRET = "576e309f6d1e2880a0064ac864d92cf1"
-
-# 必须是开放平台 网站应用 AppID
-APP_ID = "wxd81a903a6cff7273"
-
-# ⚠️ 必须 HTTPS + 已配置回调域名
-REDIRECT_URI = "http://wenyuanai.com/novelAi/#/wxCallback"
 
 
 class UserRegisterRequest(BaseModel):
@@ -210,11 +199,11 @@ async def wechat_qr_login(db: AsyncSession = Depends(get_db)):
     state = uuid.uuid4().hex
 
     # ✅ 关键修复：完整编码
-    redirect_uri = quote(REDIRECT_URI, safe="")
+    redirect_uri = quote(settings.REDIRECT_URI, safe="")
 
     url = (
         "https://open.weixin.qq.com/connect/qrconnect?"
-        f"appid={APP_ID}"
+        f"appid={settings.APP_ID or settings.WECHAT_APP_ID}"
         f"&redirect_uri={redirect_uri}"
         "&response_type=code"
         "&scope=snsapi_login"
@@ -255,8 +244,8 @@ async def qr_callback(
         resp = await client.get(
             "https://api.weixin.qq.com/sns/oauth2/access_token",
             params={
-                "appid": WECHAT_APP_ID,
-                "secret": WECHAT_APP_SECRET,
+                "appid": settings.WECHAT_APP_ID,
+                "secret": settings.WECHAT_APP_SECRET,
                 "code": code,
                 "grant_type": "authorization_code"
             }
@@ -490,8 +479,8 @@ async def bind_qr_login(
 
     url = (
         "https://open.weixin.qq.com/connect/qrconnect?"
-        f"appid={WECHAT_APP_ID}"
-        f"&redirect_uri={quote(redirect_url if redirect_url else REDIRECT_URI, safe='')}"
+        f"appid={settings.WECHAT_APP_ID}"
+        f"&redirect_uri={quote(redirect_url if redirect_url else settings.REDIRECT_URI, safe='')}"
         "&response_type=code"
         "&scope=snsapi_login"
         f"&state={state}"

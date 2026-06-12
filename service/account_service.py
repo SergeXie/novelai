@@ -363,7 +363,7 @@ class AccountService:
         ]
 
         return BonusGrantListResponse(
-            availableAmount=account.bonus_balance if account else 0,
+            availableAmount=account.bonus_total_amount if account else 0,
             weeklyAmount=items[0].amount if items else 0,
             list=items,
         )

@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 from typing import List, Tuple, Optional
 
 from fastapi import params
@@ -317,6 +317,7 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             start_time: Optional[datetime] = None,
             end_time: Optional[datetime] = None,
             origin_prompt: Optional[str] = None,
+            action_type: Optional[str] = None,
     ) -> Tuple[list[AiNovelGenerateLog], int]:
         """
             获取排除大字段后的模型对象列表，并返回总数
@@ -338,6 +339,10 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
                 origin_prompt = origin_prompt.strip()
                 if origin_prompt:
                     filters.append(AiNovelGenerateLog.originPrompt.contains(origin_prompt, autoescape=True))
+            if action_type:
+                action_type = action_type.strip()
+                if action_type:
+                    filters.append(AiNovelGenerateLog.actionType == action_type)
 
             # 2. 查询对象列表（使用 defer 排除所有 LongText 字段）
             # 这样加载到内存中的对象非常轻量
