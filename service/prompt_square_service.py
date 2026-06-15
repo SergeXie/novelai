@@ -1,4 +1,4 @@
-from fastapi import BackgroundTasks
+﻿from fastapi import BackgroundTasks
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,6 +44,7 @@ class PromptSquareService:
             promptType: str = "public",  # 新增
             title: str | None = None,
             status:UserCustomPromptStatus | None = None,
+            category_filter_field: str = "tags",
     ):
         """
         获取公开提示词列表
@@ -57,7 +58,8 @@ class PromptSquareService:
             user_id,
             promptType,
             title,
-            status
+            status,
+            category_filter_field
         )
 
         items = []

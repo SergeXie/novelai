@@ -32,6 +32,7 @@ class PromptSquareDAO:
             promptType:str = "public",
             title: str | None = None,
             status:UserCustomPromptStatus | None = None,
+            category_filter_field: str = "tags",
     ):
 
         """
@@ -48,7 +49,10 @@ class PromptSquareDAO:
             condition = (PromptSquare.status == filter_status.code)
 
         if category:
-            condition = condition & (PromptSquare.tags == category)
+            if category_filter_field == "category":
+                condition = condition & (PromptSquare.category == category)
+            else:
+                condition = condition & (PromptSquare.tags == category)
 
         if title:
             condition = condition & (PromptSquare.title.ilike(f"%{title}%"))
