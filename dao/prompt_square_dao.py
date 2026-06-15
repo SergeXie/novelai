@@ -98,7 +98,7 @@ class PromptSquareDAO:
         """
         stmt = (
             select(PromptSquare.tags)
-            .where(PromptSquareDAO._public_condition()).where(PromptSquare.parent_category == "CONSUME")
+            .where(PromptSquareDAO._public_condition()).where(PromptSquare.parent_category == "CREATION")
             .where(PromptSquare.tags.isnot(None))
             .where(PromptSquare.tags != "")
             .group_by(PromptSquare.tags)
