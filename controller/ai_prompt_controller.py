@@ -1,4 +1,4 @@
-import json
+﻿import json
 from typing import Optional
 from loguru import logger
 from fastapi import APIRouter, Depends, Body, BackgroundTasks
@@ -81,6 +81,7 @@ async def render(
         level:int = Body(...),
         tool_key: str = Body(...),
         inputs: dict = Body(...),
+        correlation: Optional[list] = Body(None),
         db: AsyncSession = Depends(get_db),
         user=Depends(get_current_user)
 ):
@@ -96,15 +97,25 @@ async def render(
 
     try:
         # 整理提示词
-        final_prompt = await service.render_prompt_tool(
+        rendered_prompt = await service.render_prompt_tool(
             tool_key=tool_key,
             book=book,
             inputs=inputs)
+        context_prompt = ""
+        if bid and correlation:
+            context_prompt = await service.generate_prompt_by_nodes(
+                user_id=user.pkId,
+                bid=bid,
+                ids=correlation,
+            )
+        final_prompt = "\n".join(filter(None, [context_prompt, rendered_prompt]))
+
         ai_service = AIService(db)
         payload = {
             "tool_key": tool_key,
             **inputs
         }
+        log_correlation = correlation if correlation is not None else payload
 
         # 生成 requestId 并记录初始请求（不阻塞）
         request_id, _ = await ai_service.prepare_and_record_request(
@@ -114,7 +125,7 @@ async def render(
             level=level,
             temperature=0.7,
             action_type=AIAction.Render,
-            correlation=payload,
+            correlation=log_correlation,
             background_tasks=background_tasks,
             origin_prompt=""
         )
