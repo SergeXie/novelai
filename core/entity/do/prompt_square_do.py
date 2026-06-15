@@ -65,9 +65,9 @@ class PromptSquare(Base):
     )
 
     tags: Mapped[list] = mapped_column(
-        JSON,
+        String(32),
         nullable=True,
-        comment="标签数组，如：[小白可用, 玄幻]"
+        comment="标签"
     )
 
     content: Mapped[str] = mapped_column(

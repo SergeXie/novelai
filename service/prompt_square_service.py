@@ -86,7 +86,6 @@ class PromptSquareService:
         categories = await PromptSquareDAO.get_public_categories(db)
 
         return categories
-        # return tag_list
 
     @staticmethod
     async def create_user_prompt(

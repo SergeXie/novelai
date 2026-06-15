@@ -97,9 +97,9 @@ class PromptSquareDAO:
         查询公开提示词的分类列表，并按分类去重
         """
         stmt = (
-            select(PromptSquare.category)
+            select(PromptSquare.tags)
             .where(PromptSquareDAO._public_condition()).where(PromptSquare.parent_category == "CREATION")
-            .group_by(PromptSquare.category)
+            .group_by(PromptSquare.tags)
             .order_by(func.max(PromptSquare.created_at).desc())
         )
 
