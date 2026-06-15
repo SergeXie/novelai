@@ -83,9 +83,10 @@ class PromptSquareService:
         """
         获取公开提示词分类列表
         """
-        # categories = await PromptSquareDAO.get_public_categories(db)
+        categories = await PromptSquareDAO.get_public_categories(db)
 
-        return tag_list
+        return categories
+        # return tag_list
 
     @staticmethod
     async def create_user_prompt(

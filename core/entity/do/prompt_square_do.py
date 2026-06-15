@@ -20,6 +20,13 @@ class PromptSquare(Base):
         comment="主键ID"
     )
 
+    parent_category: Mapped[str] = mapped_column(
+        String(64),
+        unique=True,
+        nullable=False,
+        comment="顶级分类：CREATION(创作类)、SCENARIO(专项类)、UTILITY(快捷工具)"
+    )
+
     template_key: Mapped[str] = mapped_column(
         String(64),
         unique=True,

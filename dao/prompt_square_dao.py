@@ -98,7 +98,7 @@ class PromptSquareDAO:
         """
         stmt = (
             select(PromptSquare.category)
-            .where(PromptSquareDAO._public_condition())
+            .where(PromptSquareDAO._public_condition()).where(PromptSquare.parent_category == "CREATION")
             .group_by(PromptSquare.category)
             .order_by(func.max(PromptSquare.created_at).desc())
         )
