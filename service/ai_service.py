@@ -127,7 +127,7 @@ class AIService:
             user_prompt=cleaned_prompt,
             temperature=0,
             output_content="",
-            action_type=AIAction.Render,
+            action_type=AIAction.Image,
             promptTokens=len(cleaned_prompt),
             completionTokens=50000,
         )

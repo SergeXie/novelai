@@ -33,6 +33,7 @@ class AIAction(str, Enum):
     Unknown = "unknown"
     Generate = "generate"
     Render = "render"
+    Image = "image"
     WorkFlow = "workflow"
     Execute = "execute"
     Chat = "chat"
