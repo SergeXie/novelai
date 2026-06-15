@@ -1,4 +1,4 @@
-from sqlalchemy import select, func, update
+﻿from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import or_
@@ -19,7 +19,7 @@ class PromptSquareDAO:
                 (PromptSquare.status == 1)
         )
         if category:
-            condition = condition & (PromptSquare.category == category)
+            condition = condition & (PromptSquare.tags == category)
         return condition
 
     @staticmethod
@@ -48,7 +48,7 @@ class PromptSquareDAO:
             condition = (PromptSquare.status == filter_status.code)
 
         if category:
-            condition = condition & (PromptSquare.category == category)
+            condition = condition & (PromptSquare.tags == category)
 
         if title:
             condition = condition & (PromptSquare.title.ilike(f"%{title}%"))
@@ -98,7 +98,9 @@ class PromptSquareDAO:
         """
         stmt = (
             select(PromptSquare.tags)
-            .where(PromptSquareDAO._public_condition()).where(PromptSquare.parent_category == "CREATION")
+            .where(PromptSquareDAO._public_condition()).where(PromptSquare.parent_category == "CONSUME")
+            .where(PromptSquare.tags.isnot(None))
+            .where(PromptSquare.tags != "")
             .group_by(PromptSquare.tags)
             .order_by(func.max(PromptSquare.created_at).desc())
         )
@@ -290,7 +292,7 @@ class PromptSquareDAO:
             conditions.append(PromptSquare.title.ilike(f"%{title}%"))
 
         if category:
-            conditions.append(PromptSquare.category == category)
+            conditions.append(PromptSquare.tags == category)
 
 
         FavorAlias = aliased(UserTemplateFavor)

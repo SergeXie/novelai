@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+﻿from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, Text, Integer, BigInteger, JSON, DateTime, UniqueConstraint, func
 from datetime import datetime
 
@@ -64,7 +64,7 @@ class PromptSquare(Base):
         comment="分类：大纲/正文/润色/设定"
     )
 
-    tags: Mapped[list] = mapped_column(
+    tags: Mapped[str | None] = mapped_column(
         String(32),
         nullable=True,
         comment="标签"
