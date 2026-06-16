@@ -1,8 +1,9 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Index, String, UniqueConstraint, func
+from sqlalchemy import BigInteger, DateTime, Index, String, UniqueConstraint, func, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 
+from core.enums.prompt_sys_var import PromptEngineType
 from database.db_mysql import Base
 
 
@@ -44,6 +45,22 @@ class McMenu(Base):
         server_default="1",
         comment="上下架状态(1:显示/上架, 0:隐藏/下架)",
     )
+    # 渲染引擎
+    engine_type: Mapped[str] = mapped_column(
+        String(20),
+        server_default=PromptEngineType.JINJA2.value,
+        default=PromptEngineType.JINJA2.value,
+        comment="渲染引擎"
+    )
+
+    isRelated: Mapped[int] = mapped_column(
+        Integer,
+        server_default="1",
+        default=1,
+        comment="1:关联, 0:不关联"
+    )
+
+
     create_time: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,

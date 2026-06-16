@@ -1,6 +1,8 @@
 from typing import List, Optional
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.entity.do.mc_menu_do import McMenu
 from core.entity.do.prompt_register import PromptRegistry
 
 
@@ -64,9 +66,9 @@ class PromptRegistryDAO:
         """
         获取正在启用的指定工具配置（业务最常用）
         """
-        stmt = select(PromptRegistry).where(
-            PromptRegistry.tool_key == tool_key,
-            PromptRegistry.status == 1
+        stmt = select(McMenu).where(
+            McMenu.key == tool_key,
+            McMenu.status == 1
         )
         result = await self.db.execute(stmt)
         return result.scalars().first()
