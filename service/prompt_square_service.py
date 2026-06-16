@@ -12,7 +12,7 @@ from core.entity.do.users_do import User
 from core.entity.vo.prompt_square_vo import (
     PromptItem,
     PromptSquareUpdateReq, PromptItemDetail, PromptDetailResp, PromptListItemResp,
-    PromptToolMenuItem,
+    PromptCreationToolItem, PromptToolMenuItem,
 )
 from core.enums.constants import UserCustomPromptStatus
 from core.enums.prompt_sys_var import PromptEngineType
@@ -94,6 +94,11 @@ class PromptSquareService:
     async def get_tool_menu_list(db: AsyncSession) -> list[PromptToolMenuItem]:
         rows = await PromptSquareDAO.get_tool_menu_list(db)
         return [PromptToolMenuItem(**dict(row)) for row in rows]
+
+    @staticmethod
+    async def get_creation_tool_list(db: AsyncSession) -> list[PromptCreationToolItem]:
+        rows = await PromptSquareDAO.get_creation_tool_list(db)
+        return [PromptCreationToolItem(**dict(row)) for row in rows]
 
     @staticmethod
     async def create_user_prompt(

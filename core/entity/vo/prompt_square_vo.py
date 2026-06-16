@@ -125,6 +125,20 @@ class PromptToolMenuItem(BaseModel):
     category: str
 
 
+class PromptCreationToolItem(BaseModel):
+    id: int
+    template_key: str
+    title: str
+    description: str
+    cover_img: Optional[str] = ""
+    parent_category: str
+    category: str
+    tags: Optional[str] = None
+    freeze_tokens: int = 0
+    engine_type: str = "jinja2"
+    input_schema: Dict
+
+
 class PromptSquareCreateReq(BaseModel):
     title: str
     category: str

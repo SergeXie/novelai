@@ -81,6 +81,12 @@ async def get_public_prompt_categories(
     return ResponseUtil.success(data=data)
 
 
+@aiTemplateController.get("/creationTools", name="协同创作工具")
+async def get_creation_tools(db: AsyncSession = Depends(get_db)):
+    data = await PromptSquareService.get_creation_tool_list(db)
+    return ResponseUtil.success(data=data)
+
+
 @aiTemplateController.post("/createPromptSquare", name="创建用户提示词广场")
 async def create_user_prompt_square(
         req: PromptSquareCreateReq,

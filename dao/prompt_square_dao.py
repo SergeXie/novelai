@@ -117,6 +117,32 @@ class PromptSquareDAO:
         return result.mappings().all()
 
     @staticmethod
+    async def get_creation_tool_list(db: AsyncSession):
+        stmt = (
+            select(
+                PromptSquare.id,
+                PromptSquare.template_key,
+                PromptSquare.title,
+                PromptSquare.description,
+                PromptSquare.cover_img,
+                PromptSquare.parent_category,
+                PromptSquare.category,
+                PromptSquare.tags,
+                PromptSquare.freeze_tokens,
+                PromptSquare.engine_type,
+                PromptSquare.input_schema,
+            )
+            .where(
+                PromptSquare.parent_category == "CREATION",
+                PromptSquare.status == UserCustomPromptStatus.AVAILABLE.code,
+            )
+            .order_by(PromptSquare.id.asc())
+        )
+
+        result = await db.execute(stmt)
+        return result.mappings().all()
+
+    @staticmethod
     async def get_public_categories(db: AsyncSession):
         """
         查询公开提示词的分类列表，并按分类去重
