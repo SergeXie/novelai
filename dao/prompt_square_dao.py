@@ -117,26 +117,19 @@ class PromptSquareDAO:
         return result.mappings().all()
 
     @staticmethod
-    async def get_creation_tool_list(db: AsyncSession):
+    async def get_prompt_list_by_category(db: AsyncSession, category: str):
         stmt = (
             select(
-                PromptSquare.id,
                 PromptSquare.template_key,
                 PromptSquare.title,
                 PromptSquare.description,
-                PromptSquare.cover_img,
-                PromptSquare.parent_category,
-                PromptSquare.category,
-                PromptSquare.tags,
-                PromptSquare.freeze_tokens,
-                PromptSquare.engine_type,
-                PromptSquare.input_schema,
             )
             .where(
                 PromptSquare.parent_category == "CREATION",
+                PromptSquare.category == category,
                 PromptSquare.status == UserCustomPromptStatus.AVAILABLE.code,
             )
-            .order_by(PromptSquare.id.asc())
+            .order_by(PromptSquare.created_at.desc())
         )
 
         result = await db.execute(stmt)

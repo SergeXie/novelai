@@ -7,6 +7,7 @@ from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user, check_user_quota_or_raise
 from core.entity.vo.base_vo import PageResp
 from core.entity.vo.prompt_square_vo import PromptSquareDetailReq, PromptSquareUpdateReq, PromptSquareCreateReq
+from service.menu_service import MenuService
 from service.prompt_square_service import PromptSquareService
 
 aiTemplateController = APIRouter(prefix="/ai/template")
@@ -77,13 +78,22 @@ async def get_public_prompt_categories(
     """
     获取提示词广场分类列表，按 category 去重
     """
-    data = await PromptSquareService.get_public_categories(db)
+    data = await MenuService.list_prompt_square_labels(db)
     return ResponseUtil.success(data=data)
 
 
-@aiTemplateController.get("/creationTools", name="协同创作工具")
-async def get_creation_tools(db: AsyncSession = Depends(get_db)):
-    data = await PromptSquareService.get_creation_tool_list(db)
+@aiTemplateController.get("/creationCategories", name="协同创作工具分类")
+async def get_creation_categories(db: AsyncSession = Depends(get_db)):
+    data = await MenuService.list_creation_categories(db)
+    return ResponseUtil.success(data=data)
+
+
+@aiTemplateController.get("/promtListByCategory", name="根据协同创作分类获取提示词模板")
+async def get_prompt_list_by_category(
+        category: str = Query(..., description="协同创作分类key"),
+        db: AsyncSession = Depends(get_db),
+):
+    data = await PromptSquareService.get_prompt_list_by_category(db, category)
     return ResponseUtil.success(data=data)
 
 
