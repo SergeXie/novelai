@@ -96,6 +96,27 @@ class PromptSquareDAO:
         return rows, total
 
     @staticmethod
+    async def get_tool_menu_list(db: AsyncSession):
+        stmt = (
+            select(
+                PromptSquare.template_key,
+                PromptSquare.title,
+                PromptSquare.description,
+                PromptSquare.cover_img,
+                PromptSquare.content,
+                PromptSquare.category,
+            )
+            .where(
+                PromptSquare.category == "工具",
+                PromptSquare.status == UserCustomPromptStatus.TOOLS.code,
+            )
+            .order_by(PromptSquare.created_at.desc())
+        )
+
+        result = await db.execute(stmt)
+        return result.mappings().all()
+
+    @staticmethod
     async def get_public_categories(db: AsyncSession):
         """
         查询公开提示词的分类列表，并按分类去重

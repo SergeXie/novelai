@@ -116,6 +116,15 @@ class PromptCategoryItem(BaseModel):
     category: str
 
 
+class PromptToolMenuItem(BaseModel):
+    template_key: str
+    title: str
+    description: str
+    cover_img: Optional[str] = ""
+    # content: str
+    category: str
+
+
 class PromptSquareCreateReq(BaseModel):
     title: str
     category: str
