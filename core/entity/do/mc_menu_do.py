@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Index, String, UniqueConstraint, func, Integer
+from sqlalchemy import BigInteger, DateTime, Index, String, UniqueConstraint, func, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.enums.prompt_sys_var import PromptEngineType
@@ -60,6 +60,8 @@ class McMenu(Base):
         comment="1:关联, 0:不关联"
     )
 
+    # 提示词模板，Text 类型足以存储长文本
+    template_content: Mapped[str] = mapped_column(Text, nullable=False, comment="提示词原型")
 
     create_time: Mapped[datetime] = mapped_column(
         DateTime,
