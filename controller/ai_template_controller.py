@@ -50,8 +50,7 @@ async def get_public_private_prompt_list(
         category: Optional[str] = Query(None),
         promptType: str = Query("public"),
         title: Optional[str] = Query(None),  # 新增
-        db: AsyncSession = Depends(get_db),
-        user=Depends(get_current_user)
+        db: AsyncSession = Depends(get_db)
 ):
     """
     获取提示词列表（支持筛选：公开 / 我的）
