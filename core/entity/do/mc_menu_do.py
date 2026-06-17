@@ -45,23 +45,6 @@ class McMenu(Base):
         server_default="1",
         comment="上下架状态(1:显示/上架, 0:隐藏/下架)",
     )
-    # 渲染引擎
-    engine_type: Mapped[str] = mapped_column(
-        String(20),
-        server_default=PromptEngineType.JINJA2.value,
-        default=PromptEngineType.JINJA2.value,
-        comment="渲染引擎"
-    )
-
-    isRelated: Mapped[int] = mapped_column(
-        Integer,
-        server_default="1",
-        default=1,
-        comment="1:关联, 0:不关联"
-    )
-
-    # 提示词模板，Text 类型足以存储长文本
-    template_content: Mapped[str] = mapped_column(Text, nullable=False, comment="提示词原型")
 
     create_time: Mapped[datetime] = mapped_column(
         DateTime,

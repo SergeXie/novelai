@@ -80,6 +80,7 @@ async def render(
         bid: Optional[str] = Body(None),
         level:int = Body(...),
         tool_key: str = Body(...),
+        templateKey: str = Body(...),
         inputs: dict = Body(...),
         correlation: Optional[list] = Body(None),
         db: AsyncSession = Depends(get_db),
@@ -98,7 +99,7 @@ async def render(
     try:
         # 整理提示词
         rendered_prompt = await service.render_prompt_tool(
-            tool_key=tool_key,
+            templateKey=templateKey,
             book=book,
             inputs=inputs)
         context_prompt = ""
@@ -112,7 +113,7 @@ async def render(
 
         ai_service = AIService(db)
         payload = {
-            "tool_key": tool_key,
+            "templateKey": templateKey,
             **inputs
         }
         log_correlation = correlation if correlation is not None else payload

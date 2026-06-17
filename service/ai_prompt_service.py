@@ -128,20 +128,21 @@ class PromptService:
 
         return "\n\n".join(prompt_segments)
 
-    async def render_prompt_tool(self, book:Optional[Book], tool_key: str, inputs: dict) -> str:
+    async def render_prompt_tool(self, book:Optional[Book], templateKey: str, inputs: dict) -> str:
         # 1. 获取模板配置
-        config = await self.dao.get_active_by_key(tool_key)
+        isRelated = 1
+        config = await self.dao.get_active_by_key(templateKey)
         if not config:
-            raise NotFoundError(msg=f"Template [{tool_key}] 未找到或已禁用")
+            raise NotFoundError(msg=f"Template [{templateKey}] 未找到或已禁用")
 
         try:
-            final_content = await self.render_prompt_with_params(prompt=config.template_content,
+            final_content = await self.render_prompt_with_params(prompt=config.content,
             inputs=inputs,
             engine_type=PromptEngineType.from_str(config.engine_type))
             final_content = final_content.strip()
 
             # 3. 关联背景信息拼接 (优化点：将基本信息与节点信息合并)
-            if config.isRelated and book is not None:
+            if isRelated and book is not None:
                 book_basic_prompt = await self.generate_book_base_prompt(book=book)
                 book_global_prompt = await self.generate_book_global_prompt(book=book)
                 # 拼接顺序：背景设定 -> 前情提要 -> 当前任务指令(渲染后的 template_str)
