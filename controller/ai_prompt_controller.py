@@ -80,7 +80,7 @@ async def render(
         bid: Optional[str] = Body(None),
         level:int = Body(...),
         tool_key: str = Body(...),
-        templateKey: str = Body(...),
+        templateKey: Optional[str] = Body(None),
         inputs: dict = Body(...),
         correlation: Optional[list] = Body(None),
         db: AsyncSession = Depends(get_db),
