@@ -130,7 +130,7 @@ class PromptSquareDAO:
                 PromptSquare.description,
             )
             .where(
-                PromptSquare.parent_category == "CREATION",
+                PromptSquare.parent_category == "TEXTEDITIN",
                 PromptSquare.category == category,
                 PromptSquare.status == UserCustomPromptStatus.AVAILABLE.code,
             )
