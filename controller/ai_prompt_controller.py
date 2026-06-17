@@ -31,7 +31,7 @@ async def list_all_prompts(db: AsyncSession = Depends(get_db)):
     data = await service.get_all_prompts()
 
     # 转换为 Schema 并返回
-    result = [PromptRegistryResp.model_validate(p) for p in data]
+    result = [PromptRegistryResp.model_validate(dict(p)) for p in data]
     return ResponseUtil.success(data=result)
 
 

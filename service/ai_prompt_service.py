@@ -19,9 +19,9 @@ class PromptService:
         self.dao = PromptRegistryDAO(db)
         self.db = db
 
-    async def get_all_prompts(self) -> List[PromptRegistry]:
+    async def get_all_prompts(self):
         """获取所有记录的原始逻辑"""
-        return await self.dao.get_all_prompts()
+        return await self.dao.get_template_prompts()
 
     async def get_all_prompts_scope(self) -> List[PromptRegistry]:
         """获取所有记录的原始逻辑"""
