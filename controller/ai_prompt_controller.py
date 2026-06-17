@@ -90,6 +90,8 @@ async def render(
     await check_user_quota_or_raise(frozen_token_length=3000, user_info=user)
 
     service = PromptService(db)
+    if not templateKey:
+        templateKey = tool_key
 
     book = None
     if bid:
