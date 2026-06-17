@@ -105,10 +105,11 @@ class PromptSquareDAO:
                 PromptSquare.cover_img,
                 PromptSquare.content,
                 PromptSquare.category,
+                PromptSquare.parent_category,
             )
             .where(
-                PromptSquare.category == "工具",
-                PromptSquare.status == UserCustomPromptStatus.TOOLS.code,
+                PromptSquare.parent_category == "SCENARIO",
+                PromptSquare.status == UserCustomPromptStatus.AVAILABLE.code,
             )
             .order_by(PromptSquare.created_at.desc())
         )
