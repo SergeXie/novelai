@@ -65,7 +65,8 @@ async def get_public_private_prompt_list(
         category,
         user.pkId,
         promptType,
-        title
+        title,
+        parent_category="CREATION",
     )
     rsp_data = PageResp(list=data, total=total, pageSize=pageSize, page=page)
     return ResponseUtil.success(data=rsp_data)

@@ -46,6 +46,7 @@ class PromptSquareService:
             title: str | None = None,
             status:UserCustomPromptStatus | None = None,
             category_filter_field: str = "tags",
+            parent_category: str | None = None,
     ):
         """
         获取公开提示词列表
@@ -60,7 +61,8 @@ class PromptSquareService:
             promptType,
             title,
             status,
-            category_filter_field
+            category_filter_field,
+            parent_category
         )
 
         items = []

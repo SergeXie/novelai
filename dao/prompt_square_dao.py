@@ -33,6 +33,7 @@ class PromptSquareDAO:
             title: str | None = None,
             status:UserCustomPromptStatus | None = None,
             category_filter_field: str = "tags",
+            parent_category: str | None = None,
     ):
 
         """
@@ -56,6 +57,9 @@ class PromptSquareDAO:
 
         if title:
             condition = condition & (PromptSquare.title.ilike(f"%{title}%"))
+
+        if parent_category:
+            condition = condition & (PromptSquare.parent_category == parent_category)
         # ==================== 主查询 ====================
 
         stmt = (
