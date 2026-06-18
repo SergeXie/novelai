@@ -18,24 +18,26 @@ async def execute(
         background_tasks: BackgroundTasks,
         templateKey: str = Body(...),
         level: int = Body(...),
-        userPrompt: str = Body(...),
+        userPrompt: str = Body(""),
         bid: Optional[str] = Body(None),
         inputs: Optional[dict] = Body(None),
+        correlation: Optional[list] = Body(None),
         template: Optional[float] = Body(None),
         maxTokens: Optional[int] = Body(None),
         user=Depends(get_current_user),
         db=Depends(get_db)):
     # 额度监测
-    await check_user_quota_or_raise(frozen_token_length=(len(userPrompt) + 3000), user_info=user)
+    await check_user_quota_or_raise(frozen_token_length=(len(userPrompt or "") + 3000), user_info=user)
 
     request_id = await PromptSquareService.execute_by_template(
         db=db,
         level=level,
         template_key=templateKey,
-        user_prompt=userPrompt,
+        user_prompt=userPrompt or "",
         user=user,
         bid=bid,
         inputs=inputs,
+        correlation=correlation,
         temperature=template,
         max_tokens=maxTokens,
         background_tasks=background_tasks,

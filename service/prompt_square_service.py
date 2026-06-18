@@ -257,6 +257,7 @@ class PromptSquareService:
                                   background_tasks,
                                   inputs: dict | None = None,
                                   bid: str | None = None,
+                                  correlation: list | None = None,
                                   temperature: float | None = None,
                                   max_tokens: float | None = None) -> str:
         tpl = await PromptSquareDAO.get_template_by_key(db, template_key)
@@ -285,7 +286,17 @@ class PromptSquareService:
                 inputs=final_inputs,
                 engine_type=PromptEngineType.from_str(tpl.engine_type))
             frozen_tokens = tpl.freeze_tokens
-            final_user_prompt = "\n".join(filter(None, [prompt, user_prompt]))
+            context_prompt = ""
+            if bid and correlation:
+                prompt_service = PromptService(db)
+                context_prompt = await prompt_service.generate_prompt_by_nodes(
+                    user_id=user.pkId,
+                    bid=bid,
+                    ids=correlation,
+                )
+
+            final_user_prompt = "\n".join(filter(None, [context_prompt, prompt, user_prompt]))
+            log_correlation = correlation if correlation is not None else [template_key]
 
             ai_service = AIService(db)
             request_id, _ = await ai_service.prepare_and_record_request(
@@ -296,7 +307,7 @@ class PromptSquareService:
                 level=level,
                 action_type=AIAction.Execute,
                 temperature=temperature,
-                correlation=[template_key],
+                correlation=log_correlation,
                 max_tokens=max_tokens,
                 tokenEstimate=frozen_tokens,
                 background_tasks=background_tasks

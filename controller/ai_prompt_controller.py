@@ -14,9 +14,8 @@ from common.utils.generator import LZSDGenerator
 from core.deps.auth import get_current_user, check_user_quota_or_raise
 from core.entity.vo.ai_response import TokenUsage
 from core.entity.vo.prompt_register_vo import PromptRegistryResp
-from dao.book_dao import BookDAO
 from service.ai_prompt_service import PromptService
-from service.ai_service import AIService
+from service.prompt_square_service import PromptSquareService
 from service.usage_service import UsageService
 
 promptController = APIRouter(prefix="/prompts", tags=["提示词管理"])
@@ -89,52 +88,22 @@ async def render(
     # 检查用户额度
     await check_user_quota_or_raise(frozen_token_length=3000, user_info=user)
 
-    service = PromptService(db)
     if not templateKey:
         templateKey = tool_key
 
-    book = None
-    if bid:
-        book_dao = BookDAO(db)
-        book = await book_dao.get_book_by_bid(bid=bid, user_id=user.pkId)
-
-    try:
-        # 整理提示词
-        rendered_prompt = await service.render_prompt_tool(
-            templateKey=templateKey,
-            book=book,
-            inputs=inputs)
-        context_prompt = ""
-        if bid and correlation:
-            context_prompt = await service.generate_prompt_by_nodes(
-                user_id=user.pkId,
-                bid=bid,
-                ids=correlation,
-            )
-        final_prompt = "\n".join(filter(None, [context_prompt, rendered_prompt]))
-
-        ai_service = AIService(db)
-        payload = {
-            "templateKey": templateKey,
-            **inputs
-        }
-        log_correlation = correlation if correlation is not None else payload
-
-        # 生成 requestId 并记录初始请求（不阻塞）
-        request_id, _ = await ai_service.prepare_and_record_request(
-            user=user,
-            bid=bid,
-            user_prompt=final_prompt,
-            level=level,
-            temperature=0.7,
-            action_type=AIAction.Render,
-            correlation=log_correlation,
-            background_tasks=background_tasks,
-            origin_prompt=""
-        )
-        return ResponseUtil.success(data={"request_id": request_id})
-    except ValueError as e:
-        return ResponseUtil.error(msg=str(e))
+    request_id = await PromptSquareService.execute_by_template(
+        db=db,
+        level=level,
+        template_key=templateKey,
+        user_prompt="",
+        user=user,
+        bid=bid,
+        inputs=inputs,
+        correlation=correlation,
+        temperature=0.7,
+        background_tasks=background_tasks,
+    )
+    return ResponseUtil.success(data={"request_id": request_id})
 
 
 @promptController.post("/create_book", name="小说工作流生成")
