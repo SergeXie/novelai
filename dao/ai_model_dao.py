@@ -1,4 +1,3 @@
-import time
 from types import SimpleNamespace
 from typing import Dict, List
 
@@ -6,6 +5,7 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai.adapters.enums import AIProvider
 from core.entity.do.ai_model import McAiModel
 
 
@@ -13,8 +13,7 @@ class AiModelDAO:
     _cache_models: List[SimpleNamespace] | None = None
     _cache_level_map: Dict[int, SimpleNamespace] = {}
     _cache_identifier_map: Dict[str, SimpleNamespace] = {}
-    _last_update: float = 0
-    CACHE_TTL = 1800
+    config_map: Dict[AIProvider, SimpleNamespace] = {}
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -40,30 +39,40 @@ class AiModelDAO:
             updateTime=model.updateTime,
         )
 
+    async def _load_models_once(self) -> None:
+        if AiModelDAO._cache_models is not None:
+            return
+
+        try:
+            stmt = select(McAiModel).order_by(McAiModel.weight.desc())
+            result = await self.db.execute(stmt)
+            all_models = [
+                AiModelDAO._snapshot_model(model)
+                for model in result.scalars().all()
+            ]
+
+            AiModelDAO._cache_models = all_models
+            AiModelDAO._cache_level_map = {model.level: model for model in all_models}
+            AiModelDAO._cache_identifier_map = {
+                model.model_identifier: model
+                for model in all_models
+            }
+            # 键值对 例如 AIProvider.FREE: settings.free,
+            AiModelDAO.config_map = {
+                AIProvider.parse(model.level): model
+                for model in all_models
+            }
+
+            logger.info(f"AI model config_map loaded from database. count={len(all_models)}")
+        except Exception as e:
+            logger.error(f"Failed to load AI model config_map: {e}")
+            AiModelDAO._cache_models = []
+            AiModelDAO._cache_level_map = {}
+            AiModelDAO._cache_identifier_map = {}
+            AiModelDAO.config_map = {}
+
     async def list_models(self, only_enabled: bool = True) -> list[SimpleNamespace]:
-        now = time.time()
-
-        if AiModelDAO._cache_models is None or (now - AiModelDAO._last_update) > AiModelDAO.CACHE_TTL:
-            try:
-                stmt = select(McAiModel).order_by(McAiModel.weight.desc())
-                result = await self.db.execute(stmt)
-                all_models = [
-                    AiModelDAO._snapshot_model(model)
-                    for model in result.scalars().all()
-                ]
-
-                AiModelDAO._cache_models = all_models
-                AiModelDAO._cache_level_map = {model.level: model for model in all_models}
-                AiModelDAO._cache_identifier_map = {
-                    model.model_identifier: model
-                    for model in all_models
-                }
-                AiModelDAO._last_update = now
-
-                logger.info(f"AI model cache rebuilt. count={len(all_models)}")
-            except Exception as e:
-                logger.error(f"Failed to refresh AI model cache: {e}")
-                return []
+        await self._load_models_once()
 
         models = AiModelDAO._cache_models or []
         if only_enabled:
@@ -74,6 +83,10 @@ class AiModelDAO:
     async def get_model_by_level(self, level: int) -> SimpleNamespace | None:
         await self.list_models()
         return AiModelDAO._cache_level_map.get(level)
+
+    async def get_model_by_provider(self, provider: AIProvider) -> SimpleNamespace | None:
+        await self.list_models()
+        return AiModelDAO.config_map.get(provider)
 
     async def get_model_name_by_identifier(self, identifier: str) -> str:
         await self.list_models()

@@ -17,6 +17,7 @@ from ai.adapters.mimo import MimoAdapter
 from common.config.config import settings
 from common.exception.lzsd_exception import ServiceWarning
 from core.entity.vo.ai_response import AICompletionResponse
+from dao.ai_model_dao import AiModelDAO
 
 
 @dataclass
@@ -233,6 +234,9 @@ class AINexus:
 
     @staticmethod
     def _legacy_model_config(provider: AIProvider) -> dict | None:
+        if AiModelDAO._cache_models is not None:
+            return AiModelDAO.config_map.get(provider)
+
         config_map = {
             AIProvider.FREE: settings.free,
             AIProvider.DEEPSEEK: settings.deepseek,
