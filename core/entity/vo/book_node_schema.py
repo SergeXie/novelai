@@ -137,7 +137,7 @@ class UpdateBookNodeReq(BaseModel):
     bid: str = Query(..., description="mc_book_node bid ID"),
     content: Optional[str] = None
     data: Optional[Dict[str, Any]] = None
-    len: Optional[int] = 0
+    len: Optional[int] = None
 
 
 class EditBookNodeReq(BaseModel):

@@ -325,7 +325,7 @@ class BookService:
             node_id: int,
             uid: int,
             bid: str,
-            book_len: int,
+            book_len: int | None,
             content: str | None,
             data: dict | None = None,
     ) -> BookNode:
