@@ -326,7 +326,7 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             offset = (page - 1) * pageSize
 
             # 1. 构造过滤条件
-            filters = [AiNovelGenerateLog.isDelete == 0]
+            filters = [AiNovelGenerateLog.isDelete == 0, AiNovelGenerateLog.totalTokens > 0]
             if user_id is not None:
                 filters.append(AiNovelGenerateLog.userId == user_id)
             if bid:
