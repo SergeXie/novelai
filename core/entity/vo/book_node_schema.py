@@ -16,7 +16,7 @@ class NodeTreeSchema(BaseModel):
     parent_id: Optional[int] = None
     is_leaf: int = 0
     type: int = 0
-    book_len: int = 0
+    book_len: Optional[int] = 0
     data: Optional[Dict[str, Any]] = Field(
         default=None,
         description="扩展配置数据"
@@ -42,6 +42,11 @@ class NodeTreeSchema(BaseModel):
         if v is None:
             return {}
         return v
+
+    @field_validator("book_len", mode="before")
+    @classmethod
+    def normalize_book_len(cls, v: Any) -> int:
+        return int(v or 0)
 
 class CreateBookReq(BaseModel):
     """创建书籍请求参数"""
