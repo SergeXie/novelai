@@ -8,6 +8,7 @@ from common.config.get_db import get_db, get_db_context
 from common.exception.lzsd_exception import AuthException, IllegalBookAccessException, InsufficientTokenException
 from core.entity.do.users_do import User
 from core.entity.vo.login_vo import CurrentUser
+from dao.ai_model_dao import AiModelDAO
 from dao.book_dao import BookDAO
 from dao.user_account_dao import UserAccountDAO
 from dao.user_dao import UserDAO
@@ -95,19 +96,27 @@ async def check_user_quota_or_raise(frozen_token_length: int, user_info: User, l
             if level not in [0, 2]:
                 raise InsufficientTokenException("免费用户只能使用执笔与才女模型")
 
-        if user_paid_balance >= frozen_token_length:
+        model_multiplier = 1
+        if level is not None:
+            model = await AiModelDAO(db).get_model_by_level(level)
+            if model:
+                model_multiplier = float(model.multiplier or 1)
+
+        estimated_amount = int(frozen_token_length * settings.MULTIPLIER)
+        estimated_asset_amount = int(estimated_amount * model_multiplier)
+
+        if user_paid_balance >= estimated_asset_amount:
             return
 
-        needed_from_free = frozen_token_length - user_paid_balance
-        weighted_needed = int(needed_from_free * settings.MULTIPLIER)
+        needed_from_free = estimated_asset_amount - user_paid_balance
 
         platform_total = await usage_service.get_platform_daily_consumption()
-        if platform_total + weighted_needed > settings.PLATFORM_DAILY_TOKEN_LIMIT:
+        if platform_total + needed_from_free > settings.PLATFORM_DAILY_TOKEN_LIMIT:
             logger.error(f"Platform limit reached: {user_info.account}")
             raise InsufficientTokenException("系统今日总额度已耗尽")
 
         user_monthly_free_used = await usage_service.get_user_monthly_free_used(user_id)
-        projected_free_used = user_monthly_free_used + weighted_needed
+        projected_free_used = user_monthly_free_used + needed_from_free
 
         if projected_free_used > settings.USER_MONTHLY_FREE_TOKEN_LIMIT:
             logger.info(
