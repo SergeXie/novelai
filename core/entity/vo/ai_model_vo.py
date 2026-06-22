@@ -71,7 +71,7 @@ class AIGenerateLogResp(BaseModel):
             "model": model_name,
             "status": log.status,
             "action": log.actionType,
-            "totalTokens": log.totalTokens,
+            "totalTokens": log.actualAmount,
             "actualAmount": log.actualAmount,
             "createdAt": log.createdAt,
             "outputContent": output_data,
