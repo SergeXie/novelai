@@ -325,10 +325,13 @@ class UsageService:
             action_type=action_type,
         )
 
-        list_data = [
-            await AIGenerateLogResp.from_orm_model(log, self.model_dao)
-            for log in logs
-        ]
+        #  在转换为 DTO 时处理，或者在 from_orm_model 内部去乘以 multiplier
+        list_data = []
+        for log in logs:
+            resp_obj = await AIGenerateLogResp.from_orm_model(log, self.model_dao)
+            # 让前端看到的用量是计算后的值，但绝对不碰 log 对象本身
+            resp_obj.totalTokens = int(log.totalTokens * log.multiplier)
+            list_data.append(resp_obj)
 
         # 3. 返回标准分页模型
         return PageResp(
