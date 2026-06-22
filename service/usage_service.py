@@ -329,7 +329,7 @@ class UsageService:
         list_data = []
         for log in logs:
             resp_obj = await AIGenerateLogResp.from_orm_model(log, self.model_dao)
-            resp_obj.totalTokens = int(log.totalTokens * log.multiplier)
+            resp_obj.totalTokens = int(log.actualAmount * log.multiplier)
             list_data.append(resp_obj)
 
         # 3. 返回标准分页模型

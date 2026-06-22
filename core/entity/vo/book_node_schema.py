@@ -16,6 +16,7 @@ class NodeTreeSchema(BaseModel):
     parent_id: Optional[int] = None
     is_leaf: int = 0
     type: int = 0
+    book_len: int = 0
     data: Optional[Dict[str, Any]] = Field(
         default=None,
         description="扩展配置数据"
