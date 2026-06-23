@@ -35,8 +35,7 @@ async def list_models(
 
 @aiController.post("/engineList/refresh", name="刷新AI模型配置缓存")
 async def refresh_model_config_cache(
-    db=Depends(get_db),
-    _=Depends(get_current_user),
+    db=Depends(get_db)
 ):
     """
     重新加载 mc_ai_models 到内存缓存，让数据库中的模型配置变更无需重启即可生效。
