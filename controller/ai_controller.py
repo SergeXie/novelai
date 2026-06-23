@@ -1,12 +1,15 @@
-﻿from fastapi import APIRouter, Depends, BackgroundTasks, Query
+﻿from fastapi import APIRouter, Depends, BackgroundTasks, Query, Header
 
 from ai.adapters.enums import AIAction
+from common.config.config import settings
 from common.config.get_db import get_db
 from common.exception.errors import NotFoundError
+from common.exception.lzsd_exception import ServiceWarning
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user, check_book_owner, check_user_quota_or_raise
 from core.entity.schemas import GenerateRequest
 from core.entity.vo.ai_model_vo import AiModelResp, DeleteHistoryReq
+from dao.ai_model_dao import AiModelDAO
 from service.ai_prompt_service import PromptService
 from service.ai_service import AIService
 from service.usage_service import UsageService
@@ -28,6 +31,18 @@ async def list_models(
     resp = [AiModelResp.model_validate(m) for m in models]
 
     return ResponseUtil.success(data=resp)
+
+
+@aiController.post("/engineList/refresh", name="刷新AI模型配置缓存")
+async def refresh_model_config_cache(
+    db=Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """
+    重新加载 mc_ai_models 到内存缓存，让数据库中的模型配置变更无需重启即可生效。
+    """
+    result = await AiModelDAO(db).refresh_models_cache()
+    return ResponseUtil.success(data=result, msg="模型配置缓存刷新成功")
 
 
 @aiController.post("/generate", summary="根据设定生成小说片段")

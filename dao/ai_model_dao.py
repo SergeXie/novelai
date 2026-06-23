@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 from typing import Dict, List
 
@@ -14,6 +15,7 @@ class AiModelDAO:
     _cache_level_map: Dict[int, SimpleNamespace] = {}
     _cache_identifier_map: Dict[str, SimpleNamespace] = {}
     config_map: Dict[AIProvider, SimpleNamespace] = {}
+    _cache_lock = asyncio.Lock()
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -70,6 +72,36 @@ class AiModelDAO:
             AiModelDAO._cache_level_map = {}
             AiModelDAO._cache_identifier_map = {}
             AiModelDAO.config_map = {}
+
+    async def refresh_models_cache(self) -> dict:
+        """Reload model config from database and replace the in-memory cache."""
+        async with AiModelDAO._cache_lock:
+            stmt = select(McAiModel).order_by(McAiModel.weight.desc())
+            result = await self.db.execute(stmt)
+            all_models = [
+                AiModelDAO._snapshot_model(model)
+                for model in result.scalars().all()
+            ]
+
+            AiModelDAO._cache_models = all_models
+            AiModelDAO._cache_level_map = {model.level: model for model in all_models}
+            AiModelDAO._cache_identifier_map = {
+                model.model_identifier: model
+                for model in all_models
+            }
+            AiModelDAO.config_map = {
+                AIProvider.parse(model.level): model
+                for model in all_models
+            }
+
+        enabled_count = len([model for model in all_models if model.status == 1])
+        logger.info(
+            f"AI model config_map refreshed from database. total={len(all_models)}, enabled={enabled_count}"
+        )
+        return {
+            "total": len(all_models),
+            "enabled": enabled_count,
+        }
 
     async def list_models(self, only_enabled: bool = True) -> list[SimpleNamespace]:
         await self._load_models_once()
