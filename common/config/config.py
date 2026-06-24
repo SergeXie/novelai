@@ -1,7 +1,11 @@
+from pathlib import Path
+
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from ai.config_model import LLMProviderConfig
+
+BASE_DIR = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -111,7 +115,7 @@ class Settings(BaseSettings):
 
     # 配置加载规则
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(BASE_DIR / ".env"),
         env_file_encoding='utf-8',
         case_sensitive=False,  # 区分大小写，通常环境变量推荐全大写
         env_nested_delimiter='__',

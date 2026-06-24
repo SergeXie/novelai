@@ -168,7 +168,7 @@ class AiNovelGenerateLog(Base):
         Integer,
         nullable=False,
         default=0,
-        comment="最终核减的计费Token数"
+        comment="最终核减的计费Token数 会×全局倍率（MULTIPLIER）"
     )
 
     # 在模型类中

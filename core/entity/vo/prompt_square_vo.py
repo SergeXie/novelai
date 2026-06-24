@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 from typing import List, Optional, Dict
 
 from pydantic import BaseModel
@@ -20,7 +20,7 @@ class PromptItem(BaseModel):
 
     # 分类 & 标签
     category: str
-    tags: Optional[List[str]]
+    tags: Optional[str]
 
     # 核心内容（前端编辑需要）
     input_schema: Dict
@@ -114,6 +114,21 @@ class PromptCategoryItem(BaseModel):
     """
 
     category: str
+
+
+class PromptToolMenuItem(BaseModel):
+    template_key: str
+    title: str
+    description: str
+    cover_img: Optional[str] = ""
+    # content: str
+    category: str
+
+
+class PromptTemplateBriefItem(BaseModel):
+    template_key: str
+    title: str
+    description: str
 
 
 class PromptSquareCreateReq(BaseModel):

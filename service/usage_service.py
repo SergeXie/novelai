@@ -325,10 +325,12 @@ class UsageService:
             action_type=action_type,
         )
 
-        list_data = [
-            await AIGenerateLogResp.from_orm_model(log, self.model_dao)
-            for log in logs
-        ]
+        #  在转换为 DTO 时处理，或者在 from_orm_model 内部去乘以 multiplier
+        list_data = []
+        for log in logs:
+            resp_obj = await AIGenerateLogResp.from_orm_model(log, self.model_dao)
+            resp_obj.totalTokens = int(log.actualAmount * log.multiplier)
+            list_data.append(resp_obj)
 
         # 3. 返回标准分页模型
         return PageResp(
@@ -376,15 +378,16 @@ class UsageService:
 
         user_id = log_entry.userId
 
-            # 计算总计费点数
-        actual_amount = int(total_tokens * multiplier)
+        # 计算总计费点数
+        actual_amount = int(total_tokens * float(multiplier or 1))
+        asset_amount = int(actual_amount * float(log_entry.multiplier or 1))
         log_entry.totalTokens = total_tokens
         log_entry.actualAmount = actual_amount
 
         # 2. 查询用户当前所有资产
         account = await UserAccountDAO.get_active_account(db=self.db, user_id=user_id)
 
-        remaining_to_pay = actual_amount
+        remaining_to_pay = asset_amount
 
         # --- 资产拆解扣减逻辑 (顺序调整) ---
 
@@ -431,7 +434,7 @@ class UsageService:
         if account:
             await self.consume_tokens(
                 account=account,
-                actual_amount=actual_amount,
+                actual_amount=asset_amount,
                 user_id=user_id,
                 request_id=request_id,
                 monthly_amount=log_entry.monthlyDeduct,

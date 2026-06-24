@@ -127,7 +127,7 @@ class AIService:
             user_prompt=cleaned_prompt,
             temperature=0,
             output_content="",
-            action_type=AIAction.Render,
+            action_type=AIAction.Image,
             promptTokens=len(cleaned_prompt),
             completionTokens=50000,
         )
@@ -270,33 +270,6 @@ class AIService:
         # 检查本地模型时间限制
         # ================================
         output_content = ""
-        # if level == 0:  # 本地部署模型
-        #     now = datetime.datetime.now()
-        #     weekday = now.weekday()  # 0=周一, 6=周日
-        #     # 工作日限制：周一到周五 09:00~19:00
-        #     if weekday < 7:
-        #         start_time = now.replace(hour=9, minute=0, second=0, microsecond=0)
-        #         end_time = now.replace(hour=19, minute=0, second=0, microsecond=0)
-        #         if start_time <= now <= end_time:
-        #             output_content = "当前访问人数过多，疯狂加服务器中，请切换模型或者稍后再试。"
-        #             logger.info(output_content)
-        #             # 限制时间直接返回 None
-        #             # 记录日志时也保存 output_content
-        #             log = await usage_service.record(
-        #                 user_id=user_id,
-        #                 request_id=request_id,
-        #                 level=level,
-        #                 node_ids=correlation,
-        #                 bid=bid,
-        #                 status=AIGenerateStatus.SUCCESS,
-        #                 origin_prompt=origin_prompt,
-        #                 system_prompt=final_system_prompt,
-        #                 user_prompt=input_user_prompt,
-        #                 temperature=final_temperature,
-        #                 output_content=output_content,
-        #                 action_type=AIAction(action_type),
-        #             )
-        #             return request_id, None
 
         # ================================
         # 正常记录日志

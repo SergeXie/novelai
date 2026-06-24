@@ -464,7 +464,7 @@ async def deconstruct(
         "noval": content
     }
     prompt_service = PromptService(db)
-    user_prompt = await prompt_service.render_prompt_tool(book=None, tool_key=tool_key, inputs=params)
+    user_prompt = await prompt_service.render_prompt_tool(book=None, templateKey=tool_key, inputs=params)
 
     level = AIProvider.DOUBAO.value
     frozen_token_size = len(user_prompt) * 2

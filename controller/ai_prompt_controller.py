@@ -1,4 +1,4 @@
-import json
+﻿import json
 from typing import Optional
 from loguru import logger
 from fastapi import APIRouter, Depends, Body, BackgroundTasks
@@ -14,9 +14,8 @@ from common.utils.generator import LZSDGenerator
 from core.deps.auth import get_current_user, check_user_quota_or_raise
 from core.entity.vo.ai_response import TokenUsage
 from core.entity.vo.prompt_register_vo import PromptRegistryResp
-from dao.book_dao import BookDAO
 from service.ai_prompt_service import PromptService
-from service.ai_service import AIService
+from service.prompt_square_service import PromptSquareService
 from service.usage_service import UsageService
 
 promptController = APIRouter(prefix="/prompts", tags=["提示词管理"])
@@ -31,7 +30,7 @@ async def list_all_prompts(db: AsyncSession = Depends(get_db)):
     data = await service.get_all_prompts()
 
     # 转换为 Schema 并返回
-    result = [PromptRegistryResp.model_validate(p) for p in data]
+    result = [PromptRegistryResp.model_validate(dict(p)) for p in data]
     return ResponseUtil.success(data=result)
 
 
@@ -80,47 +79,31 @@ async def render(
         bid: Optional[str] = Body(None),
         level:int = Body(...),
         tool_key: str = Body(...),
+        templateKey: Optional[str] = Body(None),
         inputs: dict = Body(...),
+        correlation: Optional[list] = Body(None),
         db: AsyncSession = Depends(get_db),
         user=Depends(get_current_user)
 ):
     # 检查用户额度
     await check_user_quota_or_raise(frozen_token_length=3000, user_info=user)
 
-    service = PromptService(db)
+    if not templateKey:
+        templateKey = tool_key
 
-    book = None
-    if bid:
-        book_dao = BookDAO(db)
-        book = await book_dao.get_book_by_bid(bid=bid, user_id=user.pkId)
-
-    try:
-        # 整理提示词
-        final_prompt = await service.render_prompt_tool(
-            tool_key=tool_key,
-            book=book,
-            inputs=inputs)
-        ai_service = AIService(db)
-        payload = {
-            "tool_key": tool_key,
-            **inputs
-        }
-
-        # 生成 requestId 并记录初始请求（不阻塞）
-        request_id, _ = await ai_service.prepare_and_record_request(
-            user=user,
-            bid=bid,
-            user_prompt=final_prompt,
-            level=level,
-            temperature=0.7,
-            action_type=AIAction.Render,
-            correlation=payload,
-            background_tasks=background_tasks,
-            origin_prompt=""
-        )
-        return ResponseUtil.success(data={"request_id": request_id})
-    except ValueError as e:
-        return ResponseUtil.error(msg=str(e))
+    request_id = await PromptSquareService.execute_by_template(
+        db=db,
+        level=level,
+        template_key=templateKey,
+        user_prompt="",
+        user=user,
+        bid=bid,
+        inputs=inputs,
+        correlation=correlation,
+        temperature=0.7,
+        background_tasks=background_tasks,
+    )
+    return ResponseUtil.success(data={"request_id": request_id})
 
 
 @promptController.post("/create_book", name="小说工作流生成")

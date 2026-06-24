@@ -55,5 +55,10 @@ class UserCustomPromptStatus(Enum):
         self.code = code
         self.label = label
 
+
+class MenuModuleKey(Enum):
+    CREATION_TOOLS = "CREATION_TOOLS"
+    PROMT_SQUARE_LABELS = "PROMT_SQUARE_LABELS"
+
 if __name__ == '__main__':
     print(ChargeType.RECHARGE.value)

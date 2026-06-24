@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+﻿from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, Text, Integer, BigInteger, JSON, DateTime, UniqueConstraint, func
 from datetime import datetime
 
@@ -18,6 +18,13 @@ class PromptSquare(Base):
         primary_key=True,
         autoincrement=True,
         comment="主键ID"
+    )
+
+    parent_category: Mapped[str] = mapped_column(
+        String(64),
+        unique=True,
+        nullable=False,
+        comment="顶级分类：CREATION(创作类)、SCENARIO(专项类)、UTILITY(快捷工具)"
     )
 
     template_key: Mapped[str] = mapped_column(
@@ -57,10 +64,10 @@ class PromptSquare(Base):
         comment="分类：大纲/正文/润色/设定"
     )
 
-    tags: Mapped[list] = mapped_column(
-        JSON,
+    tags: Mapped[str | None] = mapped_column(
+        String(32),
         nullable=True,
-        comment="标签数组，如：[小白可用, 玄幻]"
+        comment="标签"
     )
 
     content: Mapped[str] = mapped_column(

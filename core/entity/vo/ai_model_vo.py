@@ -40,7 +40,6 @@ class AIGenerateLogResp(BaseModel):
     action: str
     totalTokens: int
     model: str
-    actualAmount: int
     # 将 outputContent 设置为 Optional，兼容 defer() 没查出来的情况
     outputContent: Optional[str] = Field(None, description="模型输出内容")
     createdAt: datetime
@@ -71,8 +70,7 @@ class AIGenerateLogResp(BaseModel):
             "model": model_name,
             "status": log.status,
             "action": log.actionType,
-            "totalTokens": log.totalTokens,
-            "actualAmount": log.actualAmount,
+            "totalTokens": int((log.actualAmount or 0) * (log.multiplier or 1)),
             "createdAt": log.createdAt,
             "outputContent": output_data,
         }
@@ -107,6 +105,7 @@ class AIGenerateLogDetailResp(AIGenerateLogResp):
 
         # 补全详情特有字段
         data.update({
+            "totalTokens": int((log.actualAmount or 0) * (log.multiplier or 1)),
             "outputContent": cls._format_detail_output(log.actionType, log.outputContent),
             "originPrompt": log.originPrompt or ""
         })

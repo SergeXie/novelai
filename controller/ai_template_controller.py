@@ -7,6 +7,7 @@ from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user, check_user_quota_or_raise
 from core.entity.vo.base_vo import PageResp
 from core.entity.vo.prompt_square_vo import PromptSquareDetailReq, PromptSquareUpdateReq, PromptSquareCreateReq
+from service.menu_service import MenuService
 from service.prompt_square_service import PromptSquareService
 
 aiTemplateController = APIRouter(prefix="/ai/template")
@@ -17,24 +18,26 @@ async def execute(
         background_tasks: BackgroundTasks,
         templateKey: str = Body(...),
         level: int = Body(...),
-        userPrompt: str = Body(...),
+        userPrompt: str = Body(""),
         bid: Optional[str] = Body(None),
         inputs: Optional[dict] = Body(None),
+        correlation: Optional[list] = Body(None),
         template: Optional[float] = Body(None),
         maxTokens: Optional[int] = Body(None),
         user=Depends(get_current_user),
         db=Depends(get_db)):
     # 额度监测
-    await check_user_quota_or_raise(frozen_token_length=(len(userPrompt) + 3000), user_info=user)
+    await check_user_quota_or_raise(frozen_token_length=(len(userPrompt or "") + 3000), user_info=user)
 
     request_id = await PromptSquareService.execute_by_template(
         db=db,
         level=level,
         template_key=templateKey,
-        user_prompt=userPrompt,
+        user_prompt=userPrompt or "",
         user=user,
         bid=bid,
         inputs=inputs,
+        correlation=correlation,
         temperature=template,
         max_tokens=maxTokens,
         background_tasks=background_tasks,
@@ -64,7 +67,8 @@ async def get_public_private_prompt_list(
         category,
         user.pkId,
         promptType,
-        title
+        title,
+        parent_category="CREATION",
     )
     rsp_data = PageResp(list=data, total=total, pageSize=pageSize, page=page)
     return ResponseUtil.success(data=rsp_data)
@@ -77,7 +81,22 @@ async def get_public_prompt_categories(
     """
     获取提示词广场分类列表，按 category 去重
     """
-    data = await PromptSquareService.get_public_categories(db)
+    data = await MenuService.list_prompt_square_labels(db)
+    return ResponseUtil.success(data=data)
+
+
+@aiTemplateController.get("/creationCategories", name="协同创作工具分类")
+async def get_creation_categories(db: AsyncSession = Depends(get_db)):
+    data = await MenuService.list_creation_categories(db)
+    return ResponseUtil.success(data=data)
+
+
+@aiTemplateController.get("/promtListByCategory", name="根据协同创作分类获取提示词模板")
+async def get_prompt_list_by_category(
+        category: str = Query(..., description="协同创作分类key"),
+        db: AsyncSession = Depends(get_db),
+):
+    data = await PromptSquareService.get_prompt_list_by_category(db, category)
     return ResponseUtil.success(data=data)
 
 

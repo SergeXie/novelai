@@ -167,8 +167,15 @@ async def get_tools(db=Depends(get_db)):
                                                         category=category,
                                                         page=1,
                                                         pageSize=100,
-                                                        status=UserCustomPromptStatus.TOOLS)
+                                                        status=UserCustomPromptStatus.TOOLS,
+                                                        category_filter_field="category")
     return ResponseUtil.success(data=tools_list)
+
+
+@aiChatController.get("/toolMenu", summary="菜单工具栏")
+async def get_tool_menu(db=Depends(get_db)):
+    tools = await PromptSquareService.get_tool_menu_list(db=db)
+    return ResponseUtil.success(data=tools)
 
 
 @aiChatController.get("/quickTools", summary="")
@@ -177,5 +184,6 @@ async def get_quick_tools(db=Depends(get_db)):
     tools_list, _ = await PromptSquareService.get_public_list(db=db, category=category,
                                                               page=1,
                                                               pageSize=100,
-                                                              status=UserCustomPromptStatus.QUICK_TOOLS)
+                                                              status=UserCustomPromptStatus.QUICK_TOOLS,
+                                                              category_filter_field="category")
     return ResponseUtil.success(data=tools_list)

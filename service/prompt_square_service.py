@@ -1,4 +1,4 @@
-from fastapi import BackgroundTasks
+﻿from fastapi import BackgroundTasks
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +12,7 @@ from core.entity.do.users_do import User
 from core.entity.vo.prompt_square_vo import (
     PromptItem,
     PromptSquareUpdateReq, PromptItemDetail, PromptDetailResp, PromptListItemResp,
+    PromptTemplateBriefItem, PromptToolMenuItem,
 )
 from core.enums.constants import UserCustomPromptStatus
 from core.enums.prompt_sys_var import PromptEngineType
@@ -44,6 +45,8 @@ class PromptSquareService:
             promptType: str = "public",  # 新增
             title: str | None = None,
             status:UserCustomPromptStatus | None = None,
+            category_filter_field: str = "tags",
+            parent_category: str | None = None,
     ):
         """
         获取公开提示词列表
@@ -57,7 +60,9 @@ class PromptSquareService:
             user_id,
             promptType,
             title,
-            status
+            status,
+            category_filter_field,
+            parent_category
         )
 
         items = []
@@ -83,9 +88,19 @@ class PromptSquareService:
         """
         获取公开提示词分类列表
         """
-        # categories = await PromptSquareDAO.get_public_categories(db)
+        categories = await PromptSquareDAO.get_public_categories(db)
 
-        return tag_list
+        return categories
+
+    @staticmethod
+    async def get_tool_menu_list(db: AsyncSession) -> list[PromptToolMenuItem]:
+        rows = await PromptSquareDAO.get_tool_menu_list(db)
+        return [PromptToolMenuItem(**dict(row)) for row in rows]
+
+    @staticmethod
+    async def get_prompt_list_by_category(db: AsyncSession, category: str) -> list[PromptTemplateBriefItem]:
+        rows = await PromptSquareDAO.get_prompt_list_by_category(db, category)
+        return [PromptTemplateBriefItem(**dict(row)) for row in rows]
 
     @staticmethod
     async def create_user_prompt(
@@ -242,6 +257,7 @@ class PromptSquareService:
                                   background_tasks,
                                   inputs: dict | None = None,
                                   bid: str | None = None,
+                                  correlation: list | None = None,
                                   temperature: float | None = None,
                                   max_tokens: float | None = None) -> str:
         tpl = await PromptSquareDAO.get_template_by_key(db, template_key)
@@ -270,7 +286,17 @@ class PromptSquareService:
                 inputs=final_inputs,
                 engine_type=PromptEngineType.from_str(tpl.engine_type))
             frozen_tokens = tpl.freeze_tokens
-            final_user_prompt = "\n".join(filter(None, [prompt, user_prompt]))
+            context_prompt = ""
+            if bid and correlation:
+                prompt_service = PromptService(db)
+                context_prompt = await prompt_service.generate_prompt_by_nodes(
+                    user_id=user.pkId,
+                    bid=bid,
+                    ids=correlation,
+                )
+
+            final_user_prompt = "\n".join(filter(None, [context_prompt, prompt, user_prompt]))
+            log_correlation = correlation if correlation is not None else [template_key]
 
             ai_service = AIService(db)
             request_id, _ = await ai_service.prepare_and_record_request(
@@ -281,7 +307,7 @@ class PromptSquareService:
                 level=level,
                 action_type=AIAction.Execute,
                 temperature=temperature,
-                correlation=[template_key],
+                correlation=log_correlation,
                 max_tokens=max_tokens,
                 tokenEstimate=frozen_tokens,
                 background_tasks=background_tasks

@@ -192,7 +192,7 @@ class BookDAO:
     async def update_node_content(
             self,
             node: BookNode,
-            book_len: int,
+            book_len: int | None,
             content: str | None,
             data: dict | None = None,
     ) -> BookNode:
@@ -203,7 +203,7 @@ class BookDAO:
             node.content = content
         if data is not None:
             node.data = data
-        if book_len:
+        if book_len is not None:
             node.book_len = book_len
 
         self.db.add(node)

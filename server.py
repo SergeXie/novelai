@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 from starlette.middleware.gzip import GZipMiddleware
 from common.config.config import settings
+from common.config.get_db import get_db_context
 from common.exception.handle import handle_exception
 from controller.ai_chat_controller import aiChatController
 from controller.ai_controller import aiController
@@ -19,6 +20,7 @@ from controller.pv_controller import Pvrouter
 from controller.template_controller import templateController
 from controller.user_controller import userController
 from core.scheduler.membership_scheduler import start_scheduler, shutdown_scheduler
+from dao.ai_model_dao import AiModelDAO
 
 
 @asynccontextmanager
@@ -37,6 +39,8 @@ def register_app():
     async def lifespan(app: FastAPI):
         # 启动时
         start_scheduler()
+        async with get_db_context() as db:
+            await AiModelDAO(db).list_models(only_enabled=False)
 
         yield
 

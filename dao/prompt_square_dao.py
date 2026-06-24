@@ -1,4 +1,4 @@
-from sqlalchemy import select, func, update
+﻿from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 from sqlalchemy.sql.elements import or_
@@ -19,7 +19,7 @@ class PromptSquareDAO:
                 (PromptSquare.status == 1)
         )
         if category:
-            condition = condition & (PromptSquare.category == category)
+            condition = condition & (PromptSquare.tags == category)
         return condition
 
     @staticmethod
@@ -32,6 +32,8 @@ class PromptSquareDAO:
             promptType:str = "public",
             title: str | None = None,
             status:UserCustomPromptStatus | None = None,
+            category_filter_field: str = "tags",
+            parent_category: str | None = None,
     ):
 
         """
@@ -48,10 +50,16 @@ class PromptSquareDAO:
             condition = (PromptSquare.status == filter_status.code)
 
         if category:
-            condition = condition & (PromptSquare.category == category)
+            if category_filter_field == "category":
+                condition = condition & (PromptSquare.category == category)
+            else:
+                condition = condition & (PromptSquare.tags == category)
 
         if title:
             condition = condition & (PromptSquare.title.ilike(f"%{title}%"))
+
+        if parent_category:
+            condition = condition & (PromptSquare.parent_category == parent_category)
         # ==================== 主查询 ====================
 
         stmt = (
@@ -92,14 +100,57 @@ class PromptSquareDAO:
         return rows, total
 
     @staticmethod
+    async def get_tool_menu_list(db: AsyncSession):
+        stmt = (
+            select(
+                PromptSquare.template_key,
+                PromptSquare.title,
+                PromptSquare.description,
+                PromptSquare.cover_img,
+                PromptSquare.content,
+                PromptSquare.category,
+                PromptSquare.parent_category,
+            )
+            .where(
+                PromptSquare.parent_category == "SCENARIO",
+                PromptSquare.status == UserCustomPromptStatus.AVAILABLE.code,
+            )
+            .order_by(PromptSquare.created_at.desc())
+        )
+
+        result = await db.execute(stmt)
+        return result.mappings().all()
+
+    @staticmethod
+    async def get_prompt_list_by_category(db: AsyncSession, category: str):
+        stmt = (
+            select(
+                PromptSquare.template_key,
+                PromptSquare.title,
+                PromptSquare.description,
+            )
+            .where(
+                PromptSquare.parent_category == "TEXTEDITIN",
+                PromptSquare.category == category,
+                PromptSquare.status == UserCustomPromptStatus.AVAILABLE.code,
+            )
+            .order_by(PromptSquare.created_at.desc())
+        )
+
+        result = await db.execute(stmt)
+        return result.mappings().all()
+
+    @staticmethod
     async def get_public_categories(db: AsyncSession):
         """
         查询公开提示词的分类列表，并按分类去重
         """
         stmt = (
-            select(PromptSquare.category)
-            .where(PromptSquareDAO._public_condition())
-            .group_by(PromptSquare.category)
+            select(PromptSquare.tags)
+            .where(PromptSquareDAO._public_condition()).where(PromptSquare.parent_category == "CREATION")
+            .where(PromptSquare.tags.isnot(None))
+            .where(PromptSquare.tags != "")
+            .group_by(PromptSquare.tags)
             .order_by(func.max(PromptSquare.created_at).desc())
         )
 
@@ -290,7 +341,7 @@ class PromptSquareDAO:
             conditions.append(PromptSquare.title.ilike(f"%{title}%"))
 
         if category:
-            conditions.append(PromptSquare.category == category)
+            conditions.append(PromptSquare.tags == category)
 
 
         FavorAlias = aliased(UserTemplateFavor)
