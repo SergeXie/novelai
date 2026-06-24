@@ -16,7 +16,8 @@ aiTemplateController = APIRouter(prefix="/ai/template")
 @aiTemplateController.post("/execute")
 async def execute(
         background_tasks: BackgroundTasks,
-        templateKey: str = Body(...),
+        templateKey: Optional[str] = Body(None),
+        tool_key: Optional[str] = Body(None),
         level: int = Body(...),
         userPrompt: str = Body(""),
         bid: Optional[str] = Body(None),
@@ -28,6 +29,11 @@ async def execute(
         db=Depends(get_db)):
     # 额度监测
     await check_user_quota_or_raise(frozen_token_length=(len(userPrompt or "") + 3000), user_info=user)
+
+    if not templateKey:
+        templateKey = tool_key
+    if not templateKey:
+        return ResponseUtil.error(msg="templateKey 或 tool_key 不能为空")
 
     request_id = await PromptSquareService.execute_by_template(
         db=db,
