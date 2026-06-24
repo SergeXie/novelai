@@ -287,6 +287,7 @@ class PromptSquareService:
                 engine_type=PromptEngineType.from_str(tpl.engine_type))
             frozen_tokens = tpl.freeze_tokens
             context_prompt = ""
+
             if bid and correlation:
                 prompt_service = PromptService(db)
                 context_prompt = await prompt_service.generate_prompt_by_nodes(

@@ -103,12 +103,35 @@ class AiModelDAO:
             "enabled": enabled_count,
         }
 
-    async def list_models(self, only_enabled: bool = True) -> list[SimpleNamespace]:
+    async def list_models_with_cache(self, only_enabled: bool = True) -> list[SimpleNamespace]:
         await self._load_models_once()
 
         models = AiModelDAO._cache_models or []
         if only_enabled:
             return [model for model in models if model.status == 1]
+
+        return models
+
+    async def list_models(self, only_enabled: bool = True) -> list[SimpleNamespace]:
+        """实时从数据库获取最新的模型列表，不再走内存缓存"""
+        # 1. 构造过滤条件（逻辑删除）与排序规则（按权重降序排列，保持与 refresh 逻辑一致）
+        stmt = (
+            select(McAiModel)
+            .order_by(McAiModel.weight.desc())
+        )
+
+        # 如果要求只返回启用的模型，直接在 SQL 层面进行过滤，效率更高
+        if only_enabled:
+            stmt = stmt.where(McAiModel.status == 1)
+
+        # 2. 执行数据库查询
+        result = await self.db.execute(stmt)
+
+        # 3. 将 ORM 模型对象转换为与原系统兼容的脱钩快照对象 (SimpleNamespace)
+        models = [
+            AiModelDAO._snapshot_model(model)
+            for model in result.scalars().all()
+        ]
 
         return models
 

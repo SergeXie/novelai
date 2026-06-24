@@ -72,6 +72,8 @@ class PromptItemDetail(BaseModel):
     title: str
     description: str
 
+    input_schema: Dict
+
     # 分类 & 标签
     category: str
 

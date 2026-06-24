@@ -62,15 +62,7 @@ async def get_content_ai_tools(db: AsyncSession = Depends(get_db)):
 @promptController.get("/get_book_creation_tool", name="获取创建作品AI工具")
 async def get_book_creation_ai_tool(db: AsyncSession = Depends(get_db)):
     prompt_service = PromptService(db)
-    data = dict()
-    tool = await prompt_service.get_tool_by_key("wenyuan_title_forge")
-    if tool:
-        data["title"] = PromptRegistryResp.model_validate(tool)
-
-    tool = await prompt_service.get_tool_by_key("wenyuan_blurb_forge")
-    if tool:
-        data["intro"] = PromptRegistryResp.model_validate(tool)
-
+    data = await prompt_service.get_book_creation_templates()
     return ResponseUtil.success(data=data)
 
 @promptController.post("/render", name="渲染提示词")
