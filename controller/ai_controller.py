@@ -81,6 +81,7 @@ async def generate(
         user_prompt=combined_user_prompt,
         level=level,
         temperature=temperature,
+        max_tokens=request.max_tokens,
         action_type=AIAction.Generate,
         correlation=correlation,
         background_tasks=background_tasks,

@@ -72,6 +72,8 @@ class OpenAIBaseAdapter(BaseAIAdapter):
                 user_prompt=user_prompt,
                 enable_web_search=enable_web_search,
             )
+            if max_tokens:
+                final_user_prompt = f"{final_user_prompt}\n字数限制为{max_tokens}"
             messages = [
                 {"role": "system", "content": system_prompt},
             ]

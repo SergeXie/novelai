@@ -52,12 +52,16 @@ class DoubaoPlusAdapter(OpenAIBaseAdapter):
             final_temperature = temperature if temperature is not None else self.temperature
             final_max_tokens = min(max_tokens or self.max_tokens, self.max_tokens)
 
+            final_user_prompt = user_prompt
+            if max_tokens:
+                final_user_prompt = f"{user_prompt}\n字数限制为{max_tokens}"
+
             request_kwargs = {
                 "model": self.model_name,
                 "input": [
                     {"role": "system", "content": system_prompt},
                     *(context_messages or []),
-                    {"role": "user", "content": user_prompt},
+                    {"role": "user", "content": final_user_prompt},
                 ],
                 "temperature": final_temperature,
                 "max_output_tokens": final_max_tokens,

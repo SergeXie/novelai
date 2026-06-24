@@ -30,6 +30,8 @@ class MimoAdapter(OpenAIBaseAdapter):
                 user_prompt=user_prompt,
                 enable_web_search=enable_web_search,
             )
+            if max_tokens:
+                final_user_prompt = f"{final_user_prompt}\n字数限制为{max_tokens}"
             final_temperature = temperature if temperature is not None else self.temperature
             final_max_tokens = min(max_tokens or self.max_tokens, self.max_tokens)
 
