@@ -66,6 +66,7 @@ class UserDAO:
             permanent_amount:int,
             total_amount:int,
             balance_snapshot:dict,
+            free_amount:int = 0,
             bonus_amount:int = 0,
     ):
         """
@@ -77,6 +78,7 @@ class UserDAO:
             user_id=user_id,
             request_id=request_id,
             action_type="CONSUME",
+            free_amount=free_amount,
             monthly_amount=monthly_amount,
             bonus_amount=bonus_amount,
             permanent_amount=permanent_amount,

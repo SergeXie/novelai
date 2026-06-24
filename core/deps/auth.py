@@ -1,4 +1,4 @@
-import jwt
+﻿import jwt
 from fastapi import Depends, Header
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -83,13 +83,17 @@ async def check_user_quota_or_raise(frozen_token_length: int, user_info: User, l
     async with get_db_context() as db:
         usage_service = UsageService(db)
 
-        # Use raw paid balances here; monthly free quota is checked separately below.
         account = await UserAccountDAO.get_active_account(db=db, user_id=user_id)
+        if not account:
+            account = await AccountService.init_account(db, user_id)
+        await AccountService.ensure_monthly_free_allowance(db, account)
+
         user_paid_balance = (
             (account.monthly_balance or 0)
             + (account.bonus_balance or 0)
             + (account.permanent_balance or 0)
         ) if account else 0
+        user_free_balance = (account.free_balance or 0) if account else 0
 
         user_level = AccountService.get_user_level(account) if account else "free"
         if user_level == "free" and level:
@@ -109,17 +113,15 @@ async def check_user_quota_or_raise(frozen_token_length: int, user_info: User, l
             return
 
         needed_from_free = estimated_asset_amount - user_paid_balance
+        if user_free_balance < needed_from_free:
+            logger.info(
+                f"User monthly free balance insufficient: {user_info.account}, "
+                f"need={needed_from_free}, free_balance={user_free_balance}"
+            )
+            raise InsufficientTokenException("您的个人每月免费额度不足")
 
         platform_total = await usage_service.get_platform_daily_consumption()
         if platform_total + needed_from_free > settings.PLATFORM_DAILY_TOKEN_LIMIT:
             logger.error(f"Platform limit reached: {user_info.account}")
             raise InsufficientTokenException("系统今日总额度已耗尽")
 
-        user_monthly_free_used = await usage_service.get_user_monthly_free_used(user_id)
-        projected_free_used = user_monthly_free_used + needed_from_free
-
-        if projected_free_used > settings.USER_MONTHLY_FREE_TOKEN_LIMIT:
-            logger.info(
-                f"User monthly free limit reached: {user_info.account}, Total: {projected_free_used}"
-            )
-            raise InsufficientTokenException("您的个人每月免费额度不足")

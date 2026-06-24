@@ -67,6 +67,13 @@ class TokenUsageLog(Base):
         comment="月度额度变动（负数=消耗，正数=增加）"
     )
 
+    free_amount: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="monthly free quota change"
+    )
+
     bonus_amount: Mapped[int] = mapped_column(
         Integer,
         default=0,

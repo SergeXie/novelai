@@ -79,6 +79,26 @@ class UserAccount(Base):
 
     # ==================== 统计 ====================
 
+    free_balance: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="monthly free token balance"
+    )
+
+    free_total_amount: Mapped[int] = mapped_column(
+        BigInteger,
+        default=0,
+        nullable=False,
+        comment="current month free token total"
+    )
+
+    free_last_grant_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime,
+        nullable=True,
+        comment="last monthly free token grant time"
+    )
+
     total_consumed: Mapped[int] = mapped_column(
         BigInteger,
         default=0,
