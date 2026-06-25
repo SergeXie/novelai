@@ -85,7 +85,7 @@ class PromptService:
         node_result = await self.db.execute(
             select(BookNode.type, BookNode.name, BookNode.content)
             .where(and_(
-                BookNode.type in (BookNodeCategory.ROLES, BookNodeCategory.WORLDVIEW, BookNodeCategory.WORLDVIEW),
+                BookNode.type in (BookNodeCategory.ROLES, BookNodeCategory.WORLDVIEW, BookNodeCategory.WRITING_STYLE),
                 BookNode.bid == book.bid
             )).order_by(BookNode.type.asc())
         )
@@ -124,7 +124,7 @@ class PromptService:
             items = grouped.get(cat, [])
             if items:
                 # 使用枚举的 .key 获取显示名称 (如 "角色卡")
-                header = f"# {cat.key}列表" if cat == BookNodeCategory.ROLES else f"# {cat.key}"
+                header = f"## {cat.key}列表" if cat == BookNodeCategory.ROLES else f"## {cat.key}"
                 # 拼接：【名称】内容 或 直接内容
                 body = "\n".join([f"【{n.name}】{n.content}" if n.name else n.content for n in items])
                 prompt_segments.append(f"{header}\n{body}")
@@ -134,10 +134,10 @@ class PromptService:
         if content_items:
             chapters = []
             for n in content_items:
-                title = f"## {n.name}" if n.name else "## 未命名章节"
+                title = f"### {n.name}" if n.name else "### 未命名章节"
                 chapters.append(f"{title}\n{n.content}")
 
-            prompt_segments.append("# 前情提要\n" + "\n\n".join(chapters))
+            prompt_segments.append("## 前情提要\n" + "\n\n".join(chapters))
 
         return "\n\n".join(prompt_segments)
 

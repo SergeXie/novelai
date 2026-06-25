@@ -4,9 +4,9 @@ from ai.adapters.enums import AIAction
 from common.config.config import settings
 from common.config.get_db import get_db
 from common.exception.errors import NotFoundError
-from common.exception.lzsd_exception import ServiceWarning
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user, check_book_owner, check_user_quota_or_raise
+from core.entity.req.ai_execute_req import AIExecuteReq
 from core.entity.schemas import GenerateRequest
 from core.entity.vo.ai_model_vo import AiModelResp, DeleteHistoryReq
 from dao.ai_model_dao import AiModelDAO
@@ -19,8 +19,8 @@ aiController = APIRouter()
 
 @aiController.get("/engineList", name="模型列表")
 async def list_models(
-    db=Depends(get_db),
-    _=Depends(get_current_user)
+        db=Depends(get_db),
+        _=Depends(get_current_user)
 ):
     """
     获取 AI 模型列表
@@ -35,59 +35,14 @@ async def list_models(
 
 @aiController.post("/engineList/refresh", name="刷新AI模型配置缓存")
 async def refresh_model_config_cache(
-    db=Depends(get_db)
+        db=Depends(get_db)
 ):
     """
     重新加载 mc_ai_models 到内存缓存，让数据库中的模型配置变更无需重启即可生效。
     """
-    result = await AiModelDAO(db).refresh_models_cache()
-    return ResponseUtil.success(data=result, msg="模型配置缓存刷新成功")
+    await AiModelDAO(db).refresh_models_cache()
+    return ResponseUtil.success(data={}, msg="模型配置缓存刷新成功")
 
-
-@aiController.post("/generate", summary="根据设定生成小说片段")
-async def generate(
-        request: GenerateRequest,
-        background_tasks: BackgroundTasks,
-        db=Depends(get_db),
-        user=Depends(get_current_user),
-):
-    """
-    根据设定生成小说片段（输入 / 输出全量留痕）
-    """
-    await check_book_owner(bid=request.bid, db=db, user=user)
-
-    user_prompt = request.user_prompt
-    if not user_prompt:
-        return ResponseUtil.error(msg="提示词不能为空")
-
-    await check_user_quota_or_raise(frozen_token_length=(len(user_prompt) + 3000), user_info=user, level=request.level)
-
-    correlation = request.correlation  # 章节ID
-    bid = request.bid
-    level = request.level
-    temperature = request.temperature or 0.7
-
-    prompt_service = PromptService(db=db)
-    # 用于拼接书籍的基本信息（书名、简介、章节）
-    final_prompt = await prompt_service.generate_prompt_by_nodes(user_id=user.pkId, bid=bid, ids=correlation)
-    ai_service = AIService(db=db)
-
-    combined_user_prompt = f"{final_prompt}\n{user_prompt}"
-    
-    request_id, _ = await ai_service.prepare_and_record_request(
-        user=user,
-        bid=bid,
-        origin_prompt=user_prompt,
-        user_prompt=combined_user_prompt,
-        level=level,
-        temperature=temperature,
-        action_type=AIAction.Generate,
-        correlation=correlation,
-        background_tasks=background_tasks,
-    )
-
-    # 5. 立即返回 requestId 供前端轮询
-    return ResponseUtil.success(data={"requestId": request_id})
 
 @aiController.get("/poll")
 async def poll(requestId: str, db=Depends(get_db), user=Depends(get_current_user)):
@@ -126,7 +81,6 @@ async def delete_history(
         db=Depends(get_db),
         user=Depends(get_current_user),
 ):
-
     service = AIService(db=db)
 
     await service.delete_history(
@@ -134,6 +88,7 @@ async def delete_history(
         request_ids=req.requestIds
     )
     return ResponseUtil.success(msg="删除成功")
+
 
 @aiController.get("/ai/log/list")
 async def get_log_list(
@@ -167,3 +122,31 @@ async def get_log_detail(requestId: str, db=Depends(get_db), _=Depends(get_curre
         return NotFoundError
 
     return ResponseUtil.success(data=rsp)
+
+
+@aiController.post("/generate", summary="根据设定生成小说片段")
+async def generate(
+        req: GenerateRequest,
+        background_tasks: BackgroundTasks,
+        db=Depends(get_db),
+        user=Depends(get_current_user),
+):
+    """
+    根据设定生成小说片段（输入 / 输出全量留痕）
+    """
+
+    if req.bid:
+        await check_book_owner(bid=req.bid, db=db, user=user)
+
+    user_prompt = req.user_prompt
+    if not user_prompt or not user_prompt.strip():
+        raise ResponseUtil.error(msg="自定义提示词内容不能为空")
+
+    ai_service = AIService(db=db)
+    request_id = await ai_service.execute(db=db, user=user, action_type=AIAction.Generate, level=req.level,
+                                          temperature=req.temperature,
+                                          max_tokens=req.max_tokens, bid=req.bid, user_prompt=req.user_prompt,
+                                          background_tasks=background_tasks)
+
+    # 5. 立即返回 requestId 供前端轮询
+    return ResponseUtil.success(data={"requestId": request_id})

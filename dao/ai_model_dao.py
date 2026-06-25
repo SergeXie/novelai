@@ -74,34 +74,8 @@ class AiModelDAO:
             AiModelDAO.config_map = {}
 
     async def refresh_models_cache(self) -> dict:
-        """Reload model config from database and replace the in-memory cache."""
-        async with AiModelDAO._cache_lock:
-            stmt = select(McAiModel).order_by(McAiModel.weight.desc())
-            result = await self.db.execute(stmt)
-            all_models = [
-                AiModelDAO._snapshot_model(model)
-                for model in result.scalars().all()
-            ]
-
-            AiModelDAO._cache_models = all_models
-            AiModelDAO._cache_level_map = {model.level: model for model in all_models}
-            AiModelDAO._cache_identifier_map = {
-                model.model_identifier: model
-                for model in all_models
-            }
-            AiModelDAO.config_map = {
-                AIProvider.parse(model.level): model
-                for model in all_models
-            }
-
-        enabled_count = len([model for model in all_models if model.status == 1])
-        logger.info(
-            f"AI model config_map refreshed from database. total={len(all_models)}, enabled={enabled_count}"
-        )
-        return {
-            "total": len(all_models),
-            "enabled": enabled_count,
-        }
+        AiModelDAO._cache_models = None
+        await self._load_models_once()
 
     async def list_models_with_cache(self, only_enabled: bool = True) -> list[SimpleNamespace]:
         await self._load_models_once()
@@ -137,7 +111,21 @@ class AiModelDAO:
 
     async def get_model_by_level(self, level: int) -> SimpleNamespace | None:
         await self.list_models()
-        return AiModelDAO._cache_level_map.get(level)
+        ret = AiModelDAO._cache_level_map.get(level)
+        if not ret:
+            stmt = (
+                select(McAiModel)
+                .where(McAiModel.level == level)
+                .where(McAiModel.status == 1)
+            )
+            result = await self.db.execute(stmt)
+            model = result.scalar_one_or_none()
+            if not model:
+                return None
+            ret = model
+
+        return AiModelDAO._snapshot_model(ret)
+
 
     async def get_model_by_provider(self, provider: AIProvider) -> SimpleNamespace | None:
         await self.list_models()

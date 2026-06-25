@@ -13,6 +13,7 @@ from service.usage_service import UsageService
 
 from service.ai_service import AIService
 
+
 class WorkflowService(AIService):
     def __init__(self, db: AsyncSession):
         super().__init__(db)
@@ -43,10 +44,10 @@ class WorkflowService(AIService):
             user_prompt: str,
             level: int,
             temperature: float,
-            action_type:str,
+            action_type: str,
             correlation=None,
             background_tasks=None
-    )->str:
+    ) -> str:
         """
         第一阶段：校验、记录、生成请求ID (同步执行，快速返回)
         """
@@ -101,10 +102,10 @@ async def async_generate_task(level, input_user_prompt, temperature, request_id)
             user_prompt=input_user_prompt,
             temperature=temperature
         )
-        status = 1 # 成功
+        status = 1  # 成功
     except Exception as e:
         output_prompt = f"Error: {str(e)}"
-        status = 0 # 失败
+        status = 0  # 失败
         logger.error(f"Async Generation Error for {request_id}: {output_prompt}")
 
     # 使用新的数据库上下文更新结果
