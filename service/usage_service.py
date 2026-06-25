@@ -472,7 +472,7 @@ class UsageService:
 
         # 4. 提交数据库
         # 记得更新 account 表的相关余额
-        await self.db.flush()
+        await self.db.commit()
 
     async def consume_tokens(
             self,
