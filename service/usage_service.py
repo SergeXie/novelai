@@ -1,4 +1,5 @@
 from datetime import datetime, time
+from typing import Optional
 
 from dateutil import parser
 from dateutil.relativedelta import relativedelta
@@ -189,7 +190,7 @@ class UsageService:
     async def update_output_content_by_request_id(
             self,
             request_id: str,
-            ai_rsp: AICompletionResponse | None,
+            ai_rsp: Optional[AICompletionResponse],
             status: AIGenerateStatus = AIGenerateStatus.SUCCESS,
             error_msg: str = ""
     )->bool:
@@ -208,7 +209,10 @@ class UsageService:
             await self.record_consumption(request_id=request_id, total_tokens=ai_rsp.usage.total_tokens, multiplier=settings.MULTIPLIER)
 
         if success:
-            logger.info(f"RequestId: {request_id} 内容更新成功")
+            display_content = ""
+            if ai_rsp:
+                display_content = ai_rsp.content[:20] + "..." if len(ai_rsp.content) > 20 else ai_rsp.content
+            logger.info(f"RequestId: {request_id} 内容更新成功 :{display_content}")
         else:
             logger.error(f"RequestId: {request_id} 内容更新失败")
 
@@ -256,13 +260,13 @@ class UsageService:
             status=status,
             error_msg=error_msg,
             output_content=image_url,
-            output_length=50000,  # 文生图通常按单次固定 token 计算
-            total_tokens=50000,  # 文生图通常按单次固定 token计算
+            output_length=settings.IMAGE_GENERATE_TOKEN_COST,  # 文生图通常按单次固定 token 计算
+            total_tokens=settings.IMAGE_GENERATE_TOKEN_COST,  # 文生图通常按单次固定 token计算
         )
         if success and status == AIGenerateStatus.SUCCESS:
             await self.record_consumption(
                 request_id=request_id,
-                total_tokens=50000,
+                total_tokens=settings.IMAGE_GENERATE_TOKEN_COST,
                 multiplier=settings.MULTIPLIER
             )
         return success

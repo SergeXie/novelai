@@ -98,6 +98,7 @@ class Settings(BaseSettings):
 
     CLOUD_ADDRESS: str = Field(alias="CLOUD_ADDRESS", default="")
     IMAGE_DOWNLOAD_URL: str = Field(alias="IMAGE_DOWNLOAD_URL", default="http://8.138.95.62:8000/downloadFile")
+    IMAGE_GENERATE_TOKEN_COST: int = Field(alias="IMAGE_GENERATE_TOKEN_COST", default=50000)
 
     UPLOAD_USERS_DIR: str = Field(alias="UPLOAD_USERS_DIR", default="")
     WEB_SEARCH_API_KEY: str = Field(alias="WEB_SEARCH_API_KEY", default="")

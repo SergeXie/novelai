@@ -121,6 +121,7 @@ class AIService:
             correlation=None,
             background_tasks=None,
     ) -> tuple[str, None] | tuple[str, AICompletionResponse | None]:
+        await check_user_quota_or_raise(frozen_token_length=tokenEstimate, user_info=user, level=level)
         """
         第一阶段：校验、记录、生成请求ID
         当 background_tasks 为 None 时，直接同步等待任务完成。

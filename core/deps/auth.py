@@ -78,6 +78,9 @@ async def check_user_quota_or_raise(frozen_token_length: int, user_info: User, l
     1. Paid account balance: monthly + bonus + permanent.
     2. Monthly free quota.
     """
+    if frozen_token_length <= 0:
+        pass
+    
     user_id = user_info.pkId
 
     async with get_db_context() as db:
