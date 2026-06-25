@@ -35,7 +35,11 @@ class AIImageService(AIService):
         if not cleaned_prompt:
             raise ValueError("提示词不能为空")
 
-        await check_user_quota_or_raise(frozen_token_length=settings.IMAGE_GENERATE_TOKEN_COST, level=10)
+        await check_user_quota_or_raise(
+            frozen_token_length=settings.IMAGE_GENERATE_TOKEN_COST,
+            user_info=user,
+            level=10,
+        )
 
         request_id = LZSDGenerator.generate_request_id()
         log = await UsageService(self.db).record(

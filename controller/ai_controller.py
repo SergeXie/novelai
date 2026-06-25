@@ -135,6 +135,7 @@ async def generate(
     根据设定生成小说片段（输入 / 输出全量留痕）
     """
 
+
     if req.bid:
         await check_book_owner(bid=req.bid, db=db, user=user)
 
