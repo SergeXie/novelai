@@ -85,3 +85,4 @@ class UserDAO:
         )
 
         db.add(usage_log)
+        await db.flush()
