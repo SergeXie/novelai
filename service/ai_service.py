@@ -1,25 +1,30 @@
-import datetime
 import textwrap
-from typing import Any
+from typing import Optional, Dict, Any, List
 
-import httpx
+from fastapi import BackgroundTasks
 from loguru import logger
-from sqlalchemy import false
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.adapters.enums import AIProvider, AIAction, AIGenerateStatus
 from ai.ai_nexus import get_ai_nexus
 from common.config.config import settings
-from common.exception.lzsd_exception import ServiceWarning
-from common.utils.generator import LZSDGenerator
 from common.config.get_db import get_db_context
+from common.exception.errors import NotFoundError, ServerError
+from common.exception.lzsd_exception import ServiceWarning
+from common.modules.book_exporter import BookExporter
+from common.utils.generator import LZSDGenerator
+from core.deps.auth import check_user_quota_or_raise
+from core.entity.do.books import Book
 from core.entity.do.generate_log import AiNovelGenerateLog
 from core.entity.do.users_do import User
 from core.entity.vo.ai_response import AICompletionResponse
+from core.enums.prompt_sys_var import PromptEngineType
 from dao.ai_log_dao import AILogDAO
 from dao.ai_model_dao import AiModelDAO
+from dao.prompt_square_dao import PromptSquareDAO
+from service.ai_prompt_service import PromptService
+from service.book_service import BookService
 from service.usage_service import UsageService
-from service.content_audit_service import get_generated_content_audit_service
 
 
 class AIService:
@@ -87,7 +92,7 @@ class AIService:
         获取模型列表
         """
         aimodel_dao = AiModelDAO(self.db)
-        return await aimodel_dao.list_models(
+        return await aimodel_dao.list_models_with_cache(
             only_enabled=only_enabled,
         )
 
@@ -99,136 +104,6 @@ class AIService:
         )
 
         return True
-
-    async def generate_image(
-            self,
-            user: User,
-            prompt: str,
-            size: str = "2K",
-            n: int = 1,
-            watermark: bool = False,
-            provider: AIProvider = AIProvider.DOUBAOIMAGE,
-            response_format: str = "url",
-            extra_body: dict | None = None,
-            background_tasks: Any | None = None,
-            ) -> tuple[str, str | None]:
-        cleaned_prompt = (prompt or "").strip()
-        if not cleaned_prompt:
-            raise ValueError("提示词不能为空")
-
-        request_id = LZSDGenerator.generate_request_id()
-        log = await UsageService(self.db).record(
-            user_id=user.pkId,
-            request_id=request_id,
-            level=provider.value,
-            bid=request_id,
-            origin_prompt=cleaned_prompt,
-            system_prompt="",
-            user_prompt=cleaned_prompt,
-            temperature=0,
-            output_content="",
-            action_type=AIAction.Image,
-            promptTokens=len(cleaned_prompt),
-            completionTokens=50000,
-        )
-
-        task_kwargs = {
-            "request_id": request_id,
-            "prompt": cleaned_prompt,
-            "size": size,
-            "n": n,
-            "watermark": watermark,
-            "provider": provider,
-            "response_format": response_format,
-            "extra_body": extra_body,
-            "log": log,
-        }
-
-        if background_tasks is not None:
-            background_tasks.add_task(async_generate_image_task, **task_kwargs)
-            logger.info(f"图片任务 {request_id} 已加入后台队列")
-            return request_id, None
-
-        try:
-            logger.info(f"图片任务 {request_id} 正在同步执行...")
-            result = await self._run_image_generation(
-                prompt=cleaned_prompt,
-                size=size,
-                n=n,
-                watermark=watermark,
-                provider=provider,
-                response_format=response_format,
-                extra_body=extra_body,
-            )
-        except Exception as exc:
-            await UsageService(self.db).update_request_result_by_request_id(
-                request_id=request_id,
-                status=AIGenerateStatus.FAILED,
-                error_msg=str(exc),
-            )
-            raise
-
-        await UsageService(self.db).update_image_output_by_request_id(
-            request_id=request_id,
-            image_url=result,
-        )
-        return request_id, result
-
-    async def _run_image_generation(
-            self,
-            prompt: str,
-            size: str,
-            n: int,
-            watermark: bool,
-            provider: AIProvider,
-            response_format: str,
-            extra_body: dict | None = None,
-    ) -> str:
-        raw_image_url = await get_ai_nexus().generate_image(
-            provider=provider,
-            prompt=prompt,
-            size=size,
-            n=n,
-            watermark=watermark,
-            response_format=response_format,
-            extra_body=extra_body,
-        )
-
-        return await self.download_and_store_image_url(raw_image_url)
-
-    async def download_and_store_image_url(self, image_url: str, file_type: str = "avatar") -> str:
-        if not image_url or not image_url.strip():
-            raise ValueError("图片地址不能为空")
-
-        request_body = {
-            "url": image_url.strip(),
-            "type": file_type,
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-                response = await client.post(settings.IMAGE_DOWNLOAD_URL, json=request_body)
-                response.raise_for_status()
-        except httpx.RequestError as exc:
-            logger.error(f"图片转存请求失败: {exc}")
-            raise RuntimeError("图片转存服务请求失败") from exc
-        except httpx.HTTPStatusError as exc:
-            logger.error(f"图片转存响应异常: {exc.response.status_code} - {exc.response.text}")
-            raise RuntimeError(f"图片转存失败: HTTP {exc.response.status_code}") from exc
-
-        try:
-            response_data = response.json()
-        except ValueError as exc:
-            logger.error(f"图片转存返回非 JSON: {response.text}")
-            raise RuntimeError("图片转存服务返回格式异常") from exc
-
-        stored_url = (((response_data or {}).get("data") or {}).get("url") or "").strip()
-        if response_data.get("code") != 200 or not stored_url:
-            error_msg = response_data.get("msg") or "图片转存失败"
-            logger.error(f"图片转存业务失败: {response_data}")
-            raise RuntimeError(error_msg)
-
-        return stored_url
 
     async def prepare_and_record_request(
             self,
@@ -246,6 +121,7 @@ class AIService:
             correlation=None,
             background_tasks=None,
     ) -> tuple[str, None] | tuple[str, AICompletionResponse | None]:
+        await check_user_quota_or_raise(frozen_token_length=tokenEstimate, user_info=user, level=level)
         """
         第一阶段：校验、记录、生成请求ID
         当 background_tasks 为 None 时，直接同步等待任务完成。
@@ -279,7 +155,7 @@ class AIService:
             request_id=request_id,
             level=level,
             node_ids=correlation,
-            bid=bid,
+            bid=bid or "",
             origin_prompt=origin_prompt,
             system_prompt=final_system_prompt,
             user_prompt=input_user_prompt,
@@ -314,6 +190,109 @@ class AIService:
             logger.info(f"任务 {request_id} 正在同步执行...")
             ai_rsp = await async_generate_task(**task_kwargs)
             return request_id, ai_rsp
+
+    async def execute(
+            self,
+            db: AsyncSession,
+            user: User,
+            action_type: AIAction,
+            level: int,
+            temperature:  Optional[float] = None,
+            max_tokens: Optional[int] = None,
+            template_key: Optional[str] = None,
+            inputs: Optional[Dict[str, Any]] = None,
+            bid: Optional[str] = None,
+            user_prompt: str = None,
+            correlation: Optional[List[Any]] = None,
+            background_tasks: Optional[BackgroundTasks] = None
+    ) -> str:
+        """
+        智能解析提示词组件，拼装上下文，估算冻结Token并记录AI调用流水
+        """
+        # 1. 基础 Token 估算：用户原始 prompt + 基础消耗通道 (中文字符 Token 转换率通常按 1.5 到 2 估算)
+        user_prompt_len = len(user_prompt) if user_prompt else 0
+        frozen_tokens = int(user_prompt_len * 1.5) + 3000
+
+        # 构建用户可见的审计追溯链条（利用列表优雅组装，避免频繁的字符串 += 导致内存损耗）
+        origin_prompt_parts = []
+        template_prompt = ""
+        final_inputs = inputs or {}
+
+        # 实例化相关业务域 Service（收拢到顶部，复用同一个 db 实例）
+        book_service = BookService(db)
+        prompt_service = PromptService(db)
+
+        book : Optional[Book] = None
+        if bid:
+            book = await book_service.get_book_by_bid(bid=bid, user_id=user.pkId)
+            if not book:
+                raise NotFoundError(msg=f"作品[{bid}]不存在")
+
+        # 2. 解析与渲染提示词模板域
+        if template_key:
+            tpl = await PromptSquareDAO.get_template_by_key(db, template_key)
+            if not tpl or tpl.status == 0:
+                raise NotFoundError(msg="提示词模版不存在或已下架")
+
+            origin_prompt_parts.append(f"【模版】{tpl.title}")
+            frozen_tokens += (tpl.freeze_tokens or 0)
+
+            # 如果关联了书籍且含有系统内置插槽，自动进行书籍知识库 Markdown 导出
+            if bid and "sys_book_info" in final_inputs:
+                nodes = await book_service.get_basic_nodes(bid=bid, user_id=user.pkId) or []
+                leaf_ids = [node.id for node in nodes]
+
+                exporter = BookExporter(db)
+                final_inputs["sys_book_info"] = await exporter.export_to_markdown(book=book, leaf_node_ids=leaf_ids)
+
+            # 执行 Jinja2 或其他引擎的动态渲染
+            try:
+                template_prompt = await PromptService.render_prompt_with_params(
+                    prompt=tpl.content,
+                    inputs=final_inputs,
+                    engine_type=PromptEngineType.from_str(tpl.engine_type)
+                )
+                # 渲染后的长文本 Token 损耗追加
+                frozen_tokens += int(len(template_prompt) * 1.5)
+            except Exception as e:
+                raise ServerError(msg=f"提示词模板[{tpl.title}]渲染异常: {e}")
+
+        # 3. 解析动态关联的上下文节点（如：勾选的角色、大纲片段）
+        book_context_prompt = ""
+        if bid and book:
+            book_context_prompt = "# 小说核心设定\n" + await prompt_service.generate_book_base_prompt(book=book)
+            if correlation:
+                book_context_prompt += "\n" +  await prompt_service.generate_prompt_by_nodes(
+                    user_id=user.pkId,
+                    bid=bid,
+                    ids=correlation,
+                )
+
+        # 4. 最终核心全文本组装（清洗空文本段落，按换行合并）
+        final_user_prompt = "\n".join(filter(None, [book_context_prompt, template_prompt, user_prompt]))
+
+        # 5. 组装最终追溯用的标记
+        if user_prompt:
+            origin_prompt_parts.append(f"【提示词】{user_prompt}")
+        origin_prompt = " ".join(origin_prompt_parts)
+
+        log_correlation = correlation if correlation is not None else [template_key]
+
+        # 6. 持久化请求日志并激活异步任务网关
+        request_id, _ = await self.prepare_and_record_request(
+            user=user,
+            bid=bid,
+            origin_prompt=origin_prompt,
+            user_prompt=final_user_prompt,
+            level=level,
+            action_type=action_type,
+            temperature=temperature or 0.7,
+            correlation=log_correlation,
+            max_tokens=max_tokens,
+            tokenEstimate=frozen_tokens,
+            background_tasks=background_tasks
+        )
+        return request_id
 
 
 def _should_retry_with_level2(error: Exception) -> bool:
@@ -409,52 +388,6 @@ async def async_generate_task(
                 error_msg=error_msg)
 
     return ai_rsp
-
-
-async def async_generate_image_task(
-        request_id: str,
-        prompt: str,
-        size: str,
-        n: int,
-        watermark: bool,
-        provider: AIProvider,
-        response_format: str,
-        log: AiNovelGenerateLog,
-        extra_body: dict | None = None,
-) -> str | None:
-    """后台异步执行图片生成并更新结果"""
-    logger.info(
-        f"[{provider.name}] req:{request_id} 开始生成图片 提示词:{textwrap.shorten(prompt, width=32, placeholder='...')} size:{size}"
-    )
-
-    try:
-        async with get_db_context() as db:
-            result = await AIService(db=db)._run_image_generation(
-                prompt=prompt,
-                size=size,
-                n=n,
-                watermark=watermark,
-                provider=provider,
-                response_format=response_format,
-                extra_body=extra_body,
-            )
-
-            await UsageService(db).update_image_output_by_request_id(
-                request_id=request_id,
-                image_url=result,
-                status=AIGenerateStatus.SUCCESS,
-            )
-            logger.info(f"[{provider.name}] req:{request_id} 图片生成结束 返回:{textwrap.shorten(result, width=48, placeholder='...')}")
-            return result
-    except Exception as exc:
-        logger.error(f"[{provider.name}] req:{request_id} 图片生成异常 {exc}")
-        async with get_db_context() as db:
-            await UsageService(db).update_request_result_by_request_id(
-                request_id=request_id,
-                status=AIGenerateStatus.FAILED,
-                error_msg=str(exc),
-            )
-        return None
 
 async def reuse_book_destructor_data(
         log: AiNovelGenerateLog,

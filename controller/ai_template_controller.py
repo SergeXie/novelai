@@ -2,11 +2,14 @@ from typing import Optional
 from fastapi.params import Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import APIRouter, Depends, Body, BackgroundTasks
+
+from ai.adapters.enums import AIAction
 from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
-from core.deps.auth import get_current_user, check_user_quota_or_raise
+from core.deps.auth import get_current_user, check_user_quota_or_raise, check_book_owner
 from core.entity.vo.base_vo import PageResp
 from core.entity.vo.prompt_square_vo import PromptSquareDetailReq, PromptSquareUpdateReq, PromptSquareCreateReq
+from service.ai_service import AIService
 from service.menu_service import MenuService
 from service.prompt_square_service import PromptSquareService
 
@@ -17,37 +20,31 @@ aiTemplateController = APIRouter(prefix="/ai/template")
 async def execute(
         background_tasks: BackgroundTasks,
         templateKey: Optional[str] = Body(None),
-        tool_key: Optional[str] = Body(None),
         level: int = Body(...),
         userPrompt: str = Body(""),
         bid: Optional[str] = Body(None),
         inputs: Optional[dict] = Body(None),
         correlation: Optional[list] = Body(None),
-        template: Optional[float] = Body(None),
+        temperature: Optional[float] = Body(None),
         maxTokens: Optional[int] = Body(None),
         user=Depends(get_current_user),
         db=Depends(get_db)):
-    # 额度监测
-    await check_user_quota_or_raise(frozen_token_length=(len(userPrompt or "") + 3000), user_info=user)
+    if bid:
+        await check_book_owner(bid=bid, db=db, user=user)
 
-    if not templateKey:
-        templateKey = tool_key
-    if not templateKey:
-        return ResponseUtil.error(msg="templateKey 或 tool_key 不能为空")
-
-    request_id = await PromptSquareService.execute_by_template(
-        db=db,
-        level=level,
-        template_key=templateKey,
-        user_prompt=userPrompt or "",
-        user=user,
-        bid=bid,
-        inputs=inputs,
-        correlation=correlation,
-        temperature=template,
-        max_tokens=maxTokens,
-        background_tasks=background_tasks,
-    )
+    ai_service = AIService(db=db)
+    request_id = await ai_service.execute(db=db,
+                                          user=user,
+                                          action_type=AIAction.Execute,
+                                          level=level,
+                                          temperature=temperature,
+                                          max_tokens=maxTokens,
+                                          bid=bid,
+                                          user_prompt=userPrompt,
+                                          correlation=correlation,
+                                          template_key=templateKey,
+                                          inputs=inputs,
+                                          background_tasks=background_tasks)
 
     return ResponseUtil.success(data=request_id)
 

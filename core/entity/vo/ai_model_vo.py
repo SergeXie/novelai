@@ -16,7 +16,6 @@ class AiModelResp(BaseModel):
     id: int
     level: int
     model_name: str
-    provider: str
     multiplier: Decimal
     max_tokens: int
     temperature: Decimal

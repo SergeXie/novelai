@@ -5,6 +5,7 @@ from common.config.get_db import get_db
 from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user
 from core.entity.do.users_do import User
+from service.ai_image_service import AIImageService
 from service.ai_service import AIService
 
 aiImageController = APIRouter(prefix="/ai/image", tags=["AI文生图"])
@@ -23,7 +24,7 @@ async def _generate_image(
     if not size or not size.strip():
         return ResponseUtil.failure(msg="图片尺寸不能为空")
 
-    ai_srv = AIService(db=db)
+    ai_srv = AIImageService(db=db)
 
     try:
         request_id, _ = await ai_srv.generate_image(
@@ -70,10 +71,9 @@ async def generate_avatar(
     db=Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    DEFAULT_AVATAR_PROMPT = "一个可爱的头像"
     # 如果 prompt 为空，使用默认提示词
     if not prompt or not prompt.strip():
-        prompt = DEFAULT_AVATAR_PROMPT
+        prompt = "一个可爱的头像"
     return await _generate_image(
         background_tasks=background_tasks,
         level=level,
@@ -94,10 +94,9 @@ async def generate_cover(
     db=Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    DEFAULT_COVER_PROMPT = "一本科幻小说的封面"
     # 如果 prompt 为空，使用默认提示词
     if not prompt or not prompt.strip():
-        prompt = DEFAULT_COVER_PROMPT
+        prompt = "一本科幻小说的封面"
     # 有书名或简介时，直接在提示词后拼接
     if book_name:
         prompt = f"{prompt}，书名《{book_name}》"

@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from jinja2 import Environment
 from sqlalchemy import select, and_
@@ -8,6 +8,7 @@ from common.exception.errors import NotFoundError
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
 from core.entity.do.prompt_register import PromptRegistry
+from core.entity.vo.prompt_register_vo import PromptRegistryResp
 from core.enums.node_type import BookNodeCategory
 from core.enums.prompt_sys_var import PromptEngineType
 from dao.ai_prompt_registry_dao import PromptRegistryDAO
@@ -30,13 +31,25 @@ class PromptService:
     async def get_scope_detail_prompts(self, scope:int) -> List[PromptRegistry]:
         return await self.dao.get_prompts_detail_scope(scope)
 
-
     async def get_detail_by_key(self, tool_key: str) -> Optional[PromptRegistry]:
         """根据key获取详情"""
         return await self.dao.get_by_tool_key(tool_key)
 
-    async def get_tool_by_key(self, tool_key: str) -> Optional[PromptRegistry]:
-        return await self.dao.get_by_tool_key(tool_key)
+    async def get_book_creation_templates(self) -> dict:
+        """
+        获取创建作品时候用到的ai提示词模板
+        """
+        data = dict()
+
+        tool_keys = ["wenyuan_title_forge", "wenyuan_blurb_forge"]
+        rets = await self.dao.get_by_tool_keys(tool_keys=tool_keys)
+        for tool in rets:
+            if tool.tool_key == tool_keys[0]:
+                data["title"] = PromptRegistryResp.model_validate(tool)
+            elif tool.tool_key == tool_keys[1]:
+                data["intro"] = PromptRegistryResp.model_validate(tool)
+
+        return data
 
     async def generate_prompt_by_nodes(self, user_id: int, bid: str, ids: list) -> str:
         """
@@ -72,7 +85,7 @@ class PromptService:
         node_result = await self.db.execute(
             select(BookNode.type, BookNode.name, BookNode.content)
             .where(and_(
-                BookNode.type in (BookNodeCategory.ROLES, BookNodeCategory.WORLDVIEW, BookNodeCategory.WORLDVIEW),
+                BookNode.type in (BookNodeCategory.ROLES, BookNodeCategory.WORLDVIEW, BookNodeCategory.WRITING_STYLE),
                 BookNode.bid == book.bid
             )).order_by(BookNode.type.asc())
         )
@@ -111,7 +124,7 @@ class PromptService:
             items = grouped.get(cat, [])
             if items:
                 # 使用枚举的 .key 获取显示名称 (如 "角色卡")
-                header = f"# {cat.key}列表" if cat == BookNodeCategory.ROLES else f"# {cat.key}"
+                header = f"## {cat.key}列表" if cat == BookNodeCategory.ROLES else f"## {cat.key}"
                 # 拼接：【名称】内容 或 直接内容
                 body = "\n".join([f"【{n.name}】{n.content}" if n.name else n.content for n in items])
                 prompt_segments.append(f"{header}\n{body}")
@@ -121,10 +134,10 @@ class PromptService:
         if content_items:
             chapters = []
             for n in content_items:
-                title = f"## {n.name}" if n.name else "## 未命名章节"
+                title = f"### {n.name}" if n.name else "### 未命名章节"
                 chapters.append(f"{title}\n{n.content}")
 
-            prompt_segments.append("# 前情提要\n" + "\n\n".join(chapters))
+            prompt_segments.append("## 前情提要\n" + "\n\n".join(chapters))
 
         return "\n\n".join(prompt_segments)
 

@@ -245,77 +245,7 @@ class PromptSquareService:
 
         # ==================== 执行删除 ====================
         await PromptSquareDAO.delete(db, prompt)
-
         return True
-
-    @staticmethod
-    async def execute_by_template(db: AsyncSession,
-                                  level: int,
-                                  user: User,
-                                  template_key: str,
-                                  user_prompt: str,
-                                  background_tasks,
-                                  inputs: dict | None = None,
-                                  bid: str | None = None,
-                                  correlation: list | None = None,
-                                  temperature: float | None = None,
-                                  max_tokens: float | None = None) -> str:
-        tpl = await PromptSquareDAO.get_template_by_key(db, template_key)
-        if not tpl or tpl.status != 1:
-            raise NotFoundError(msg="提示词模版不存在")
-
-        final_inputs = inputs or {}
-        if bid:
-            book_service = BookService(db)
-            book = await book_service.get_book_by_bid(bid=bid, user_id=user.pkId)
-            if not book:
-                raise NotFoundError(msg=f"书籍[{bid}]不存在")
-
-            key = "sys_book_info"
-            if key in final_inputs:
-                nodes = await book_service.get_basic_nodes(bid=bid, user_id=user.pkId) or []
-                leaf_ids = [node.id for node in nodes]
-                exporter = BookExporter(db)
-                book_prompt = await exporter.export_to_markdown(book=book, leaf_node_ids=leaf_ids)
-                final_inputs[key] = book_prompt
-
-        try:
-
-            prompt = await PromptService.render_prompt_with_params(
-                prompt=tpl.content,
-                inputs=final_inputs,
-                engine_type=PromptEngineType.from_str(tpl.engine_type))
-            frozen_tokens = tpl.freeze_tokens
-            context_prompt = ""
-            if bid and correlation:
-                prompt_service = PromptService(db)
-                context_prompt = await prompt_service.generate_prompt_by_nodes(
-                    user_id=user.pkId,
-                    bid=bid,
-                    ids=correlation,
-                )
-
-            final_user_prompt = "\n".join(filter(None, [context_prompt, prompt, user_prompt]))
-            log_correlation = correlation if correlation is not None else [template_key]
-
-            ai_service = AIService(db)
-            request_id, _ = await ai_service.prepare_and_record_request(
-                user=user,
-                bid=bid,
-                origin_prompt=f"【模版】{tpl.title} 【提示词】{user_prompt}",
-                user_prompt=final_user_prompt,
-                level=level,
-                action_type=AIAction.Execute,
-                temperature=temperature,
-                correlation=log_correlation,
-                max_tokens=max_tokens,
-                tokenEstimate=frozen_tokens,
-                background_tasks=background_tasks
-            )
-            return request_id
-
-        except Exception as e:
-            raise ServerError(msg="AI生成失败:{}".format(e))
 
     @staticmethod
     async def get_my_favor_list(

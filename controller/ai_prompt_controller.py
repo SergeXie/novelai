@@ -11,10 +11,11 @@ from common.config.get_db import get_db, get_db_context
 from common.log import logger
 from common.response.response_util import ResponseUtil
 from common.utils.generator import LZSDGenerator
-from core.deps.auth import get_current_user, check_user_quota_or_raise
+from core.deps.auth import get_current_user, check_user_quota_or_raise, check_book_owner
 from core.entity.vo.ai_response import TokenUsage
 from core.entity.vo.prompt_register_vo import PromptRegistryResp
 from service.ai_prompt_service import PromptService
+from service.ai_service import AIService
 from service.prompt_square_service import PromptSquareService
 from service.usage_service import UsageService
 
@@ -59,60 +60,52 @@ async def get_content_ai_tools(db: AsyncSession = Depends(get_db)):
     result = [PromptRegistryResp.model_validate(p) for p in data]
     return ResponseUtil.success(data=result)
 
+
 @promptController.get("/get_book_creation_tool", name="获取创建作品AI工具")
 async def get_book_creation_ai_tool(db: AsyncSession = Depends(get_db)):
     prompt_service = PromptService(db)
-    data = dict()
-    tool = await prompt_service.get_tool_by_key("wenyuan_title_forge")
-    if tool:
-        data["title"] = PromptRegistryResp.model_validate(tool)
-
-    tool = await prompt_service.get_tool_by_key("wenyuan_blurb_forge")
-    if tool:
-        data["intro"] = PromptRegistryResp.model_validate(tool)
-
+    data = await prompt_service.get_book_creation_templates()
     return ResponseUtil.success(data=data)
+
 
 @promptController.post("/render", name="渲染提示词")
 async def render(
         background_tasks: BackgroundTasks,
         bid: Optional[str] = Body(None),
-        level:int = Body(...),
+        level: int = Body(...),
         tool_key: str = Body(...),
-        templateKey: Optional[str] = Body(None),
         inputs: dict = Body(...),
         correlation: Optional[list] = Body(None),
+        temperature: Optional[float] = Body(None),
+        maxTokens: Optional[int] = Body(None),
         db: AsyncSession = Depends(get_db),
         user=Depends(get_current_user)
 ):
-    # 检查用户额度
-    await check_user_quota_or_raise(frozen_token_length=3000, user_info=user)
+    if bid:
+        await check_book_owner(bid=bid, db=db, user=user)
 
-    if not templateKey:
-        templateKey = tool_key
+    ai_service = AIService(db=db)
+    request_id = await ai_service.execute(db=db,
+                                          user=user,
+                                          action_type=AIAction.Render,
+                                          level=level,
+                                          temperature=temperature,
+                                          max_tokens=maxTokens,
+                                          bid=bid,
+                                          template_key=tool_key,
+                                          inputs=inputs,
+                                          correlation=correlation,
+                                          background_tasks=background_tasks)
 
-    request_id = await PromptSquareService.execute_by_template(
-        db=db,
-        level=level,
-        template_key=templateKey,
-        user_prompt="",
-        user=user,
-        bid=bid,
-        inputs=inputs,
-        correlation=correlation,
-        temperature=0.7,
-        background_tasks=background_tasks,
-    )
     return ResponseUtil.success(data={"request_id": request_id})
 
 
 @promptController.post("/create_book", name="小说工作流生成")
 async def create_book_flow(
         idea: str = Body(..., description="小说脑洞/主题"),
-        level:int = Body(..., description="模型"),
+        level: int = Body(..., description="模型"),
         user=Depends(get_current_user)
 ):
-
     # 1. 校验配额-
     await check_user_quota_or_raise(frozen_token_length=3000, user_info=user)
 
