@@ -46,7 +46,6 @@ async def execute(
                                           inputs=inputs,
                                           background_tasks=background_tasks)
 
-
     return ResponseUtil.success(data=request_id)
 
 

@@ -12,11 +12,13 @@ from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user
 from core.entity.vo.base_vo import PageResp
 from core.entity.vo.order_schema_vo import CreateInternalOrderRequest, CreateOrderRequest
+from core.entity.vo.redeem_code_vo import RedeemCodeRecordItem, RedeemCodeUseRequest, RedeemCodeUseResponse
 from core.entity.vo.user_vo import BonusGrantListResponse
 from service.account_service import AccountService
 from service.order_service import OrderService
 from service.payment.payment_service import PaymentService
 from service.product_service import ProductService
+from service.redeem_code_service import RedeemCodeService
 
 productRouter = APIRouter(prefix="/order")
 
@@ -37,6 +39,38 @@ async def get_bonus_list(
 ):
     data = await AccountService.get_current_bonus_list(db, user.pkId)
     return ResponseUtil.success(data=data)
+
+
+@productRouter.post("/redeem", name="兑换码兑换", response_model=RedeemCodeUseResponse)
+async def redeem_code(
+    req: RedeemCodeUseRequest,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    data = await RedeemCodeService.use_code(db, user.pkId, req.code)
+    return ResponseUtil.success(data=data)
+
+
+@productRouter.get("/redeem/history", name="兑换码兑换记录")
+async def get_redeem_history(
+    page: int = 1,
+    pageSize: int = 20,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    data, total = await RedeemCodeService.get_user_redeem_records(
+        db=db,
+        user_id=user.pkId,
+        page=page,
+        page_size=pageSize,
+    )
+    rsp_data = PageResp[RedeemCodeRecordItem](
+        page=page,
+        pageSize=pageSize,
+        total=total,
+        list=data,
+    )
+    return ResponseUtil.success(data=rsp_data)
 
 
 @productRouter.get("/history", name="历史订购")

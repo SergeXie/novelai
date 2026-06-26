@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+﻿from datetime import datetime, timedelta, timezone
 
 from dateutil.relativedelta import relativedelta
 from loguru import logger
@@ -15,7 +15,6 @@ from dao.membership_dao import MembershipDAO
 from dao.membership_token_grant_plan_dao import MembershipTokenGrantPlanDAO
 from dao.package_dao import PackageDAO
 from dao.user_account_dao import UserAccountDAO
-from service.usage_service import UsageService
 
 
 class AccountService:
@@ -57,6 +56,92 @@ class AccountService:
             return 12
 
         return max(1, duration_days // 30)
+
+    @staticmethod
+    def _same_month(left: datetime | None, right: datetime) -> bool:
+        return bool(left and left.year == right.year and left.month == right.month)
+
+    @staticmethod
+    def _month_key(value: datetime) -> str:
+        return value.strftime("%Y-%m")
+
+    @staticmethod
+    def _write_free_recharge_log(
+            db: AsyncSession,
+            account: UserAccount,
+            amount: int,
+            now: datetime,
+    ) -> None:
+        log = AccountLog(
+            user_id=account.user_id,
+            biz_id=f"free-monthly:{AccountService._month_key(now)}",
+            biz_type=BizType.SYSTEM.value,
+            change_type=ChargeType.RECHARGE.value,
+            asset_type=AssetType.FREE.value,
+            amount=amount,
+            balance_after=account.free_balance,
+            extra={
+                "source": "monthly_free_allowance",
+                "month": AccountService._month_key(now),
+            }
+        )
+        db.add(log)
+
+    @staticmethod
+    def _write_free_expire_log(
+            db: AsyncSession,
+            account: UserAccount,
+            amount: int,
+            now: datetime,
+    ) -> None:
+        if amount <= 0:
+            return
+
+        log = AccountLog(
+            user_id=account.user_id,
+            biz_id=f"free-monthly:{AccountService._month_key(now)}:reset",
+            biz_type=BizType.SYSTEM.value,
+            change_type=ChargeType.EXPIRE.value,
+            asset_type=AssetType.FREE.value,
+            amount=-amount,
+            balance_after=0,
+            extra={
+                "source": "monthly_free_allowance",
+                "reason": "monthly_free_reset",
+                "month": AccountService._month_key(now),
+            }
+        )
+        db.add(log)
+
+    @staticmethod
+    async def ensure_monthly_free_allowance(
+            db: AsyncSession,
+            account: UserAccount | None,
+            now: datetime | None = None,
+    ) -> UserAccount:
+        now = now or datetime.utcnow()
+        if not account:
+            raise ServiceWarning("用户账户不存在")
+
+        if AccountService._same_month(account.free_last_grant_at, now):
+            return account
+
+        allowance = settings.USER_MONTHLY_FREE_TOKEN_LIMIT
+        old_free_balance = account.free_balance or 0
+        AccountService._write_free_expire_log(db, account, old_free_balance, now)
+
+        account.free_balance = allowance
+        account.free_total_amount = allowance
+        account.free_last_grant_at = now
+
+        AccountService._write_free_recharge_log(
+            db=db,
+            account=account,
+            amount=allowance,
+            now=now,
+        )
+        logger.info(f"[free allowance] granted user_id={account.user_id}, amount={allowance}")
+        return account
 
     @staticmethod
     def _build_membership_token_plans(
@@ -438,8 +523,6 @@ class AccountService:
     @staticmethod
     def _build_usage_overview(
             account: UserAccount | None,
-            free_total: int,
-            free_available: int,
     ) -> UsageOverview:
         monthly_total = account.monthly_total_amount if account else 0
         monthly_available = account.monthly_balance if account else 0
@@ -447,12 +530,17 @@ class AccountService:
         permanent_available = account.permanent_balance if account else 0
         bonus_total = account.bonus_total_amount if account else 0
         bonus_available = account.bonus_balance if account else 0
+        free_total = account.free_total_amount if account else 0
+        free_available = account.free_balance if account else 0
+        redeem_total = account.redeem_total_amount if account else 0
+        redeem_available = account.redeem_balance if account else 0
 
         items = [
+            AccountService._build_asset_usage_item("free", "基础免费", free_total, free_available),
+            AccountService._build_asset_usage_item("bonus", "补给奖励", bonus_total, bonus_available),
+            AccountService._build_asset_usage_item("redeem", "兑换码额度", redeem_total, redeem_available),
             AccountService._build_asset_usage_item("monthly", "付费额度", monthly_total, monthly_available),
             AccountService._build_asset_usage_item("permanent", "永久额度", permanent_total, permanent_available),
-            AccountService._build_asset_usage_item("bonus", "补给奖励", bonus_total, bonus_available),
-            AccountService._build_asset_usage_item("free", "基础免费", free_total, free_available),
         ]
 
         total_amount = sum(item.total for item in items)
@@ -476,27 +564,13 @@ class AccountService:
         await AccountService.claim_due_bonus_plans(db, user_id)
 
         # =============计算个人每天免费额度===================
-        usage_service = UsageService(db)
-        free_used = await usage_service.get_user_monthly_free_used(user_id)
-        # 计算今天剩余可用的免费额度
-        free_limit_remaining = max(0, settings.USER_MONTHLY_FREE_TOKEN_LIMIT - free_used)
-        usage_overview = AccountService._build_usage_overview(
-            account=None,
-            free_total=settings.USER_MONTHLY_FREE_TOKEN_LIMIT,
-            free_available=free_limit_remaining,
-        )
-        # ==================== 1. 获取账户 ====================
         account = await UserAccountDAO.get_active_account(db=db, user_id=user_id)
         if not account:
-            # 每日的额度
-            #  自动初始化（推荐）
+            account = await AccountService.init_account(db, user_id)
 
-            return AccountInfoResponse(
-                level=UserLevel.FREE.value,
-                level_name=UserLevel.get_descriptions()[UserLevel.FREE],
-                permanent_balance=0,
-                **usage_overview.model_dump(),
-            )
+        await AccountService.ensure_monthly_free_allowance(db, account)
+        await db.commit()
+        await db.refresh(account)
 
         # ==================== 2. 获取会员配置 ====================
 
@@ -506,8 +580,6 @@ class AccountService:
 
         usage_overview = AccountService._build_usage_overview(
             account=account,
-            free_total=settings.USER_MONTHLY_FREE_TOKEN_LIMIT,
-            free_available=free_limit_remaining,
         )
 
 
@@ -686,6 +758,8 @@ class AccountService:
         else:
             # ==================== 2. 创建账户 ====================
 
+            now = datetime.utcnow()
+            free_allowance = settings.USER_MONTHLY_FREE_TOKEN_LIMIT
             account = UserAccount(
                 user_id=user_id,
                 level_code=UserLevel.FREE.value,  # 默认免费会员
@@ -695,15 +769,22 @@ class AccountService:
                 permanent_balance=0,
                 permanent_total_amount=0,
                 bonus_balance=0,
+                free_balance=free_allowance,
+                free_total_amount=free_allowance,
+                free_last_grant_at=now,
+                redeem_balance=0,
+                redeem_total_amount=0,
                 total_consumed=0,
                 total_amount=0,
                 bonus_total_amount=0,
                 last_reset_at=None,
                 version=0,
-                updated_at=datetime.utcnow()
+                updated_at=now
             )
 
             db.add(account)
+            AccountService._write_free_recharge_log(db, account, free_allowance, now)
             logger.info(f"[账户权益] 创建成功 user_id={user_id}")
 
         return account
+

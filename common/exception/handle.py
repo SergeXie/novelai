@@ -66,7 +66,7 @@ def handle_exception(app: FastAPI):
     @app.exception_handler(ServiceWarning)
     async def service_warning_handler(request: Request, exc: ServiceWarning):
         logger.warning(exc.message)
-        return ResponseUtil.failure(data=exc.data, msg=exc.message)
+        return ResponseUtil.failure_ok(data=exc.data, msg=exc.message)
 
     @app.exception_handler(ServiceWarningSpecial)
     async def service_warning_handler(request: Request, exc: ServiceWarning):

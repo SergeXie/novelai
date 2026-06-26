@@ -31,9 +31,11 @@ class ChargeType(Enum):
     ADJUS = "ADJUS"
 
 class AssetType(Enum):
+    FREE = "FREE"
     MONTHLY = "MONTHLY"
     PERMANENT = "PERMANENT"
     BONUS = "BONUS"
+    REDEEM = "REDEEM"
 
     @classmethod
     def get_descriptions(cls):
