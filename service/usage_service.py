@@ -1,4 +1,4 @@
-from datetime import datetime, time
+﻿from datetime import datetime, time
 from typing import Optional
 
 from dateutil import parser
@@ -18,6 +18,7 @@ from dao.ai_model_dao import AiModelDAO
 from dao.user_account_dao import UserAccountDAO
 from dao.user_dao import UserDAO
 from service.account_service import AccountService
+from service.redeem_code_service import RedeemCodeService
 
 
 class UsageService:
@@ -429,6 +430,13 @@ class UsageService:
             remaining_to_pay -= bonus_deduct
             logger.info("抵扣补给奖励额度")
 
+
+        redeem_deduct = 0
+        if account and account.redeem_balance > 0 and remaining_to_pay > 0:
+            redeem_deduct = await RedeemCodeService.consume_redeem_balance(self.db, account, remaining_to_pay)
+            remaining_to_pay -= redeem_deduct
+            if redeem_deduct > 0:
+                logger.info("抵扣兑换码额度")
         # C. 【再次】抵扣月度额度 (Monthly)
         if account and account.monthly_balance > 0 and remaining_to_pay > 0:
             monthly_deduct = min(account.monthly_balance, remaining_to_pay)
@@ -456,6 +464,7 @@ class UsageService:
                 free_amount=log_entry.freeDeduct,
                 monthly_amount=log_entry.monthlyDeduct,
                 bonus_amount=log_entry.bonusDeduct,
+                redeem_amount=redeem_deduct,
                 permanent_amount=log_entry.permanentDeduct,
             )
 
@@ -466,6 +475,7 @@ class UsageService:
             1 if log_entry.freeDeduct > 0 else 0,
             1 if log_entry.monthlyDeduct > 0 else 0,
             1 if log_entry.bonusDeduct > 0 else 0,
+            1 if redeem_deduct > 0 else 0,
             1 if log_entry.permanentDeduct > 0 else 0
         ])
 
@@ -477,6 +487,8 @@ class UsageService:
             log_entry.consume_source = TokenConsumeSource.MEMBER_MONTHLY
         elif log_entry.bonusDeduct > 0:
             log_entry.consume_source = TokenConsumeSource.BONUS
+        elif redeem_deduct > 0:
+            log_entry.consume_source = TokenConsumeSource.REDEEM
         elif log_entry.permanentDeduct > 0:
             log_entry.consume_source = TokenConsumeSource.PERMANENT
         else:
@@ -496,6 +508,7 @@ class UsageService:
             free_amount: int = 0,
             monthly_amount: int = 0,
             bonus_amount: int = 0,
+            redeem_amount: int = 0,
             permanent_amount: int = 0,
     ):
         # 新增额外流水
@@ -506,16 +519,18 @@ class UsageService:
             free_amount=free_amount,
             monthly_amount=monthly_amount,
             bonus_amount=bonus_amount,
+            redeem_amount=redeem_amount,
             permanent_amount=permanent_amount,
             total_amount=actual_amount,
             balance_snapshot={
                 "free": account.free_balance,
                 "monthly": account.monthly_balance,
                 "bonus": account.bonus_balance,
+                "redeem": account.redeem_balance,
                 "permanent": account.permanent_balance
             }
         )
 
         logger.info(
-            f"[扣费] 成功 user_id={user_id}, free={free_amount}, monthly={monthly_amount}, bonus={bonus_amount}, permanent={permanent_amount}"
+            f"[扣费] 成功 user_id={user_id}, free={free_amount}, bonus={bonus_amount}, redeem={redeem_amount}, monthly={monthly_amount}, permanent={permanent_amount}"
         )

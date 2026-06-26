@@ -94,6 +94,7 @@ async def check_user_quota_or_raise(frozen_token_length: int, user_info: User, l
         user_paid_balance = (
             (account.monthly_balance or 0)
             + (account.bonus_balance or 0)
+            + (account.redeem_balance or 0)
             + (account.permanent_balance or 0)
         ) if account else 0
         user_free_balance = (account.free_balance or 0) if account else 0

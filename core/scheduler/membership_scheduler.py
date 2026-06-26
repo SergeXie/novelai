@@ -8,6 +8,7 @@ from dao.membership_token_grant_plan_dao import MembershipTokenGrantPlanDAO
 from dao.user_account_dao import UserAccountDAO
 from service.account_service import AccountService
 from service.order_service import OrderService
+from service.redeem_code_service import RedeemCodeService
 
 scheduler = AsyncIOScheduler()
 
@@ -194,6 +195,23 @@ async def order_expire_job():
             logger.info(f"[定时任务] 订单过期检查完成，关闭订单数={count}")
 
     logger.info("[定时任务] 订单过期检查结束")
+
+
+@scheduler.scheduled_job("cron", hour=1, minute=20)
+async def redeem_token_expire_job():
+    """
+    Expire redeemed code token balance after its valid_days window.
+    """
+    logger.info("[定时任务] 开始执行兑换码额度过期检查")
+
+    async for db in get_db():
+        count = await RedeemCodeService.expire_redeem_tokens(db, datetime.utcnow())
+        await db.commit()
+
+        if count:
+            logger.info(f"[定时任务] 兑换码额度过期检查完成，作废兑换码数={count}")
+
+    logger.info("[定时任务] 兑换码额度过期检查结束")
 
 
 def start_scheduler():

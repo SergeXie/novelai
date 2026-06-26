@@ -81,6 +81,13 @@ class TokenUsageLog(Base):
         comment="补给奖励额度变动"
     )
 
+    redeem_amount: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="redeem code quota change"
+    )
+
     permanent_amount: Mapped[int] = mapped_column(
         Integer,
         default=0,

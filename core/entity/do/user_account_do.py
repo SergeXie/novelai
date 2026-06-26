@@ -99,6 +99,20 @@ class UserAccount(Base):
         comment="last monthly free token grant time"
     )
 
+    redeem_balance: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment="redeem code token balance"
+    )
+
+    redeem_total_amount: Mapped[int] = mapped_column(
+        BigInteger,
+        default=0,
+        nullable=False,
+        comment="redeem code token total amount"
+    )
+
     total_consumed: Mapped[int] = mapped_column(
         BigInteger,
         default=0,

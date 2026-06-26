@@ -532,12 +532,15 @@ class AccountService:
         bonus_available = account.bonus_balance if account else 0
         free_total = account.free_total_amount if account else 0
         free_available = account.free_balance if account else 0
+        redeem_total = account.redeem_total_amount if account else 0
+        redeem_available = account.redeem_balance if account else 0
 
         items = [
+            AccountService._build_asset_usage_item("free", "基础免费", free_total, free_available),
+            AccountService._build_asset_usage_item("bonus", "补给奖励", bonus_total, bonus_available),
+            AccountService._build_asset_usage_item("redeem", "兑换码额度", redeem_total, redeem_available),
             AccountService._build_asset_usage_item("monthly", "付费额度", monthly_total, monthly_available),
             AccountService._build_asset_usage_item("permanent", "永久额度", permanent_total, permanent_available),
-            AccountService._build_asset_usage_item("bonus", "补给奖励", bonus_total, bonus_available),
-            AccountService._build_asset_usage_item("free", "基础免费", free_total, free_available),
         ]
 
         total_amount = sum(item.total for item in items)
@@ -769,6 +772,8 @@ class AccountService:
                 free_balance=free_allowance,
                 free_total_amount=free_allowance,
                 free_last_grant_at=now,
+                redeem_balance=0,
+                redeem_total_amount=0,
                 total_consumed=0,
                 total_amount=0,
                 bonus_total_amount=0,

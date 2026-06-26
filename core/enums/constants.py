@@ -35,6 +35,7 @@ class AssetType(Enum):
     MONTHLY = "MONTHLY"
     PERMANENT = "PERMANENT"
     BONUS = "BONUS"
+    REDEEM = "REDEEM"
 
     @classmethod
     def get_descriptions(cls):

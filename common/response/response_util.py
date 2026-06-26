@@ -83,6 +83,33 @@ class ResponseUtil:
         return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=jsonable_encoder(result))
 
     @classmethod
+    def failure_ok(
+        cls,
+        msg: str = 'Bad Request',
+        data: Optional[Any] = None,
+        rows: Optional[Any] = None,
+        dict_content: Optional[Dict] = None,
+        model_content: Optional[BaseModel] = None,
+    ) -> Response:
+        """
+        Business failure response with HTTP 200 and body code 400.
+        """
+        result = {'code': status.HTTP_400_BAD_REQUEST, 'msg': msg}
+
+        if data is not None:
+            result['data'] = data
+        if rows is not None:
+            result['rows'] = rows
+        if dict_content is not None:
+            result.update(dict_content)
+        if model_content is not None:
+            result.update(model_content.model_dump())
+
+        result.update({'success': False, 'time': parse_and_format_date()})
+
+        return JSONResponse(status_code=status.HTTP_200_OK, content=jsonable_encoder(result))
+
+    @classmethod
     def special_failure(
             cls,
             msg: str = 'Bad Request',
