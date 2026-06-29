@@ -15,8 +15,7 @@ from core.enums.prompt_sys_var import PromptTopCategory
 from dao.prompt_square_dao import PromptSquareDAO
 from service.content_audit_service import get_content_audit_service
 
-tag_list = ["大纲", "脑洞", "扩写", "金手指", "剧本"]
-
+category_list = ["大纲", "脑洞", "扩写", "金手指", "剧本"]
 
 class PromptSquareService:
 
@@ -39,7 +38,6 @@ class PromptSquareService:
             promptType: str = "public",  # 新增
             title: str | None = None,
             status:UserCustomPromptStatus | None = None,
-            category_filter_field: str = "tags",
             parent_category: str | None = None,
     ):
         """
@@ -56,7 +54,6 @@ class PromptSquareService:
             promptType,
             title,
             status,
-            category_filter_field,
             parent_category
         )
 
@@ -79,15 +76,6 @@ class PromptSquareService:
         return items, total
 
     @staticmethod
-    async def get_public_categories(db: AsyncSession) -> list[str]:
-        """
-        获取公开提示词分类列表
-        """
-        categories = await PromptSquareDAO.get_public_categories(db)
-
-        return categories
-
-    @staticmethod
     async def get_tool_menu_list(db: AsyncSession) -> list[PromptToolMenuItem]:
         rows = await PromptSquareDAO.get_tool_menu_list(db)
         return [PromptToolMenuItem(**dict(row)) for row in rows]
@@ -101,6 +89,10 @@ class PromptSquareService:
     async def get_prompt_list(db: AsyncSession, parent_category: PromptTopCategory = None, category:str = None, tag:str = None):
         rows = await PromptSquareDAO.get_prompt_list_with_filter(db,  parent_category=parent_category, category=category, tag=tag)
         return [PromptTemplateBriefItem(**dict(row)) for row in rows]
+
+    @staticmethod
+    def get_prompt_categories() -> list[str]:
+        return category_list
 
     @staticmethod
     async def create_user_prompt(

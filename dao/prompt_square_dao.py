@@ -19,7 +19,7 @@ class PromptSquareDAO:
                 (PromptSquare.status == 1)
         )
         if category:
-            condition = condition & (PromptSquare.tags == category)
+            condition = condition & (PromptSquare.category == category)
         return condition
 
     @staticmethod
@@ -33,7 +33,6 @@ class PromptSquareDAO:
             promptType: str = "public",
             title: str | None = None,
             status: UserCustomPromptStatus | None = None,
-            category_filter_field: str = "tags",
             parent_category: str | None = None,
     ):
 
@@ -51,10 +50,7 @@ class PromptSquareDAO:
             condition = (PromptSquare.status == filter_status.code)
 
         if category:
-            if category_filter_field == "category":
-                condition = condition & (PromptSquare.category == category)
-            else:
-                condition = condition & (PromptSquare.tags == category)
+            condition = condition & (PromptSquare.category == category)
 
         # ==================== 补充 tag 查询开始 ====================
         if tag and tag.strip():
@@ -190,23 +186,6 @@ class PromptSquareDAO:
         # 4. 执行并返回
         result = await db.execute(stmt)
         return result.mappings().all()
-
-    @staticmethod
-    async def get_public_categories(db: AsyncSession):
-        """
-        查询公开提示词的分类列表，并按分类去重
-        """
-        stmt = (
-            select(PromptSquare.tags)
-            .where(PromptSquareDAO._public_condition()).where(PromptSquare.parent_category == "CREATION")
-            .where(PromptSquare.tags.isnot(None))
-            .where(PromptSquare.tags != "")
-            .group_by(PromptSquare.tags)
-            .order_by(func.max(PromptSquare.created_at).desc())
-        )
-
-        result = await db.execute(stmt)
-        return result.scalars().all()
 
     @staticmethod
     async def create_user_prompt(
@@ -392,7 +371,7 @@ class PromptSquareDAO:
             conditions.append(PromptSquare.title.ilike(f"%{title}%"))
 
         if category:
-            conditions.append(PromptSquare.tags == category)
+            conditions.append(PromptSquare.category == category)
 
         FavorAlias = aliased(UserTemplateFavor)
 

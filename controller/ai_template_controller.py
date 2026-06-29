@@ -79,6 +79,16 @@ async def get_public_private_prompt_list(
     rsp_data = PageResp(list=data, total=total, pageSize=pageSize, page=page)
     return ResponseUtil.success(data=rsp_data)
 
+@aiTemplateController.get("/categories", name="获取提示词分类")
+async def get_public_prompt_categories(
+        db: AsyncSession = Depends(get_db)
+):
+    """
+    获取提示词广场分类列表，按 category 去重
+    """
+    data = PromptSquareService.get_prompt_categories()
+    return ResponseUtil.success(data=data)
+
 
 @aiTemplateController.get("/publicCategories", name="获取提示词分类")
 async def get_public_prompt_categories(
