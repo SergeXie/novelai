@@ -46,6 +46,12 @@ class McMenu(Base):
         comment="上下架状态(1:显示/上架, 0:隐藏/下架)",
     )
 
+    interaction_type: Mapped[int] = mapped_column(
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment="交互类型(1: 续写、扩写、润色、去AI味、审稿, 2: 写作)")
+
     create_time: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
