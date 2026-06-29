@@ -15,7 +15,7 @@ from core.enums.prompt_sys_var import PromptTopCategory
 from dao.prompt_square_dao import PromptSquareDAO
 from service.content_audit_service import get_content_audit_service
 
-category_list = ["大纲", "脑洞", "扩写", "金手指", "剧本"]
+category_list = ["大纲", "脑洞", "扩写", "金手指", "写作"]
 
 class PromptSquareService:
 
