@@ -7,7 +7,7 @@ from common.utils.generator import LZSDGenerator
 from core.entity.do.prompt_square_do import PromptSquare, UserTemplateFavor
 from core.entity.vo.prompt_square_vo import PromptSquareCreateReq, PromptSquareUpdateReq
 from core.enums.constants import UserCustomPromptStatus
-from core.enums.prompt_sys_var import PromptEngineType
+from core.enums.prompt_sys_var import PromptEngineType, PromptTopCategory
 
 
 class PromptSquareDAO:
@@ -28,10 +28,11 @@ class PromptSquareDAO:
             page: int,
             pageSize: int,
             category: str | None = None,
+            tag: str | None = None,
             user_id: int | None = None,
-            promptType:str = "public",
+            promptType: str = "public",
             title: str | None = None,
-            status:UserCustomPromptStatus | None = None,
+            status: UserCustomPromptStatus | None = None,
             category_filter_field: str = "tags",
             parent_category: str | None = None,
     ):
@@ -54,6 +55,14 @@ class PromptSquareDAO:
                 condition = condition & (PromptSquare.category == category)
             else:
                 condition = condition & (PromptSquare.tags == category)
+
+        # ==================== 补充 tag 查询开始 ====================
+        if tag and tag.strip():
+            # 构造形如 "%,tag,%" 的匹配字符串，精准匹配逗号分隔的标签
+            like_filter = f"%,{tag.strip()},%"
+            # 使用 func.concat 前后补逗号，规避边界匹配漏洞（如 "AI" 错配到 "AIGC"）
+            condition = condition & (func.concat(',', PromptSquare.tags, ',').like(like_filter))
+        # ==================== 补充 tag 查询结束 ====================
 
         if title:
             condition = condition & (PromptSquare.title.ilike(f"%{title}%"))
@@ -141,6 +150,48 @@ class PromptSquareDAO:
         return result.mappings().all()
 
     @staticmethod
+    async def get_prompt_list_with_filter(
+            db: AsyncSession,
+            parent_category: PromptTopCategory = None,
+            category: str = None,
+            tag: str = None
+    ):
+        # 1. 基础查询语句
+        stmt = select(
+            PromptSquare.template_key,
+            PromptSquare.title,
+            PromptSquare.description,
+        )
+
+        # 2. 动态构建 where 条件列表
+        conditions = [
+            # 默认基础条件：状态必须是可用
+            PromptSquare.status == UserCustomPromptStatus.AVAILABLE.code
+        ]
+
+        # 当 parent_category 不为 None 时拼接条件
+        if parent_category is not None:
+            conditions.append(PromptSquare.parent_category == parent_category.code)
+
+        # 当 category 不为 None 且不为空字符串时拼接条件
+        if category and category.strip():
+            # 假设数据库里有 category 字段，这里补上对应的逻辑
+            conditions.append(PromptSquare.category == category)
+
+        # 当 tag 不为 None 且不为空字符串时拼接条件
+        if tag and tag.strip():
+            # 补全模糊匹配的 % 通配符，精准匹配逗号分隔的标签
+            like_filter = f"%,{tag.strip()},%"
+            conditions.append(func.concat(',', PromptSquare.tags, ',').like(like_filter))
+
+        # 3. 将条件解包传给 where
+        stmt = stmt.where(*conditions).order_by(PromptSquare.created_at.desc())
+
+        # 4. 执行并返回
+        result = await db.execute(stmt)
+        return result.mappings().all()
+
+    @staticmethod
     async def get_public_categories(db: AsyncSession):
         """
         查询公开提示词的分类列表，并按分类去重
@@ -161,10 +212,10 @@ class PromptSquareDAO:
     async def create_user_prompt(
             db: AsyncSession,
             user_id: int,
-            title:str,
+            title: str,
             category: str,
-            description:str,
-            content:str,
+            description: str,
+            content: str,
     ) -> PromptSquare:
 
         prompt = PromptSquare(
@@ -255,6 +306,7 @@ class PromptSquareDAO:
         row = result.first()
 
         return row  # 👈 注意这里不再是 prompt，而是 tuple
+
     @staticmethod
     async def update_user_prompt(
             db: AsyncSession,
@@ -298,7 +350,6 @@ class PromptSquareDAO:
         # await db.commit()
         return result.rowcount > 0
 
-
     @staticmethod
     async def delete(
             db: AsyncSession,
@@ -328,8 +379,8 @@ class PromptSquareDAO:
             user_id: int,
             page: int,
             page_size: int,
-            title:str,
-            category:str
+            title: str,
+            category: str
     ):
         """
         查询我的收藏（带收藏数）
@@ -342,7 +393,6 @@ class PromptSquareDAO:
 
         if category:
             conditions.append(PromptSquare.tags == category)
-
 
         FavorAlias = aliased(UserTemplateFavor)
 
@@ -412,4 +462,3 @@ class PromptSquareDAO:
 
         await db.execute(stmt)
         await db.commit()
-

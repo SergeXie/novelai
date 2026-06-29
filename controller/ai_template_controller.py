@@ -9,6 +9,7 @@ from common.response.response_util import ResponseUtil
 from core.deps.auth import get_current_user, check_user_quota_or_raise, check_book_owner
 from core.entity.vo.base_vo import PageResp
 from core.entity.vo.prompt_square_vo import PromptSquareDetailReq, PromptSquareUpdateReq, PromptSquareCreateReq
+from core.enums.prompt_sys_var import PromptTopCategory
 from service.ai_service import AIService
 from service.menu_service import MenuService
 from service.prompt_square_service import PromptSquareService
@@ -54,6 +55,7 @@ async def get_public_private_prompt_list(
         page: int = Query(1, ge=1),
         pageSize: int = Query(10, le=50),
         category: Optional[str] = Query(None),
+        tag: Optional[str] = Query(None),
         promptType: str = Query("public"),
         title: Optional[str] = Query(None),  # 新增
         db: AsyncSession = Depends(get_db),
@@ -64,14 +66,15 @@ async def get_public_private_prompt_list(
     """
 
     data, total = await PromptSquareService.get_public_list(
-        db,
-        page,
-        pageSize,
-        category,
-        user.pkId,
-        promptType,
-        title,
-        parent_category="CREATION",
+        db=db,
+        page=page,
+        pageSize=pageSize,
+        category=category,
+        tag=tag,
+        user_id=user.pkId,
+        promptType=promptType,
+        title=title,
+        parent_category=PromptTopCategory.CREATION.code,
     )
     rsp_data = PageResp(list=data, total=total, pageSize=pageSize, page=page)
     return ResponseUtil.success(data=rsp_data)
@@ -94,12 +97,18 @@ async def get_creation_categories(db: AsyncSession = Depends(get_db)):
     return ResponseUtil.success(data=data)
 
 
+@aiTemplateController.get("/creationMenus", name="协同创作工具菜单")
+async def get_creation_categories(db: AsyncSession = Depends(get_db)):
+    data = await MenuService.list_creation_categories(db)
+    return ResponseUtil.success(data=data)
+
+
 @aiTemplateController.get("/promtListByCategory", name="根据协同创作分类获取提示词模板")
 async def get_prompt_list_by_category(
         category: str = Query(..., description="协同创作分类key"),
         db: AsyncSession = Depends(get_db),
 ):
-    data = await PromptSquareService.get_prompt_list_by_category(db, category)
+    data = await PromptSquareService.get_prompt_list(db, category=category, parent_category=PromptTopCategory.CREATION)
     return ResponseUtil.success(data=data)
 
 

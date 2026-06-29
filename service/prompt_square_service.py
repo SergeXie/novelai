@@ -2,24 +2,17 @@
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ai.adapters.enums import AIAction
-from common.config.get_db import get_db, get_db_context
-from common.exception.errors import NotFoundError, ServerError
-from common.exception.lzsd_exception import SensitiveWordException, BusinessException
-from common.modules.book_exporter import BookExporter
+from common.config.get_db import get_db_context
+from common.exception.lzsd_exception import BusinessException
 from core.entity.do.prompt_square_do import PromptSquare
-from core.entity.do.users_do import User
 from core.entity.vo.prompt_square_vo import (
     PromptItem,
     PromptSquareUpdateReq, PromptItemDetail, PromptDetailResp, PromptListItemResp,
     PromptTemplateBriefItem, PromptToolMenuItem,
 )
 from core.enums.constants import UserCustomPromptStatus
-from core.enums.prompt_sys_var import PromptEngineType
+from core.enums.prompt_sys_var import PromptTopCategory
 from dao.prompt_square_dao import PromptSquareDAO
-from service.ai_prompt_service import PromptService
-from service.ai_service import AIService
-from service.book_service import BookService
 from service.content_audit_service import get_content_audit_service
 
 tag_list = ["大纲", "脑洞", "扩写", "金手指", "剧本"]
@@ -41,6 +34,7 @@ class PromptSquareService:
             page: int,
             pageSize: int,
             category: str | None = None,
+            tag: str | None = None,
             user_id: int = None,
             promptType: str = "public",  # 新增
             title: str | None = None,
@@ -57,6 +51,7 @@ class PromptSquareService:
             page,
             pageSize,
             category,
+            tag,
             user_id,
             promptType,
             title,
@@ -100,6 +95,11 @@ class PromptSquareService:
     @staticmethod
     async def get_prompt_list_by_category(db: AsyncSession, category: str) -> list[PromptTemplateBriefItem]:
         rows = await PromptSquareDAO.get_prompt_list_by_category(db, category)
+        return [PromptTemplateBriefItem(**dict(row)) for row in rows]
+
+    @staticmethod
+    async def get_prompt_list(db: AsyncSession, parent_category: PromptTopCategory = None, category:str = None, tag:str = None):
+        rows = await PromptSquareDAO.get_prompt_list_with_filter(db,  parent_category=parent_category, category=category, tag=tag)
         return [PromptTemplateBriefItem(**dict(row)) for row in rows]
 
     @staticmethod

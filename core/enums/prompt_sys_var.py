@@ -35,3 +35,17 @@ class PromptEngineType(str, Enum):
         except ValueError:
             # 转换失败则返回默认值
             return cls.JINJA2
+
+class PromptTopCategory(str, Enum):
+    """系统顶级分类枚举"""
+    CREATION = ("CREATION", "创作类")
+    SCENARIO = ("SCENARIO", "专项类")
+    UTILITY = ("UTILITY", "快捷工具")
+
+    def __new__(cls, code: str, label: str):
+        # 继承 str 时，需要用 __new__ 来正确初始化枚举的值
+        obj = str.__new__(cls, code)
+        obj._value_ = code
+        obj.code = code
+        obj.label = label
+        return obj
