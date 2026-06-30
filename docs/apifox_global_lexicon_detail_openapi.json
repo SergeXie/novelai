@@ -1,0 +1,105 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "公共词条库详情接口",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "/novelAI"
+    }
+  ],
+  "tags": [
+    {
+      "name": "公共词条库"
+    }
+  ],
+  "paths": {
+    "/lexicon/detail": {
+      "get": {
+        "tags": ["公共词条库"],
+        "summary": "公共词条库详情",
+        "description": "用于编辑前回显。只能查看当前用户自己创建的词条，或者全平台公开词条。",
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "description": "词条ID",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "example": 1
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseGlobalLexiconItem"
+                },
+                "example": {
+                  "code": 200,
+                  "msg": "Success",
+                  "data": {
+                    "id": 1,
+                    "userId": 42,
+                    "title": "翻天印",
+                    "lexiconType": 4,
+                    "content": "上古法宝，威力极强。",
+                    "data": {
+                      "aliases": ["番天印"],
+                      "level": "神器"
+                    },
+                    "shareLevel": 0,
+                    "createTime": "2026-06-30 18:00:00"
+                  },
+                  "success": true,
+                  "time": "2026-06-30 18:00:00"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "GlobalLexiconItem": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer", "description": "词条ID"},
+          "userId": {"type": "integer", "description": "创建者用户ID"},
+          "title": {"type": "string", "description": "词条名称"},
+          "lexiconType": {"type": "integer", "description": "词条类型：1角色，2世界观，3功法，4道具"},
+          "content": {"type": "string", "nullable": true, "description": "详细设定描述"},
+          "data": {"type": "object", "nullable": true, "description": "扩展数据，例如别名、属性"},
+          "shareLevel": {"type": "integer", "description": "共享等级：0私有，1系列可见，2全平台公开"},
+          "createTime": {"type": "string", "nullable": true, "example": "2026-06-30 18:00:00", "description": "创建时间"}
+        }
+      },
+      "ApiResponseGlobalLexiconItem": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer", "example": 200},
+          "msg": {"type": "string", "example": "Success"},
+          "data": {"$ref": "#/components/schemas/GlobalLexiconItem"},
+          "success": {"type": "boolean", "example": true},
+          "time": {"type": "string", "example": "2026-06-30 18:00:00"}
+        }
+      }
+    }
+  }
+}

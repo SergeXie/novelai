@@ -1,0 +1,158 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "公共词条库列表接口",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "/novelAI"
+    }
+  ],
+  "tags": [
+    {
+      "name": "公共词条库"
+    }
+  ],
+  "paths": {
+    "/lexicon/list": {
+      "get": {
+        "tags": ["公共词条库"],
+        "summary": "公共词条库列表",
+        "description": "支持按词条类型、标题关键字、列表范围筛选。scope=public 查询广场公开，scope=mine 查询我的发布；不传 scope 时返回我的发布和广场公开。",
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码",
+            "schema": {"type": "integer", "default": 1, "minimum": 1},
+            "example": 1
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "每页数量",
+            "schema": {"type": "integer", "default": 20, "minimum": 1, "maximum": 100},
+            "example": 20
+          },
+          {
+            "name": "lexiconType",
+            "in": "query",
+            "description": "词条类型：1角色，2世界观，3功法，4道具",
+            "schema": {"type": "integer", "minimum": 1, "maximum": 4},
+            "example": 1
+          },
+          {
+            "name": "title",
+            "in": "query",
+            "description": "词条名称关键字，模糊搜索",
+            "schema": {"type": "string"},
+            "example": "翻天印"
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "description": "词条名称关键字兼容参数；title 优先",
+            "schema": {"type": "string"},
+            "example": "翻天印"
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "description": "列表范围：public=广场公开，mine=我的发布；不传为我的发布+广场公开",
+            "schema": {
+              "type": "string",
+              "enum": ["public", "mine"]
+            },
+            "example": "public"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseGlobalLexiconPage"
+                },
+                "example": {
+                  "code": 200,
+                  "msg": "Success",
+                  "data": {
+                    "list": [
+                      {
+                        "id": 1,
+                        "userId": 42,
+                        "title": "翻天印",
+                        "lexiconType": 4,
+                        "content": "上古法宝，威力极强。",
+                        "data": {
+                          "aliases": ["番天印"],
+                          "level": "神器"
+                        },
+                        "shareLevel": 2,
+                        "createTime": "2026-06-30 18:00:00"
+                      }
+                    ],
+                    "total": 1,
+                    "page": 1,
+                    "pageSize": 20
+                  },
+                  "success": true,
+                  "time": "2026-06-30 18:00:00"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "GlobalLexiconItem": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "integer", "description": "词条ID"},
+          "userId": {"type": "integer", "description": "创建者用户ID"},
+          "title": {"type": "string", "description": "词条名称"},
+          "lexiconType": {"type": "integer", "description": "词条类型：1角色，2世界观，3功法，4道具"},
+          "content": {"type": "string", "nullable": true, "description": "详细设定描述"},
+          "data": {"type": "object", "nullable": true, "description": "扩展数据，例如别名、属性"},
+          "shareLevel": {"type": "integer", "description": "共享等级：0私有，1系列可见，2全平台公开"},
+          "createTime": {"type": "string", "nullable": true, "example": "2026-06-30 18:00:00", "description": "创建时间"}
+        }
+      },
+      "GlobalLexiconPage": {
+        "type": "object",
+        "properties": {
+          "list": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/GlobalLexiconItem"}
+          },
+          "total": {"type": "integer"},
+          "page": {"type": "integer"},
+          "pageSize": {"type": "integer"}
+        }
+      },
+      "ApiResponseGlobalLexiconPage": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer", "example": 200},
+          "msg": {"type": "string", "example": "Success"},
+          "data": {"$ref": "#/components/schemas/GlobalLexiconPage"},
+          "success": {"type": "boolean", "example": true},
+          "time": {"type": "string", "example": "2026-06-30 18:00:00"}
+        }
+      }
+    }
+  }
+}

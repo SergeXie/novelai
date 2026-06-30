@@ -1,0 +1,89 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "公共词条库删除接口",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "/novelAI"
+    }
+  ],
+  "tags": [
+    {
+      "name": "公共词条库"
+    }
+  ],
+  "paths": {
+    "/lexicon/delete": {
+      "post": {
+        "tags": ["公共词条库"],
+        "summary": "删除公共词条库",
+        "description": "只允许删除当前登录用户自己创建的词条。",
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GlobalLexiconDeleteReq"
+              },
+              "example": {
+                "id": 1
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseSuccess"
+                },
+                "example": {
+                  "code": 200,
+                  "msg": "Success",
+                  "success": true,
+                  "time": "2026-06-30 18:00:00"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "GlobalLexiconDeleteReq": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "词条ID"
+          }
+        }
+      },
+      "ApiResponseSuccess": {
+        "type": "object",
+        "properties": {
+          "code": {"type": "integer", "example": 200},
+          "msg": {"type": "string", "example": "Success"},
+          "success": {"type": "boolean", "example": true},
+          "time": {"type": "string", "example": "2026-06-30 18:00:00"}
+        }
+      }
+    }
+  }
+}
