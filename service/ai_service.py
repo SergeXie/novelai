@@ -90,10 +90,10 @@ class AIService:
 
     async def list_models(self, only_enabled: bool = True):
         """
-        获取模型列表
+        实时获取模型列表，确保 /engineList 返回数据库最新配置。
         """
         aimodel_dao = AiModelDAO(self.db)
-        return await aimodel_dao.list_models_with_cache(
+        return await aimodel_dao.list_models(
             only_enabled=only_enabled,
         )
 
