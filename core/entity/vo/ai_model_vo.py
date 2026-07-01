@@ -89,11 +89,15 @@ class AIGenerateLogDetailResp(AIGenerateLogResp):
     originPrompt: str
 
     @staticmethod
-    def _format_detail_output(action_type: str, output_content: str | None) -> str:
+    def _format_detail_output(
+            action_type: str,
+            output_content: str | None,
+            template_key: str | None = None,
+    ) -> str:
         action = (action_type or "").lower()
         if action in {"workflow", "workflow_step"}:
             return "格式化生成内容"
-        if action == "execute":
+        if action == "execute" and (template_key or "").lower() in {"role", "universe"}:
             return "模版化生成内容"
         return output_content or ""
 
@@ -105,7 +109,7 @@ class AIGenerateLogDetailResp(AIGenerateLogResp):
         # 补全详情特有字段
         data.update({
             "totalTokens": int((log.actualAmount or 0) * (log.multiplier or 1)),
-            "outputContent": cls._format_detail_output(log.actionType, log.outputContent),
+            "outputContent": cls._format_detail_output(log.actionType, log.outputContent, log.template_key),
             "originPrompt": log.originPrompt or ""
         })
 

@@ -115,6 +115,7 @@ class UsageService:
             temperature: float,
             output_content: str,
             node_ids : list = None,
+            template_key: str | None = None,
             action_type: AIAction = AIAction.Generate,
             status=AIGenerateStatus.PENDING,
             promptTokens:int = 0,
@@ -150,6 +151,7 @@ class UsageService:
             requestId=request_id,
             bid=bid,
             node_ids=node_ids,
+            template_key=template_key,
             originPrompt=origin_prompt,
             multiplier=ai_model_multiplier,
             # 输入信息

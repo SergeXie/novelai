@@ -58,6 +58,12 @@ class AiNovelGenerateLog(Base):
         comment="关联的节点ID数组"
     )
 
+    template_key: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        nullable=True,
+        comment="提示词模板唯一标识"
+    )
+
     # ========= 输入(Input) =========
     userPrompt: Mapped[str] = mapped_column(
         Text,

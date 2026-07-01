@@ -120,6 +120,7 @@ class AIService:
             system_prompt: str | None = None,
             enable_web_search: bool = False,
             correlation=None,
+            template_key: str | None = None,
             background_tasks=None,
     ) -> tuple[str, None] | tuple[str, AICompletionResponse | None]:
         await check_user_quota_or_raise(frozen_token_length=tokenEstimate, user_info=user, level=level)
@@ -156,6 +157,7 @@ class AIService:
             request_id=request_id,
             level=level,
             node_ids=correlation,
+            template_key=template_key,
             bid=bid or "",
             origin_prompt=origin_prompt,
             system_prompt=final_system_prompt,
@@ -298,7 +300,7 @@ class AIService:
             origin_prompt_parts.append(f"【提示词】{user_prompt}")
         origin_prompt = " ".join(origin_prompt_parts)
 
-        log_correlation = list(correlation) if correlation is not None else ([template_key] if template_key else [])
+        log_correlation = list(correlation) if correlation is not None else []
         log_correlation.extend(lexicon_correlation)
         print("log_correlation:{}".format(log_correlation))
         # 6. 持久化请求日志并激活异步任务网关
@@ -311,6 +313,7 @@ class AIService:
             action_type=action_type,
             temperature=temperature or 0.7,
             correlation=log_correlation,
+            template_key=template_key,
             max_tokens=max_tokens,
             tokenEstimate=frozen_tokens,
             background_tasks=background_tasks
