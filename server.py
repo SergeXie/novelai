@@ -13,6 +13,7 @@ from controller.ai_image_controller import aiImageController
 from controller.novel_wizard_controller import novelWizardController
 from controller.ai_template_controller import aiTemplateController
 from controller.book_controller import bookController
+from controller.lexicon_controller import lexiconController
 from controller.login_controller import loginController
 from controller.product_controller import productRouter
 from controller.ai_prompt_controller import promptController
@@ -94,6 +95,7 @@ def register_router(app: FastAPI):
     """
     controller_list = [
         {'router': loginController, 'tags': ['登录接口']},
+        {'router': lexiconController, 'tags': ['公共词条库']},
         {'router': aiController, 'tags': ['AI']},
         {'router': aiImageController, 'tags': ['AI文生图']},
         {'router': promptController, 'tags': ['提示词']},
