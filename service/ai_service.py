@@ -21,6 +21,7 @@ from core.entity.vo.ai_response import AICompletionResponse
 from core.enums.prompt_sys_var import PromptEngineType
 from dao.ai_log_dao import AILogDAO
 from dao.ai_model_dao import AiModelDAO
+from dao.global_lexicon_dao import GlobalLexiconDAO
 from dao.prompt_square_dao import PromptSquareDAO
 from service.ai_prompt_service import PromptService
 from service.book_service import BookService
@@ -204,6 +205,7 @@ class AIService:
             bid: Optional[str] = None,
             user_prompt: str = None,
             correlation: Optional[List[Any]] = None,
+            lexicon_ids: Optional[List[int]] = None,
             background_tasks: Optional[BackgroundTasks] = None
     ) -> str:
         """
@@ -268,16 +270,37 @@ class AIService:
                     ids=correlation,
                 )
 
-        # 4. 最终核心全文本组装（清洗空文本段落，按换行合并）
-        final_user_prompt = "\n".join(filter(None, [book_context_prompt, template_prompt, user_prompt]))
+        # 词条是独立上下文，不参与书籍节点查询；仅允许使用自己的或全平台公开的词条。
+        lexicon_context_prompt = ""
+        lexicon_correlation = []
+        if lexicon_ids:
+            unique_lexicon_ids = list(dict.fromkeys(lexicon_ids))
+            lexicons = await GlobalLexiconDAO.get_visible_lexicons(
+                db=db,
+                lexicon_ids=unique_lexicon_ids,
+                user_id=user.pkId,
+            )
+            if len(lexicons) != len(unique_lexicon_ids):
+                raise ServiceWarning("存在无效或无权限查看的词条")
 
+            lexicon_parts = [
+                f"{item.title}\n{item.content or ''}".rstrip()
+                for item in lexicons
+            ]
+            lexicon_context_prompt = "\n# 公共词条\n" + "\n\n".join(lexicon_parts)
+            lexicon_correlation = [item.id for item in lexicons]
+            frozen_tokens += int(len(lexicon_context_prompt) * 1.5)
+
+        # 4. 最终核心全文本组装（清洗空文本段落，按换行合并）
+        final_user_prompt = "\n".join(filter(None, [book_context_prompt, lexicon_context_prompt, template_prompt, user_prompt]))
         # 5. 组装最终追溯用的标记
         if user_prompt:
             origin_prompt_parts.append(f"【提示词】{user_prompt}")
         origin_prompt = " ".join(origin_prompt_parts)
 
-        log_correlation = correlation if correlation is not None else [template_key]
-
+        log_correlation = list(correlation) if correlation is not None else ([template_key] if template_key else [])
+        log_correlation.extend(lexicon_correlation)
+        print("log_correlation:{}".format(log_correlation))
         # 6. 持久化请求日志并激活异步任务网关
         request_id, _ = await self.prepare_and_record_request(
             user=user,

@@ -26,6 +26,7 @@ async def execute(
         bid: Optional[str] = Body(None),
         inputs: Optional[dict] = Body(None),
         correlation: Optional[list] = Body(None),
+        lexiconIds: Optional[list[int]] = Body(None, description="关联的公共词条ID列表"),
         temperature: Optional[float] = Body(None),
         maxTokens: Optional[int] = Body(None),
         user=Depends(get_current_user),
@@ -43,6 +44,7 @@ async def execute(
                                           bid=bid,
                                           user_prompt=userPrompt,
                                           correlation=correlation,
+                                          lexicon_ids=lexiconIds,
                                           template_key=templateKey,
                                           inputs=inputs,
                                           background_tasks=background_tasks)

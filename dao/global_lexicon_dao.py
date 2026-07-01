@@ -34,6 +34,23 @@ class GlobalLexiconDAO:
         return result.scalar_one_or_none()
 
     @staticmethod
+    async def get_visible_lexicons(
+            db: AsyncSession,
+            lexicon_ids: list[int],
+            user_id: int,
+    ) -> list[McGlobalLexicon]:
+        stmt = select(McGlobalLexicon).where(
+            McGlobalLexicon.id.in_(lexicon_ids),
+            or_(
+                McGlobalLexicon.user_id == user_id,
+                McGlobalLexicon.share_level == 2,
+            ),
+        )
+        result = await db.execute(stmt)
+        lexicon_map = {item.id: item for item in result.scalars().all()}
+        return [lexicon_map[item_id] for item_id in lexicon_ids if item_id in lexicon_map]
+
+    @staticmethod
     async def delete(db: AsyncSession, lexicon: McGlobalLexicon) -> None:
         await db.delete(lexicon)
         await db.flush()
