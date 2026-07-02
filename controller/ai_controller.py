@@ -5,12 +5,11 @@ from common.config.config import settings
 from common.config.get_db import get_db
 from common.exception.errors import NotFoundError
 from common.response.response_util import ResponseUtil
-from core.deps.auth import get_current_user, check_book_owner, check_user_quota_or_raise
+from core.deps.auth import get_current_user, check_book_owner
 from core.entity.req.ai_execute_req import AIExecuteReq
 from core.entity.schemas import GenerateRequest
 from core.entity.vo.ai_model_vo import AiModelResp, DeleteHistoryReq
 from dao.ai_model_dao import AiModelDAO
-from service.ai_prompt_service import PromptService
 from service.ai_service import AIService
 from service.usage_service import UsageService
 
@@ -43,6 +42,34 @@ async def refresh_model_config_cache(
     await AiModelDAO(db).refresh_models_cache()
     return ResponseUtil.success(data={}, msg="模型配置缓存刷新成功")
 
+
+@aiController.post("/generate", summary="根据设定生成小说片段")
+async def generate(
+        req: GenerateRequest,
+        background_tasks: BackgroundTasks,
+        db=Depends(get_db),
+        user=Depends(get_current_user),
+):
+    """
+    根据设定生成小说片段（输入 / 输出全量留痕）
+    """
+
+
+    if req.bid:
+        await check_book_owner(bid=req.bid, db=db, user=user)
+
+    user_prompt = req.user_prompt
+    if not user_prompt or not user_prompt.strip():
+        raise ResponseUtil.error(msg="自定义提示词内容不能为空")
+
+    ai_service = AIService(db=db)
+    request_id = await ai_service.execute(db=db, user=user, action_type=AIAction.Generate, level=req.level,
+                                          temperature=req.temperature,
+                                          max_tokens=req.max_tokens, bid=req.bid, user_prompt=req.user_prompt,
+                                          background_tasks=background_tasks)
+
+    # 5. 立即返回 requestId 供前端轮询
+    return ResponseUtil.success(data={"requestId": request_id})
 
 @aiController.get("/poll")
 async def poll(requestId: str, db=Depends(get_db), user=Depends(get_current_user)):
@@ -123,31 +150,3 @@ async def get_log_detail(requestId: str, db=Depends(get_db), _=Depends(get_curre
 
     return ResponseUtil.success(data=rsp)
 
-
-@aiController.post("/generate", summary="根据设定生成小说片段")
-async def generate(
-        req: GenerateRequest,
-        background_tasks: BackgroundTasks,
-        db=Depends(get_db),
-        user=Depends(get_current_user),
-):
-    """
-    根据设定生成小说片段（输入 / 输出全量留痕）
-    """
-
-
-    if req.bid:
-        await check_book_owner(bid=req.bid, db=db, user=user)
-
-    user_prompt = req.user_prompt
-    if not user_prompt or not user_prompt.strip():
-        raise ResponseUtil.error(msg="自定义提示词内容不能为空")
-
-    ai_service = AIService(db=db)
-    request_id = await ai_service.execute(db=db, user=user, action_type=AIAction.Generate, level=req.level,
-                                          temperature=req.temperature,
-                                          max_tokens=req.max_tokens, bid=req.bid, user_prompt=req.user_prompt,
-                                          background_tasks=background_tasks)
-
-    # 5. 立即返回 requestId 供前端轮询
-    return ResponseUtil.success(data={"requestId": request_id})

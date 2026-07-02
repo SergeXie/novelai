@@ -20,6 +20,7 @@ from controller.ai_prompt_controller import promptController
 from controller.pv_controller import Pvrouter
 from controller.template_controller import templateController
 from controller.user_controller import userController
+from controller.model_test_controller import modelTestController
 from core.scheduler.membership_scheduler import start_scheduler, shutdown_scheduler
 from dao.ai_model_dao import AiModelDAO
 
@@ -108,6 +109,7 @@ def register_router(app: FastAPI):
         {'router': aiChatController, 'tags': ['AI聊天']},
         {'router': novelWizardController, 'tags': ['小说向导']},
         {'router': Pvrouter, 'tags': ['PV统计']},
+        {'router': modelTestController, 'tags': ['模型连通性测试']},
     ]
 
     for controller in controller_list:
