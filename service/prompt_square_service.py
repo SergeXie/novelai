@@ -104,7 +104,7 @@ class PromptSquareService:
             content: str,
             background_tasks: BackgroundTasks
     ) -> PromptItem:
-        if category not in tag_list:
+        if category not in category_list:
             raise BusinessException(message="分类不存在")
 
         prompt = await PromptSquareDAO.create_user_prompt(db=db, user_id=user_id, title=title, category=category,
