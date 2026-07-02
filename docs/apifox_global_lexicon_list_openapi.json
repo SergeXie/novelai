@@ -19,21 +19,21 @@
       "get": {
         "tags": ["公共词条库"],
         "summary": "公共词条库列表",
-        "description": "支持按词条类型、标题关键字、列表范围筛选。scope=public 查询广场公开，scope=mine 查询我的发布；不传 scope 时返回我的发布和广场公开。",
+        "description": "支持按词条类型、标题关键字、列表范围筛选。page 和 pageSize 都不传时返回全部；任意传一个则启用分页。scope=public 查询广场公开，scope=mine 查询我的发布；不传 scope 时返回我的发布和广场公开。",
         "security": [{"bearerAuth": []}],
         "parameters": [
           {
             "name": "page",
             "in": "query",
-            "description": "页码",
-            "schema": {"type": "integer", "default": 1, "minimum": 1},
+            "description": "可选页码；与 pageSize 都不传时返回全部",
+            "schema": {"type": "integer", "minimum": 1},
             "example": 1
           },
           {
             "name": "pageSize",
             "in": "query",
-            "description": "每页数量",
-            "schema": {"type": "integer", "default": 20, "minimum": 1, "maximum": 100},
+            "description": "可选每页数量；与 page 都不传时返回全部",
+            "schema": {"type": "integer", "minimum": 1, "maximum": 100},
             "example": 20
           },
           {

@@ -98,8 +98,8 @@ class GlobalLexiconService:
     async def list_lexicons(
             db: AsyncSession,
             user_id: int,
-            page: int,
-            page_size: int,
+            page: int | None,
+            page_size: int | None,
             lexicon_type: int | None = None,
             title: str | None = None,
             scope: str | None = None,

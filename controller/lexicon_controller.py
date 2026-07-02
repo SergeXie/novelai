@@ -24,8 +24,8 @@ async def create_global_lexicon(
 
 @lexiconController.get("/list", name="公共词条库列表")
 async def list_global_lexicons(
-        page: int = Query(1, ge=1),
-        pageSize: int = Query(20, ge=1, le=100),
+        page: int | None = Query(None, ge=1),
+        pageSize: int | None = Query(None, ge=1, le=100),
         lexiconType: int | None = Query(None, ge=1, le=4),
         title: str | None = Query(None, description="词条名称关键字"),
         keyword: str | None = Query(None, description="词条名称关键字兼容参数"),
@@ -34,16 +34,20 @@ async def list_global_lexicons(
         user=Depends(get_current_user),
 ):
     search_title = title if title is not None else keyword
+    pagination_enabled = page is not None or pageSize is not None
+    query_page = page or 1
+    query_page_size = pageSize or 20
     rows, total = await GlobalLexiconService.list_lexicons(
         db=db,
         user_id=user.pkId,
-        page=page,
-        page_size=pageSize,
+        page=query_page if pagination_enabled else None,
+        page_size=query_page_size if pagination_enabled else None,
         lexicon_type=lexiconType,
         title=search_title,
         scope=scope,
     )
-    return ResponseUtil.success(data=PageResp(list=rows, total=total, page=page, pageSize=pageSize))
+    response_page_size = query_page_size if pagination_enabled else total
+    return ResponseUtil.success(data=PageResp(list=rows, total=total, page=query_page, pageSize=response_page_size))
 
 
 @lexiconController.get("/detail", name="公共词条库详情")

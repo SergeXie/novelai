@@ -59,8 +59,8 @@ class GlobalLexiconDAO:
     async def list_page(
             db: AsyncSession,
             user_id: int,
-            page: int,
-            page_size: int,
+            page: int | None,
+            page_size: int | None,
             lexicon_type: int | None = None,
             title: str | None = None,
             scope: str | None = None,
@@ -88,8 +88,9 @@ class GlobalLexiconDAO:
             select(McGlobalLexicon)
             .where(*conditions)
             .order_by(McGlobalLexicon.create_time.desc(), McGlobalLexicon.id.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
         )
+        if page is not None and page_size is not None:
+            stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+
         result = await db.execute(stmt)
         return list(result.scalars().all()), total
