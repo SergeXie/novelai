@@ -54,7 +54,10 @@ class DoubaoPlusAdapter(OpenAIBaseAdapter):
 
             final_user_prompt = user_prompt
             if max_tokens:
-                final_user_prompt = f"{user_prompt}\n字数限制为{max_tokens}"
+                range_offset = 300 if max_tokens >= 2000 else 200
+                min_tokens = max_tokens - range_offset
+                max_tokens_range = max_tokens + range_offset
+                final_user_prompt = f"{user_prompt}\n\n【字数硬性要求：{min_tokens}~{max_tokens_range}字】\n这是不可协商的范围限制。不足{min_tokens}字视为未完成，超过{max_tokens_range}字视为违规。请精准控制篇幅，确保一次输出达标。"
 
             request_kwargs = {
                 "model": self.model_name,

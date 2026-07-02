@@ -392,6 +392,7 @@ async def async_generate_task(
             break
 
     if ai_rsp or error_msg:
+        print('我要在这里做字数审核')
         async with get_db_context() as db:
             # audit_service = get_generated_content_audit_service()
             # try:

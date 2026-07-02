@@ -124,3 +124,48 @@ class AiModelDAO:
         await self.list_models()
         model = AiModelDAO._cache_identifier_map.get(identifier)
         return model.model_name if model else "默认模型"
+
+    async def get_all_models_by_level(self, level: int) -> list[SimpleNamespace]:
+        """获取指定 level 下的全部模型（含启用和禁用），按 weight 降序"""
+        await self.list_models(only_enabled=False)
+        models = AiModelDAO._cache_models or []
+        return [m for m in models if m.level == level]
+
+    async def update_model_status(self, model_id: int, new_status: int) -> bool:
+        """
+        更新模型的 status 字段
+
+        Args:
+            model_id: 模型 id
+            new_status: 新状态 (1=启用, 0=禁用)
+
+        Returns:
+            是否更新成功
+        """
+        try:
+            stmt = (
+                select(McAiModel)
+                .where(McAiModel.id == model_id)
+                .limit(1)
+            )
+            result = await self.db.execute(stmt)
+            model = result.scalar_one_or_none()
+
+            if not model:
+                logger.warning(f"[模型测试] 更新 status 失败: 未找到 id={model_id} 的模型")
+                return False
+
+            old_status = model.status
+            model.status = new_status
+            await self.db.commit()
+
+            logger.info(
+                f"[模型测试] 模型 id={model_id} name={model.model_name} "
+                f"status: {old_status} -> {new_status}"
+            )
+            return True
+
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"[模型测试] 更新模型 status 失败: id={model_id} error={e}")
+            return False
