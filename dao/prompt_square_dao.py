@@ -63,7 +63,8 @@ class PromptSquareDAO:
         if title:
             condition = condition & (PromptSquare.title.ilike(f"%{title}%"))
 
-        if parent_category:
+        # 顶级分类限制只用于公开广场；“我的发布”应展示用户自己的全部记录。
+        if parent_category and promptType != "mine":
             condition = condition & (PromptSquare.parent_category == parent_category)
         # ==================== 主查询 ====================
 
@@ -200,6 +201,7 @@ class PromptSquareDAO:
         prompt = PromptSquare(
             template_key=LZSDGenerator.generate_template_id(),
             title=title,
+            parent_category=PromptTopCategory.CREATION.code,
             category=category,
             content=content,
             description=description,
