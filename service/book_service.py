@@ -651,17 +651,28 @@ class BookService:
         if not content_root:
             return ""
 
-        # 4. 遍历并格式化
-        for child in nodes:
-            if child.parent_id == content_root.id:
-                # 写入标题
-                output.write(f"{child.name}\n")
-                # 写入分割线（可选，增加可读性）
-                output.write("\n")
-                # 写入正文，处理 None 的情况
-                output.write(child.content or "")
-                # 章节间留空行
-                output.write("\n\n")
+        # 4. 按父子关系递归导出，兼容“正文 -> 卷 -> 章节”等多级结构。
+        children_by_parent = {}
+        for node in nodes:
+            children_by_parent.setdefault(node.parent_id, []).append(node)
+
+        visited_node_ids = set()
+
+        def write_children(parent_id: int) -> None:
+            for child in children_by_parent.get(parent_id, []):
+                # 防止异常脏数据形成循环关系，导致递归无法结束。
+                if child.id in visited_node_ids:
+                    continue
+                visited_node_ids.add(child.id)
+
+                output.write(f"{child.name}\n\n")
+                if child.content:
+                    output.write(child.content)
+                    output.write("\n\n")
+
+                write_children(child.id)
+
+        write_children(content_root.id)
 
         return quick_html_to_text(output.getvalue())
 
