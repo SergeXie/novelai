@@ -13,6 +13,25 @@ from core.enums.prompt_sys_var import PromptEngineType, PromptTopCategory
 class PromptSquareDAO:
 
     @staticmethod
+    async def get_active_templates_by_keys(db: AsyncSession, template_keys: list[str]):
+        if not template_keys:
+            return []
+
+        stmt = (
+            select(
+                PromptSquare.template_key.label("tool_key"),
+                PromptSquare.title.label("name"),
+                PromptSquare.input_schema.label("variables_schema"),
+            )
+            .where(
+                PromptSquare.template_key.in_(template_keys),
+                PromptSquare.status == 1,
+            )
+        )
+        result = await db.execute(stmt)
+        return result.mappings().all()
+
+    @staticmethod
     def _public_condition(category: str | None = None, user_id: int = None):
         condition = (
                 (PromptSquare.author_id == 0) &

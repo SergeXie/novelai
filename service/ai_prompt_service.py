@@ -12,6 +12,7 @@ from core.entity.vo.prompt_register_vo import PromptRegistryResp
 from core.enums.node_type import BookNodeCategory
 from core.enums.prompt_sys_var import PromptEngineType
 from dao.ai_prompt_registry_dao import PromptRegistryDAO
+from dao.prompt_square_dao import PromptSquareDAO
 
 jinja_env = Environment(enable_async=True)
 
@@ -23,10 +24,6 @@ class PromptService:
     async def get_all_prompts(self):
         """获取所有记录的原始逻辑"""
         return await self.dao.get_template_prompts()
-
-    async def get_all_prompts_scope(self) -> List[PromptRegistry]:
-        """获取所有记录的原始逻辑"""
-        return await self.dao.get_all_prompts_scope()
 
     async def get_scope_detail_prompts(self, scope:int) -> List[PromptRegistry]:
         return await self.dao.get_prompts_detail_scope(scope)
@@ -42,12 +39,16 @@ class PromptService:
         data = dict()
 
         tool_keys = ["wenyuan_title_forge", "wenyuan_blurb_forge"]
-        rets = await self.dao.get_by_tool_keys(tool_keys=tool_keys)
+        rets = await PromptSquareDAO.get_active_templates_by_keys(
+            db=self.db,
+            template_keys=tool_keys,
+        )
         for tool in rets:
-            if tool.tool_key == tool_keys[0]:
-                data["title"] = PromptRegistryResp.model_validate(tool)
-            elif tool.tool_key == tool_keys[1]:
-                data["intro"] = PromptRegistryResp.model_validate(tool)
+            prompt = PromptRegistryResp.model_validate(dict(tool))
+            if prompt.tool_key == tool_keys[0]:
+                data["title"] = prompt
+            elif prompt.tool_key == tool_keys[1]:
+                data["intro"] = prompt
 
         return data
 
