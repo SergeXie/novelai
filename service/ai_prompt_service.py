@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from jinja2 import Environment
 from sqlalchemy import select, and_
@@ -7,23 +7,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.exception.errors import NotFoundError
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
-from core.entity.do.prompt_register import PromptRegistry
 from core.entity.vo.prompt_register_vo import PromptRegistryResp
 from core.enums.node_type import BookNodeCategory
 from core.enums.prompt_sys_var import PromptEngineType
-from dao.ai_prompt_registry_dao import PromptRegistryDAO
 from dao.prompt_square_dao import PromptSquareDAO
 
 jinja_env = Environment(enable_async=True)
 
 class PromptService:
     def __init__(self, db: AsyncSession):
-        self.dao = PromptRegistryDAO(db)
         self.db = db
 
     async def get_all_prompts(self):
         """获取所有记录的原始逻辑"""
-        return await self.dao.get_template_prompts()
+        return await PromptSquareDAO.get_template_prompts(self.db)
 
     async def get_scope_detail_prompts(self, scope: int) -> list[dict]:
         rows = await PromptSquareDAO.get_active_templates_by_scope(
@@ -38,10 +35,6 @@ class PromptService:
             )
             result.append(item)
         return result
-
-    async def get_detail_by_key(self, tool_key: str) -> Optional[PromptRegistry]:
-        """根据key获取详情"""
-        return await self.dao.get_by_tool_key(tool_key)
 
     async def get_book_creation_templates(self) -> dict:
         """
@@ -185,8 +178,8 @@ class PromptService:
     async def render_prompt_tool(self, book:Optional[Book], templateKey: str, inputs: dict) -> str:
         # 1. 获取模板配置
         isRelated = 1
-        config = await self.dao.get_active_by_key(templateKey)
-        if not config:
+        config = await PromptSquareDAO.get_template_by_key(self.db, templateKey)
+        if not config or config.status != 1:
             raise NotFoundError(msg=f"Template [{templateKey}] 未找到或已禁用")
 
         try:
