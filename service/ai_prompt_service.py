@@ -44,13 +44,42 @@ class PromptService:
             template_keys=tool_keys,
         )
         for tool in rets:
-            prompt = PromptRegistryResp.model_validate(dict(tool))
+            tool_data = dict(tool)
+            tool_data["variables_schema"] = self._to_legacy_variables_schema(
+                tool_data.get("variables_schema")
+            )
+            prompt = PromptRegistryResp.model_validate(tool_data)
             if prompt.tool_key == tool_keys[0]:
                 data["title"] = prompt
             elif prompt.tool_key == tool_keys[1]:
                 data["intro"] = prompt
 
         return data
+
+    @staticmethod
+    def _to_legacy_variables_schema(input_schema: dict | None) -> dict:
+        """将 ai_prompt_square 的 fields 数组转换为旧接口的变量字典。"""
+        if not isinstance(input_schema, dict):
+            return {}
+
+        fields = input_schema.get("fields")
+        if not isinstance(fields, list):
+            return input_schema
+
+        variables_schema = {}
+        for field in fields:
+            if not isinstance(field, dict) or not field.get("name"):
+                continue
+
+            field_name = field["name"]
+            variables_schema[field_name] = {
+                "name": field.get("label") or field_name,
+                "type": field.get("type", "string"),
+                "default": field.get("default", "暂无"),
+                "required": bool(field.get("required", False)),
+            }
+
+        return variables_schema
 
     async def generate_prompt_by_nodes(self, user_id: int, bid: str, ids: list) -> str:
         """
