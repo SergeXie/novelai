@@ -112,6 +112,12 @@ class PromptSquare(Base):
         comment="状态：1=上架 0=下架"
     )
 
+    scope: Mapped[int] = mapped_column(
+        BigInteger,
+        default=0,
+        comment="作用域对应节点类型"
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,

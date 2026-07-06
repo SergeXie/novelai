@@ -32,6 +32,23 @@ class PromptSquareDAO:
         return result.mappings().all()
 
     @staticmethod
+    async def get_active_templates_by_scope(db: AsyncSession, scope: int):
+        stmt = (
+            select(
+                PromptSquare.template_key.label("tool_key"),
+                PromptSquare.title.label("name"),
+                PromptSquare.input_schema.label("variables_schema"),
+            )
+            .where(
+                PromptSquare.scope == scope,
+                PromptSquare.status == 1,
+            )
+            .order_by(PromptSquare.id.desc())
+        )
+        result = await db.execute(stmt)
+        return result.mappings().all()
+
+    @staticmethod
     def _public_condition(category: str | None = None, user_id: int = None):
         condition = (
                 (PromptSquare.author_id == 0) &

@@ -25,8 +25,19 @@ class PromptService:
         """获取所有记录的原始逻辑"""
         return await self.dao.get_template_prompts()
 
-    async def get_scope_detail_prompts(self, scope:int) -> List[PromptRegistry]:
-        return await self.dao.get_prompts_detail_scope(scope)
+    async def get_scope_detail_prompts(self, scope: int) -> list[dict]:
+        rows = await PromptSquareDAO.get_active_templates_by_scope(
+            db=self.db,
+            scope=scope,
+        )
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["variables_schema"] = self._to_legacy_variables_schema(
+                item.get("variables_schema")
+            )
+            result.append(item)
+        return result
 
     async def get_detail_by_key(self, tool_key: str) -> Optional[PromptRegistry]:
         """根据key获取详情"""
