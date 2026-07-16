@@ -1,5 +1,7 @@
 import io
 import os
+from datetime import datetime
+from types import SimpleNamespace
 from typing import List, Optional
 from urllib.parse import urlparse, unquote
 import httpx
@@ -94,6 +96,11 @@ BOOK_SYSTEM_NODE_DEPTH = {
 }
 BOOK_SYSTEM_NODE_TYPE = {
     item["id"]: item["type"]
+    for root in BOOK_SYSTEM_NODES
+    for item in [root, *root.get("children", [])]
+}
+BOOK_SYSTEM_NODE_NAME = {
+    item["id"]: item["name"]
     for root in BOOK_SYSTEM_NODES
     for item in [root, *root.get("children", [])]
 }
@@ -272,7 +279,7 @@ class BookService:
         for node in nodes:
             # “基础设定”下面的旧子节点按类型映射：
             # 角色/世界观/写作要求/大纲 -> -2/-3/-4/-5。
-            if node.parent_id in legacy_basic_ids and node.type in LEGACY_BASIC_CHILD_TYPE_TO_SYSTEM_ID and not node.content:
+            if node.parent_id in legacy_basic_ids and node.type in LEGACY_BASIC_CHILD_TYPE_TO_SYSTEM_ID:
                 legacy_map[node.id] = LEGACY_BASIC_CHILD_TYPE_TO_SYSTEM_ID[node.type]
 
         return legacy_map
@@ -484,10 +491,17 @@ class BookService:
             node_id: int,
             uid: int,
             bid: str,
-    ) -> BookNode:
+    ) -> BookNode | SimpleNamespace:
         """
         获取书籍节点详情
         """
+        if node_id in BOOK_SYSTEM_NODE_IDS:
+            return await self._get_virtual_node_detail(
+                node_id=node_id,
+                uid=uid,
+                bid=bid,
+            )
+
         node = await self.book_dao.get_node_by_id(
             node_id=node_id,
             uid=uid,
@@ -499,6 +513,36 @@ class BookService:
             raise ServiceWarning(message='书籍节点不存在')
 
         return node
+
+    async def _get_virtual_node_detail(
+            self,
+            node_id: int,
+            uid: int,
+            bid: str,
+    ) -> SimpleNamespace:
+        # 虚拟节点没有真实 mc_book_node.id。
+        # 旧书如果曾经把系统节点入库，这里会找到对应旧节点，并复用它的 content/data 做详情回显。
+        nodes = await self.book_dao.get_book_nodes(bid=bid, user_id=uid)
+        legacy_system_parent_map = self._build_legacy_system_parent_map(nodes)
+        legacy_node = next(
+            (node for node in nodes if legacy_system_parent_map.get(node.id) == node_id),
+            None,
+        )
+
+        now = datetime.now()
+        return SimpleNamespace(
+            id=node_id,
+            bid=bid,
+            uid=uid,
+            is_leaf=1 if node_id == BOOK_SYSTEM_WRITING_STYLE_ID else 0,
+            content=legacy_node.content if legacy_node else None,
+            name=BOOK_SYSTEM_NODE_NAME[node_id],
+            type=BOOK_SYSTEM_NODE_TYPE[node_id],
+            depth=BOOK_SYSTEM_NODE_DEPTH[node_id],
+            createTime=legacy_node.createTime if legacy_node else now,
+            updateTime=legacy_node.updateTime if legacy_node else now,
+            data=legacy_node.data if legacy_node and legacy_node.data else {"system_key": node_id},
+        )
 
     async def update_book_node_content(
             self,
