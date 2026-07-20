@@ -1,6 +1,7 @@
 import io
 import os
 from datetime import datetime
+from html.parser import HTMLParser
 from types import SimpleNamespace
 from typing import List, Optional
 from urllib.parse import urlparse, unquote
@@ -111,6 +112,42 @@ LEGACY_BASIC_CHILD_TYPE_TO_SYSTEM_ID = {
     BookNodeCategory.WRITING_STYLE.code: BOOK_SYSTEM_WRITING_STYLE_ID,
     BookNodeCategory.OUTLINE.code: BOOK_SYSTEM_OUTLINE_ID,
 }
+
+
+class SearchBlockTextParser(HTMLParser):
+    BLOCK_TAGS = {"p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6"}
+
+    def __init__(self):
+        super().__init__()
+        self.blocks: list[str] = []
+        self._tag_stack: list[str] = []
+        self._buffer: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs):
+        if tag.lower() in self.BLOCK_TAGS:
+            if not self._tag_stack:
+                self._buffer = []
+            self._tag_stack.append(tag.lower())
+
+    def handle_data(self, data: str):
+        if self._tag_stack:
+            self._buffer.append(data)
+
+    def handle_endtag(self, tag: str):
+        tag = tag.lower()
+        if tag not in self.BLOCK_TAGS or tag not in self._tag_stack:
+            return
+
+        while self._tag_stack:
+            current = self._tag_stack.pop()
+            if current == tag:
+                break
+
+        if not self._tag_stack:
+            text = " ".join("".join(self._buffer).split())
+            if text:
+                self.blocks.append(text)
+            self._buffer = []
 
 
 class BookService:
@@ -513,33 +550,70 @@ class BookService:
         items: list[BookSearchChapterItem] = []
         total = 0
         for node in nodes:
-            clean_content = " ".join(strip_html_tags(node.content or "").split())
-            positions = self._find_keyword_positions(clean_content, keyword)
-            if not positions:
+            snippets, match_count = self._build_node_search_snippets(
+                content=node.content or "",
+                keyword=keyword,
+                snippet_size=snippet_size,
+                max_snippets=max_snippets_per_node,
+            )
+            if match_count <= 0:
                 continue
 
-            total += len(positions)
-            snippets = [
-                BookSearchSnippetItem(snippet=snippet)
-                for snippet in self._build_search_snippets(
-                    text=clean_content,
-                    keyword=keyword,
-                    positions=positions,
-                    snippet_size=snippet_size,
-                    max_snippets=max_snippets_per_node,
-                )
-            ]
+            total += match_count
 
             items.append(
                 BookSearchChapterItem(
                     nodeId=node.id,
                     chapterName=node.name,
-                    matchCount=len(positions),
-                    snippets=snippets,
+                    matchCount=match_count,
+                    snippets=[BookSearchSnippetItem(snippet=snippet) for snippet in snippets],
                 )
             )
 
         return BookSearchResp(keyword=keyword, total=total, list=items)
+
+    @classmethod
+    def _build_node_search_snippets(
+            cls,
+            *,
+            content: str,
+            keyword: str,
+            snippet_size: int,
+            max_snippets: int | None,
+    ) -> tuple[list[str], int]:
+        blocks = cls._extract_search_blocks(content)
+        if blocks:
+            snippets: list[str] = []
+            match_count = 0
+            for block in blocks:
+                positions = cls._find_keyword_positions(block, keyword)
+                if not positions:
+                    continue
+
+                match_count += len(positions)
+                snippets.append(block)
+
+            if max_snippets is not None:
+                snippets = snippets[:max_snippets]
+
+            return snippets, match_count
+
+        clean_content = " ".join(strip_html_tags(content).split())
+        positions = cls._find_keyword_positions(clean_content, keyword)
+        return cls._build_search_snippets(
+            text=clean_content,
+            keyword=keyword,
+            positions=positions,
+            snippet_size=snippet_size,
+            max_snippets=max_snippets,
+        ), len(positions)
+
+    @staticmethod
+    def _extract_search_blocks(content: str) -> list[str]:
+        parser = SearchBlockTextParser()
+        parser.feed(content or "")
+        parser.close()
+        return parser.blocks
 
     @staticmethod
     def _find_keyword_positions(text: str, keyword: str) -> list[int]:
