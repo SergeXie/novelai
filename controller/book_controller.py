@@ -223,9 +223,9 @@ async def list_books(
 async def search_book_content(
         bid: str = Query(..., description="book bid"),
         keyword: str = Query(..., description="keyword"),
-        limit: int = Query(100, ge=1, le=500, description="max matched chapter nodes"),
+        limit: Optional[int] = Query(None, ge=1, le=500, description="max matched chapter nodes"),
         snippetSize: int = Query(24, ge=5, le=100, description="snippet size around keyword"),
-        maxSnippetsPerNode: int = Query(8, ge=1, le=20, description="max snippets per chapter node"),
+        maxSnippetsPerNode: Optional[int] = Query(None, ge=1, le=200, description="max snippets per chapter node"),
         db: AsyncSession = Depends(get_db),
         current_user=Depends(get_current_user)
 ):

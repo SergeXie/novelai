@@ -92,7 +92,7 @@ class BookDAO:
             user_id: int,
             bid: str,
             keyword: str,
-            limit: int = 100,
+            limit: int | None = None,
     ) -> List[BookNode]:
         stmt = (
             select(BookNode)
@@ -107,8 +107,10 @@ class BookDAO:
                 )
             )
             .order_by(BookNode.id.asc())
-            .limit(limit)
         )
+
+        if limit is not None:
+            stmt = stmt.limit(limit)
 
         result = await self.db.execute(stmt)
         return list(result.scalars().all())

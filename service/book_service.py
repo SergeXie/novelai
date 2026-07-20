@@ -491,9 +491,9 @@ class BookService:
             uid: int,
             bid: str,
             keyword: str,
-            limit: int = 100,
+            limit: int | None = None,
             snippet_size: int = 24,
-            max_snippets_per_node: int = 8,
+            max_snippets_per_node: int | None = None,
     ) -> BookSearchResp:
         keyword = (keyword or "").strip()
         if not keyword:
@@ -565,16 +565,15 @@ class BookService:
             keyword: str,
             positions: list[int],
             snippet_size: int,
-            max_snippets: int,
+            max_snippets: int | None,
     ) -> list[str]:
         snippets: list[str] = []
         keyword_len = len(keyword)
-        for position in positions[:max_snippets]:
+        target_positions = positions if max_snippets is None else positions[:max_snippets]
+        for position in target_positions:
             start = max(position - snippet_size, 0)
             end = min(position + keyword_len + snippet_size, len(text))
-            prefix = "..." if start > 0 else ""
-            suffix = "..." if end < len(text) else ""
-            snippets.append(f"{prefix}{text[start:end]}{suffix}")
+            snippets.append(text[start:end])
         return snippets
 
     async def get_book_node_detail(
