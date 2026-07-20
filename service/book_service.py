@@ -16,7 +16,7 @@ from core.entity.do.book_deconstruct_record_do import BookDeconstructRecord
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
 from core.entity.vo.base_vo import PageResp
-from core.entity.vo.book_node_schema import NodeTreeSchema
+from core.entity.vo.book_node_schema import BookSearchChapterItem, BookSearchResp, BookSearchSnippetItem, NodeTreeSchema
 from core.entity.vo.bool_vo import Character, ChapterData
 from core.entity.vo.generate_log_vo import BookDeconstructItemVO
 from core.enums.node_type import BookNodeCategory
@@ -485,6 +485,97 @@ class BookService:
             uid=uid,
             status=status,
         )
+
+    async def search_book_content(
+            self,
+            uid: int,
+            bid: str,
+            keyword: str,
+            limit: int = 100,
+            snippet_size: int = 24,
+            max_snippets_per_node: int = 8,
+    ) -> BookSearchResp:
+        keyword = (keyword or "").strip()
+        if not keyword:
+            raise ServiceWarning("搜索关键词不能为空")
+
+        book = await self.book_dao.get_book_by_bid(bid=bid, user_id=uid)
+        if not book:
+            raise ServiceWarning("书籍不存在")
+
+        nodes = await self.book_dao.search_content_nodes(
+            user_id=uid,
+            bid=bid,
+            keyword=keyword,
+            limit=limit,
+        )
+
+        items: list[BookSearchChapterItem] = []
+        total = 0
+        for node in nodes:
+            clean_content = " ".join(strip_html_tags(node.content or "").split())
+            positions = self._find_keyword_positions(clean_content, keyword)
+            if not positions:
+                continue
+
+            total += len(positions)
+            snippets = [
+                BookSearchSnippetItem(snippet=snippet)
+                for snippet in self._build_search_snippets(
+                    text=clean_content,
+                    keyword=keyword,
+                    positions=positions,
+                    snippet_size=snippet_size,
+                    max_snippets=max_snippets_per_node,
+                )
+            ]
+
+            items.append(
+                BookSearchChapterItem(
+                    nodeId=node.id,
+                    chapterName=node.name,
+                    matchCount=len(positions),
+                    snippets=snippets,
+                )
+            )
+
+        return BookSearchResp(keyword=keyword, total=total, list=items)
+
+    @staticmethod
+    def _find_keyword_positions(text: str, keyword: str) -> list[int]:
+        if not text or not keyword:
+            return []
+
+        positions: list[int] = []
+        haystack = text.lower()
+        needle = keyword.lower()
+        start = 0
+        while True:
+            index = haystack.find(needle, start)
+            if index < 0:
+                break
+            positions.append(index)
+            start = index + len(needle)
+        return positions
+
+    @staticmethod
+    def _build_search_snippets(
+            *,
+            text: str,
+            keyword: str,
+            positions: list[int],
+            snippet_size: int,
+            max_snippets: int,
+    ) -> list[str]:
+        snippets: list[str] = []
+        keyword_len = len(keyword)
+        for position in positions[:max_snippets]:
+            start = max(position - snippet_size, 0)
+            end = min(position + keyword_len + snippet_size, len(text))
+            prefix = "..." if start > 0 else ""
+            suffix = "..." if end < len(text) else ""
+            snippets.append(f"{prefix}{text[start:end]}{suffix}")
+        return snippets
 
     async def get_book_node_detail(
             self,

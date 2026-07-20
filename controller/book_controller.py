@@ -22,7 +22,7 @@ from core.entity.do.book_deconstruct_record_do import BookDeconstructRecord
 from core.entity.do.users_do import User
 from core.entity.vo.book_node_schema import BookResp, CreateBookReq, BookNodeDetailResp, UpdateBookNodeReq, \
     EditBookNodeReq, EditBookNodeResp, AddChapterResp, AddBookNodeReq, DeleteBookNodeReq, OfflineBookReq, EditBookReq, \
-    HardDeleteBookReq
+    HardDeleteBookReq, BookSearchResp
 from core.entity.vo.bool_vo import AutoCreateBookReq
 from core.entity.vo.confirm_import_req import ConfirmImportRequest
 from core.processor.book_processor import Chapter, NovelProcessor
@@ -217,6 +217,28 @@ async def list_books(
     # 关键：手动走 Pydantic v2 序列化
     resp_data = [BookResp.model_validate(item) for item in data]
     return ResponseUtil.success(data=resp_data)
+
+
+@bookController.get("/book/search", name="book content search")
+async def search_book_content(
+        bid: str = Query(..., description="book bid"),
+        keyword: str = Query(..., description="keyword"),
+        limit: int = Query(100, ge=1, le=500, description="max matched chapter nodes"),
+        snippetSize: int = Query(24, ge=5, le=100, description="snippet size around keyword"),
+        maxSnippetsPerNode: int = Query(8, ge=1, le=20, description="max snippets per chapter node"),
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user)
+):
+    books = BookService(db)
+    data: BookSearchResp = await books.search_book_content(
+        uid=current_user.pkId,
+        bid=bid,
+        keyword=keyword,
+        limit=limit,
+        snippet_size=snippetSize,
+        max_snippets_per_node=maxSnippetsPerNode,
+    )
+    return ResponseUtil.success(data=data)
 
 
 @bookController.post("/book/create", response_model=BookResp, name="创建书籍")

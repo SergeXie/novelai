@@ -129,6 +129,23 @@ class BookNodeDetailResp(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class BookSearchSnippetItem(BaseModel):
+    snippet: str
+
+
+class BookSearchChapterItem(BaseModel):
+    nodeId: int
+    chapterName: str
+    matchCount: int
+    snippets: List[BookSearchSnippetItem]
+
+
+class BookSearchResp(BaseModel):
+    keyword: str
+    total: int
+    list: List[BookSearchChapterItem]
+
+
 class UpdateBookNodeReq(BaseModel):
     """
     编辑书籍节点请求参数

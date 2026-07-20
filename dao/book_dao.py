@@ -87,6 +87,32 @@ class BookDAO:
         nodes = result.scalars().all()
         return list(nodes)
 
+    async def search_content_nodes(
+            self,
+            user_id: int,
+            bid: str,
+            keyword: str,
+            limit: int = 100,
+    ) -> List[BookNode]:
+        stmt = (
+            select(BookNode)
+            .where(
+                and_(
+                    BookNode.bid == bid,
+                    BookNode.uid == user_id,
+                    BookNode.type == BookNodeCategory.CONTENT.code,
+                    BookNode.content.is_not(None),
+                    BookNode.content != "",
+                    BookNode.content.contains(keyword, autoescape=True),
+                )
+            )
+            .order_by(BookNode.id.asc())
+            .limit(limit)
+        )
+
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
     async def create_book(self,
             uid: int,
             title: str,
