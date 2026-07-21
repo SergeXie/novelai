@@ -20,7 +20,7 @@ aiTemplateController = APIRouter(prefix="/ai/template")
 @aiTemplateController.post("/execute")
 async def execute(
         background_tasks: BackgroundTasks,
-        template_key: Optional[str] = Body(None),
+        templateKey: Optional[str] = Body(None),
         level: int = Body(...),
         user_prompt: str = Body(""),
         bid: Optional[str] = Body(None),
@@ -45,7 +45,7 @@ async def execute(
                                           user_prompt=user_prompt,
                                           correlation=correlation,
                                           lexicon_ids=lexicon_ids,
-                                          template_key=template_key,
+                                          template_key=templateKey,
                                           inputs=inputs,
                                           background_tasks=background_tasks)
 
