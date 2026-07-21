@@ -128,6 +128,7 @@ class UsageService:
             bonusDeduct:int = 0,
             permanentDeduct:int = 0,
             tokenEstimate: int = 0,
+            max_tokens: int | None = None,
     ) -> AiNovelGenerateLog:
         """记录一次 AI 生成日志。
 
@@ -135,13 +136,15 @@ class UsageService:
         """
         # 根据等级找到对应模型，模型里通常带有倍率和 max_tokens 配置。
         ai_model_multiplier = 1
-        max_tokens = 0
+        model_max_tokens = 0
         model = await self.model_dao.get_model_by_level(level)
         model_name = "unknown"
         if model:
             ai_model_multiplier = model.multiplier
-            max_tokens = model.max_tokens
+            model_max_tokens = model.max_tokens
             model_name = model.model_identifier
+        # 优先使用调用方传入的 max_tokens，回退到模型默认值
+        final_max_tokens = max_tokens if max_tokens is not None else model_max_tokens
 
         if isinstance(action_type, str):
             action_type = AIAction(action_type)
@@ -160,7 +163,7 @@ class UsageService:
             requestInputLength=promptTokens,
             model=model_name,
             temperature=temperature,
-            maxTokens=max_tokens,
+            maxTokens=final_max_tokens,
             # 输出信息
             outputContent=output_content,
             outputLength=completionTokens,
