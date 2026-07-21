@@ -1,5 +1,8 @@
 import io
 import os
+from datetime import datetime
+from html.parser import HTMLParser
+from types import SimpleNamespace
 from typing import List, Optional
 from urllib.parse import urlparse, unquote
 import httpx
@@ -14,7 +17,7 @@ from core.entity.do.book_deconstruct_record_do import BookDeconstructRecord
 from core.entity.do.book_node import BookNode
 from core.entity.do.books import Book
 from core.entity.vo.base_vo import PageResp
-from core.entity.vo.book_node_schema import NodeTreeSchema
+from core.entity.vo.book_node_schema import BookSearchChapterItem, BookSearchResp, BookSearchSnippetItem, NodeTreeSchema
 from core.entity.vo.bool_vo import Character, ChapterData
 from core.entity.vo.generate_log_vo import BookDeconstructItemVO
 from core.enums.node_type import BookNodeCategory
@@ -23,6 +26,128 @@ from dao.book_dao import BookDAO
 from dao.template_dao import TemplateDAO
 
 DEFAULT_TEMPLATE_ID = "TPLXIAOSHUO"
+
+# 系统固定节点使用负数 ID，避免和 mc_book_node.id 的自增正数冲突。
+# 这些节点只在 /book/tree 响应里返回，不写入 mc_book_node 表。
+BOOK_SYSTEM_BASIC_ID = -1
+BOOK_SYSTEM_ROLES_ID = -2
+BOOK_SYSTEM_WORLDVIEW_ID = -3
+BOOK_SYSTEM_WRITING_STYLE_ID = -4
+BOOK_SYSTEM_OUTLINE_ID = -5
+BOOK_SYSTEM_CONTENT_ID = -6
+
+BOOK_SYSTEM_NODES = [
+    {
+        "id": BOOK_SYSTEM_BASIC_ID,
+        "name": "基础设定",
+        "parent_id": 0,
+        "is_leaf": 0,
+        "type": BookNodeCategory.NORMAL.code,
+        "depth": 0,
+        "children": [
+            {
+                "id": BOOK_SYSTEM_ROLES_ID,
+                "name": "角色",
+                "parent_id": BOOK_SYSTEM_BASIC_ID,
+                "is_leaf": 0,
+                "type": BookNodeCategory.ROLES.code,
+                "depth": 1,
+            },
+            {
+                "id": BOOK_SYSTEM_WORLDVIEW_ID,
+                "name": "世界观",
+                "parent_id": BOOK_SYSTEM_BASIC_ID,
+                "is_leaf": 0,
+                "type": BookNodeCategory.WORLDVIEW.code,
+                "depth": 1,
+            },
+            {
+                "id": BOOK_SYSTEM_WRITING_STYLE_ID,
+                "name": "写作要求",
+                "parent_id": BOOK_SYSTEM_BASIC_ID,
+                "is_leaf": 1,
+                "type": BookNodeCategory.WRITING_STYLE.code,
+                "depth": 1,
+            },
+            {
+                "id": BOOK_SYSTEM_OUTLINE_ID,
+                "name": "大纲",
+                "parent_id": BOOK_SYSTEM_BASIC_ID,
+                "is_leaf": 0,
+                "type": BookNodeCategory.OUTLINE.code,
+                "depth": 1,
+            },
+        ],
+    },
+    {
+        "id": BOOK_SYSTEM_CONTENT_ID,
+        "name": "正文",
+        "parent_id": 0,
+        "is_leaf": 0,
+        "type": BookNodeCategory.CONTENT.code,
+        "depth": 0,
+    },
+]
+
+# 快速查询表：真实用户节点挂到虚拟父节点下时，用它拿 depth/type。
+BOOK_SYSTEM_NODE_DEPTH = {
+    item["id"]: item["depth"]
+    for root in BOOK_SYSTEM_NODES
+    for item in [root, *root.get("children", [])]
+}
+BOOK_SYSTEM_NODE_TYPE = {
+    item["id"]: item["type"]
+    for root in BOOK_SYSTEM_NODES
+    for item in [root, *root.get("children", [])]
+}
+BOOK_SYSTEM_NODE_NAME = {
+    item["id"]: item["name"]
+    for root in BOOK_SYSTEM_NODES
+    for item in [root, *root.get("children", [])]
+}
+BOOK_SYSTEM_NODE_IDS = set(BOOK_SYSTEM_NODE_DEPTH)
+LEGACY_BASIC_CHILD_TYPE_TO_SYSTEM_ID = {
+    BookNodeCategory.ROLES.code: BOOK_SYSTEM_ROLES_ID,
+    BookNodeCategory.WORLDVIEW.code: BOOK_SYSTEM_WORLDVIEW_ID,
+    BookNodeCategory.WRITING_STYLE.code: BOOK_SYSTEM_WRITING_STYLE_ID,
+    BookNodeCategory.OUTLINE.code: BOOK_SYSTEM_OUTLINE_ID,
+}
+
+
+class SearchBlockTextParser(HTMLParser):
+    BLOCK_TAGS = {"p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6"}
+
+    def __init__(self):
+        super().__init__()
+        self.blocks: list[str] = []
+        self._tag_stack: list[str] = []
+        self._buffer: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs):
+        if tag.lower() in self.BLOCK_TAGS:
+            if not self._tag_stack:
+                self._buffer = []
+            self._tag_stack.append(tag.lower())
+
+    def handle_data(self, data: str):
+        if self._tag_stack:
+            self._buffer.append(data)
+
+    def handle_endtag(self, tag: str):
+        tag = tag.lower()
+        if tag not in self.BLOCK_TAGS or tag not in self._tag_stack:
+            return
+
+        while self._tag_stack:
+            current = self._tag_stack.pop()
+            if current == tag:
+                break
+
+        if not self._tag_stack:
+            text = " ".join("".join(self._buffer).split())
+            if text:
+                self.blocks.append(text)
+            self._buffer = []
 
 
 class BookService:
@@ -92,6 +217,111 @@ class BookService:
         return total
 
     async def get_tree(self, bid: str, uid: int, max_depth: Optional[int] = None) -> List[NodeTreeSchema]:
+        # 先构建代码固定的系统树，再把数据库里的真实节点挂到对应位置。
+        tree = self._build_system_tree(bid=bid, uid=uid, max_depth=max_depth)
+        system_node_map: dict[int, NodeTreeSchema] = {}
+        self._collect_tree_nodes(tree, system_node_map)
+
+        nodes = await self.book_dao.get_book_nodes(bid, uid, max_depth)
+
+        if nodes:
+            # 旧书可能已经把基础设定/角色/正文等系统节点写入了数据库。
+            # 这里不改库，只在响应里隐藏旧系统节点，并把它们的子节点映射到新的虚拟 ID 下。
+            legacy_system_parent_map = self._build_legacy_system_parent_map(nodes)
+            legacy_system_node_ids = set(legacy_system_parent_map)
+
+            node_map = {}
+            for node in nodes:
+                if node.id in legacy_system_node_ids:
+                    continue
+
+                node_obj = NodeTreeSchema.model_validate(node)
+                node_obj.children = []
+                # 如果真实节点挂在旧的入库系统节点下，响应时移动到对应虚拟父节点下。
+                node_obj.parent_id = legacy_system_parent_map.get(node.parent_id, node.parent_id)
+                node_map[node.id] = node_obj
+
+            for node in node_map.values():
+                if node.parent_id in system_node_map:
+                    # 新数据可以直接使用 parent_id=-2/-6，旧数据经过映射后也会走到这里。
+                    system_node_map[node.parent_id].children.append(node)
+                elif node.parent_id is None or node.parent_id == 0:
+                    tree.append(node)
+                else:
+                    parent = node_map.get(node.parent_id)
+                    if parent:
+                        parent.children.append(node)
+                    else:
+                        tree.append(node)
+
+        return tree
+
+    @staticmethod
+    def _build_system_tree(bid: str, uid: int, max_depth: Optional[int]) -> List[NodeTreeSchema]:
+        # 把 BOOK_SYSTEM_NODES 字典转换成和数据库节点一致的返回结构。
+        # 这里也处理 max_depth，保证虚拟节点同样遵守 /book/tree 的层级过滤。
+        def build_node(item: dict) -> NodeTreeSchema | None:
+            if max_depth is not None and item["depth"] > max_depth:
+                return None
+
+            node = NodeTreeSchema(
+                id=item["id"],
+                bid=bid,
+                uid=uid,
+                name=item["name"],
+                parent_id=item["parent_id"],
+                is_leaf=item["is_leaf"],
+                type=item["type"],
+                book_len=0,
+                data={"system_key": item["id"]},
+                children=[],
+            )
+
+            for child in item.get("children", []):
+                child_node = build_node(child)
+                if child_node:
+                    node.children.append(child_node)
+            return node
+
+        return [node for item in BOOK_SYSTEM_NODES if (node := build_node(item))]
+
+    @staticmethod
+    def _collect_tree_nodes(nodes: List[NodeTreeSchema], node_map: dict[int, NodeTreeSchema]) -> None:
+        # 把虚拟树拍平成 map，方便后面按 parent_id 快速挂载真实节点。
+        for node in nodes:
+            node_map[node.id] = node
+            if node.children:
+                BookService._collect_tree_nodes(node.children, node_map)
+
+    @staticmethod
+    def _build_legacy_system_parent_map(nodes: List[BookNode]) -> dict[int, int]:
+        """把旧的入库系统节点映射到新的虚拟 ID，不修改数据库数据。"""
+        legacy_map: dict[int, int] = {}
+        root_nodes = [node for node in nodes if node.parent_id in (None, 0)]
+        # 旧模板里的“基础设定”根节点通常是 type=0，且没有正文内容。
+        legacy_basic_ids = [
+            node.id
+            for node in root_nodes
+            if node.type == BookNodeCategory.NORMAL.code and not node.content
+        ]
+
+        for node_id in legacy_basic_ids:
+            legacy_map[node_id] = BOOK_SYSTEM_BASIC_ID
+
+        for node in root_nodes:
+            # 旧模板里的“正文”根节点通常是 type=1，且没有正文内容。
+            if node.type == BookNodeCategory.CONTENT.code and not node.content:
+                legacy_map[node.id] = BOOK_SYSTEM_CONTENT_ID
+
+        for node in nodes:
+            # “基础设定”下面的旧子节点按类型映射：
+            # 角色/世界观/写作要求/大纲 -> -2/-3/-4/-5。
+            if node.parent_id in legacy_basic_ids and node.type in LEGACY_BASIC_CHILD_TYPE_TO_SYSTEM_ID:
+                legacy_map[node.id] = LEGACY_BASIC_CHILD_TYPE_TO_SYSTEM_ID[node.type]
+
+        return legacy_map
+
+    async def _get_tree_legacy(self, bid: str, uid: int, max_depth: Optional[int] = None) -> List[NodeTreeSchema]:
         tree = []
         # 从 DAO 获取原始数据库对象
         nodes = await self.book_dao.get_book_nodes(bid, uid, max_depth)
@@ -220,16 +450,10 @@ class BookService:
             coverUrl=self.normalize_cover_path(coverUrl),
         )
 
-        template_data = template.data  # JSON
+        template_data = []
 
         # 3️⃣ 递归创建节点（root parent_id = 0）
-        await self._create_nodes_from_template(
-            uid=uid,
-            bid=book.bid,
-            nodes=template_data,
-            parent_id=0,
-            depth=0,
-        )
+        # System nodes are now virtual and are not stored in mc_book_node.
 
         # 2 统一提交
         await self.db.commit()
@@ -299,15 +523,149 @@ class BookService:
             status=status,
         )
 
+    async def search_book_content(
+            self,
+            uid: int,
+            bid: str,
+            keyword: str,
+            limit: int | None = None,
+            snippet_size: int = 24,
+            max_snippets_per_node: int | None = None,
+    ) -> BookSearchResp:
+        keyword = (keyword or "").strip()
+        if not keyword:
+            raise ServiceWarning("搜索关键词不能为空")
+
+        book = await self.book_dao.get_book_by_bid(bid=bid, user_id=uid)
+        if not book:
+            raise ServiceWarning("书籍不存在")
+
+        nodes = await self.book_dao.search_content_nodes(
+            user_id=uid,
+            bid=bid,
+            keyword=keyword,
+            limit=limit,
+        )
+
+        items: list[BookSearchChapterItem] = []
+        total = 0
+        for node in nodes:
+            snippets, match_count = self._build_node_search_snippets(
+                content=node.content or "",
+                keyword=keyword,
+                snippet_size=snippet_size,
+                max_snippets=max_snippets_per_node,
+            )
+            if match_count <= 0:
+                continue
+
+            total += match_count
+
+            items.append(
+                BookSearchChapterItem(
+                    nodeId=node.id,
+                    chapterName=node.name,
+                    matchCount=match_count,
+                    snippets=[BookSearchSnippetItem(snippet=snippet) for snippet in snippets],
+                )
+            )
+
+        return BookSearchResp(keyword=keyword, total=total, list=items)
+
+    @classmethod
+    def _build_node_search_snippets(
+            cls,
+            *,
+            content: str,
+            keyword: str,
+            snippet_size: int,
+            max_snippets: int | None,
+    ) -> tuple[list[str], int]:
+        blocks = cls._extract_search_blocks(content)
+        if blocks:
+            snippets: list[str] = []
+            match_count = 0
+            for block in blocks:
+                positions = cls._find_keyword_positions(block, keyword)
+                if not positions:
+                    continue
+
+                match_count += len(positions)
+                snippets.append(block)
+
+            if max_snippets is not None:
+                snippets = snippets[:max_snippets]
+
+            return snippets, match_count
+
+        clean_content = " ".join(strip_html_tags(content).split())
+        positions = cls._find_keyword_positions(clean_content, keyword)
+        return cls._build_search_snippets(
+            text=clean_content,
+            keyword=keyword,
+            positions=positions,
+            snippet_size=snippet_size,
+            max_snippets=max_snippets,
+        ), len(positions)
+
+    @staticmethod
+    def _extract_search_blocks(content: str) -> list[str]:
+        parser = SearchBlockTextParser()
+        parser.feed(content or "")
+        parser.close()
+        return parser.blocks
+
+    @staticmethod
+    def _find_keyword_positions(text: str, keyword: str) -> list[int]:
+        if not text or not keyword:
+            return []
+
+        positions: list[int] = []
+        haystack = text.lower()
+        needle = keyword.lower()
+        start = 0
+        while True:
+            index = haystack.find(needle, start)
+            if index < 0:
+                break
+            positions.append(index)
+            start = index + len(needle)
+        return positions
+
+    @staticmethod
+    def _build_search_snippets(
+            *,
+            text: str,
+            keyword: str,
+            positions: list[int],
+            snippet_size: int,
+            max_snippets: int | None,
+    ) -> list[str]:
+        snippets: list[str] = []
+        keyword_len = len(keyword)
+        target_positions = positions if max_snippets is None else positions[:max_snippets]
+        for position in target_positions:
+            start = max(position - snippet_size, 0)
+            end = min(position + keyword_len + snippet_size, len(text))
+            snippets.append(text[start:end])
+        return snippets
+
     async def get_book_node_detail(
             self,
             node_id: int,
             uid: int,
             bid: str,
-    ) -> BookNode:
+    ) -> BookNode | SimpleNamespace:
         """
         获取书籍节点详情
         """
+        if node_id in BOOK_SYSTEM_NODE_IDS:
+            return await self._get_virtual_node_detail(
+                node_id=node_id,
+                uid=uid,
+                bid=bid,
+            )
+
         node = await self.book_dao.get_node_by_id(
             node_id=node_id,
             uid=uid,
@@ -319,6 +677,36 @@ class BookService:
             raise ServiceWarning(message='书籍节点不存在')
 
         return node
+
+    async def _get_virtual_node_detail(
+            self,
+            node_id: int,
+            uid: int,
+            bid: str,
+    ) -> SimpleNamespace:
+        # 虚拟节点没有真实 mc_book_node.id。
+        # 旧书如果曾经把系统节点入库，这里会找到对应旧节点，并复用它的 content/data 做详情回显。
+        nodes = await self.book_dao.get_book_nodes(bid=bid, user_id=uid)
+        legacy_system_parent_map = self._build_legacy_system_parent_map(nodes)
+        legacy_node = next(
+            (node for node in nodes if legacy_system_parent_map.get(node.id) == node_id),
+            None,
+        )
+
+        now = datetime.now()
+        return SimpleNamespace(
+            id=node_id,
+            bid=bid,
+            uid=uid,
+            is_leaf=1 if node_id == BOOK_SYSTEM_WRITING_STYLE_ID else 0,
+            content=legacy_node.content if legacy_node else None,
+            name=BOOK_SYSTEM_NODE_NAME[node_id],
+            type=BOOK_SYSTEM_NODE_TYPE[node_id],
+            depth=BOOK_SYSTEM_NODE_DEPTH[node_id],
+            createTime=legacy_node.createTime if legacy_node else now,
+            updateTime=legacy_node.updateTime if legacy_node else now,
+            data=legacy_node.data if legacy_node and legacy_node.data else {"system_key": node_id},
+        )
 
     async def update_book_node_content(
             self,
@@ -389,6 +777,13 @@ class BookService:
         if parent_id == 0:
             parent = None
             parent_depth = 0
+        elif parent_id in BOOK_SYSTEM_NODE_IDS:
+            # 虚拟父节点只存在于 BOOK_SYSTEM_NODES，不存在于数据库。
+            # 所以这里不查父节点，直接使用配置里的 depth/type，并把新真实节点的 parent_id 写成负数。
+            parent = None
+            parent_depth = BOOK_SYSTEM_NODE_DEPTH[parent_id]
+            if type is None:
+                type = BOOK_SYSTEM_NODE_TYPE[parent_id]
         else:
             # 1️⃣ 校验节点
             parent = await self.book_dao.get_node_parent_by_id(parent_id=parent_id, uid=uid, bid=bid)
@@ -409,7 +804,7 @@ class BookService:
             depth=parent_depth + 1,
             data=data,
             content=content,
-            category=BookNodeCategory.CONTENT
+            category=type
         )
 
         # 3️⃣ 父节点修正（核心规则）
@@ -550,6 +945,55 @@ class BookService:
         if not book:
             return None
 
+        for role in roles or []:
+            await self.book_dao.add_child_node(
+                bid=book.bid,
+                uid=user_id,
+                parent_node=None,
+                parent_id=BOOK_SYSTEM_ROLES_ID,
+                is_leaf=1,
+                name=role.name,
+                content=role.role,
+                category=BookNodeCategory.ROLES,
+                depth=BOOK_SYSTEM_NODE_DEPTH[BOOK_SYSTEM_ROLES_ID] + 1,
+            )
+
+        for chapter in chapters or []:
+            await self.book_dao.add_child_node(
+                bid=book.bid,
+                uid=user_id,
+                parent_node=None,
+                parent_id=BOOK_SYSTEM_CONTENT_ID,
+                is_leaf=1,
+                name=chapter.title,
+                content=chapter.content,
+                category=BookNodeCategory.CONTENT,
+                order=chapter.index,
+                depth=BOOK_SYSTEM_NODE_DEPTH[BOOK_SYSTEM_CONTENT_ID] + 1,
+            )
+
+        simple_fields = {
+            BOOK_SYSTEM_WORLDVIEW_ID: (BookNodeCategory.WORLDVIEW, world_view),
+            BOOK_SYSTEM_OUTLINE_ID: (BookNodeCategory.OUTLINE, outline),
+            BOOK_SYSTEM_WRITING_STYLE_ID: (BookNodeCategory.WRITING_STYLE, writing_style),
+        }
+
+        for parent_id, (node_type, content) in simple_fields.items():
+            if content:
+                await self.book_dao.add_child_node(
+                    bid=book.bid,
+                    uid=user_id,
+                    parent_node=None,
+                    parent_id=parent_id,
+                    is_leaf=1,
+                    name=node_type.key,
+                    content=content,
+                    category=node_type,
+                    depth=BOOK_SYSTEM_NODE_DEPTH[parent_id] + 1,
+                )
+
+        return book
+
         # 2. 获取一级分类节点
         nodes = await self.book_dao.get_book_nodes(bid=book.bid, user_id=user_id, max_depth=1)
 
@@ -605,6 +1049,25 @@ class BookService:
         if book is None:
             raise ServerError(msg=f"创建书籍[{book_name}]失败")
 
+        try:
+            await self.book_dao.batch_add_child_nodes(
+                user_id=user_id,
+                bid=book.bid,
+                parent_node=None,
+                parent_id=BOOK_SYSTEM_CONTENT_ID,
+                node_type=BookNodeCategory.CONTENT.code,
+                depth=BOOK_SYSTEM_NODE_DEPTH[BOOK_SYSTEM_CONTENT_ID] + 1,
+                chapter_data=chapters,
+                is_leaf=1
+            )
+        except Exception as e:
+            logger.error(f"鎵归噺鍐欏叆绔犺妭澶辫触: {e}")
+            raise ServerError(msg="绔犺妭鍚屾鍏ュ簱澶辫触")
+
+        return book
+
+        # 下面是暂时保留的旧实现，仅用于回滚或对照参考，当前不会执行。
+        # 新逻辑已经把导入章节写到虚拟正文父节点 -6 下。
         content_root_nodes = await self.book_dao.get_nodes_by_parent_id(bid=book.bid, parent_id=0)
         # 使用 next() 配合生成器更优雅地查找
         parent_node = next(
@@ -642,6 +1105,38 @@ class BookService:
         output = io.StringIO()
         output.write(f"{book_name}\n")
 
+        children_by_parent = {}
+        for node in nodes:
+            children_by_parent.setdefault(node.parent_id, []).append(node)
+
+        legacy_content_root_ids = [
+            node.id
+            for node in nodes
+            if node.parent_id in (None, 0) and node.type == BookNodeCategory.CONTENT.code and not node.content
+        ]
+        # 导出时同时兼容两类数据：新数据挂在虚拟正文 -6 下，旧数据挂在入库的正文根节点下。
+        content_parent_ids = [BOOK_SYSTEM_CONTENT_ID, *legacy_content_root_ids]
+
+        visited_node_ids = set()
+
+        def write_children(parent_id: int) -> None:
+            for child in children_by_parent.get(parent_id, []):
+                if child.id in visited_node_ids:
+                    continue
+                visited_node_ids.add(child.id)
+
+                output.write(f"{child.name}\n\n")
+                if child.content:
+                    output.write(child.content)
+                    output.write("\n\n")
+
+                write_children(child.id)
+
+        for parent_id in content_parent_ids:
+            write_children(parent_id)
+
+        return quick_html_to_text(output.getvalue())
+
         # 3. 寻找内容根节点（使用 next 提高效率，避免全量循环）
         content_root = next(
             (node for node in nodes if node.type == BookNodeCategory.CONTENT.code),
@@ -651,17 +1146,28 @@ class BookService:
         if not content_root:
             return ""
 
-        # 4. 遍历并格式化
-        for child in nodes:
-            if child.parent_id == content_root.id:
-                # 写入标题
-                output.write(f"{child.name}\n")
-                # 写入分割线（可选，增加可读性）
-                output.write("\n")
-                # 写入正文，处理 None 的情况
-                output.write(child.content or "")
-                # 章节间留空行
-                output.write("\n\n")
+        # 4. 按父子关系递归导出，兼容“正文 -> 卷 -> 章节”等多级结构。
+        children_by_parent = {}
+        for node in nodes:
+            children_by_parent.setdefault(node.parent_id, []).append(node)
+
+        visited_node_ids = set()
+
+        def write_children(parent_id: int) -> None:
+            for child in children_by_parent.get(parent_id, []):
+                # 防止异常脏数据形成循环关系，导致递归无法结束。
+                if child.id in visited_node_ids:
+                    continue
+                visited_node_ids.add(child.id)
+
+                output.write(f"{child.name}\n\n")
+                if child.content:
+                    output.write(child.content)
+                    output.write("\n\n")
+
+                write_children(child.id)
+
+        write_children(content_root.id)
 
         return quick_html_to_text(output.getvalue())
 

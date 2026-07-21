@@ -87,6 +87,34 @@ class BookDAO:
         nodes = result.scalars().all()
         return list(nodes)
 
+    async def search_content_nodes(
+            self,
+            user_id: int,
+            bid: str,
+            keyword: str,
+            limit: int | None = None,
+    ) -> List[BookNode]:
+        stmt = (
+            select(BookNode)
+            .where(
+                and_(
+                    BookNode.bid == bid,
+                    BookNode.uid == user_id,
+                    BookNode.type == BookNodeCategory.CONTENT.code,
+                    BookNode.content.is_not(None),
+                    BookNode.content != "",
+                    BookNode.content.contains(keyword, autoescape=True),
+                )
+            )
+            .order_by(BookNode.id.asc())
+        )
+
+        if limit is not None:
+            stmt = stmt.limit(limit)
+
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
     async def create_book(self,
             uid: int,
             title: str,
@@ -243,7 +271,7 @@ class BookDAO:
             is_leaf: int,
             name: str,
             depth: int,
-            category: BookNodeCategory,
+            category: BookNodeCategory | int,
             data: dict | None = None,
             content: str | None = None,
     ) -> BookNode:
@@ -259,7 +287,7 @@ class BookDAO:
             depth=depth,
             data=data,
             content=content,
-            type=category.code
+            type=category.code if isinstance(category, BookNodeCategory) else int(category)
         )
         self.db.add(node)
         await self.db.flush()
@@ -269,13 +297,15 @@ class BookDAO:
             self,
             uid: int,
             bid: str,
-            parent_node: BookNode,
+            parent_node: BookNode | None,
             is_leaf: int,
             name: str,
             data: dict | None = None,
             content: str | None = None,
             category:BookNodeCategory = BookNodeCategory.NORMAL,
             order:int = 0,
+            parent_id: int | None = None,
+            depth: int | None = None,
     ) -> BookNode:
         """
         新增章节（自动补正文根节点）
@@ -284,9 +314,16 @@ class BookDAO:
         _parent_id = 0
         _type = category.code
         if parent_node:
+            # 普通路径：子节点挂在真实的 mc_book_node 父节点下面。
             _parent_id = parent_node.id
             _depth = parent_node.depth + 1
             _type = parent_node.type
+        elif parent_id is not None:
+            # 虚拟系统父节点路径：父节点不在数据库里。
+            # 调用方会直接传 parent_id=-N，并显式传入该节点应有的 depth/type。
+            _parent_id = parent_id
+            _depth = 1 if depth is None else depth
+            _type = category.code if isinstance(category, BookNodeCategory) else int(category)
 
         node = BookNode(
             bid=bid,
@@ -308,9 +345,12 @@ class BookDAO:
             self,
             user_id: int,
             bid: str,
-            parent_node: BookNode,
+            parent_node: BookNode | None,
             chapter_data: list[Chapter],
             is_leaf:int,
+            parent_id: int | None = None,
+            node_type: int | None = None,
+            depth: int | None = None,
     ):
         """
         批量添加子节点（章节）
@@ -318,6 +358,15 @@ class BookDAO:
         """
         if not chapter_data:
             return
+
+        if parent_node is None:
+            # 构造一个轻量的内存父节点对象，复用下面原有的批量插入逻辑。
+            # 这样就能支持“正文(-6)”这种虚拟父节点，而不需要把它写入数据库。
+            parent_node = type(
+                "_VirtualParent",
+                (),
+                {"id": parent_id, "type": node_type, "depth": (depth or 1) - 1},
+            )()
 
         now = datetime.now()
 
@@ -327,7 +376,7 @@ class BookDAO:
             {
                 "uid": user_id,
                 "bid": bid,
-                "parent_id": parent_node.id,
+                "parent_id": parent_node.id if parent_node else parent_id,
                 "name": item.title,
                 "content": item.content,
                 "type": parent_node.type,  # 默认目录类型

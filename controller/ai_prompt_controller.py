@@ -48,19 +48,6 @@ async def get_prompts_scopes(scope: int, db: AsyncSession = Depends(get_db)):
     return ResponseUtil.success(data=result)
 
 
-@promptController.get("/contentTools", name="获取正文AI工具列表")
-async def get_content_ai_tools(db: AsyncSession = Depends(get_db)):
-    # 实例化 Service 并透传 Session
-    service = PromptService(db)
-
-    # 调用 Service 业务
-    data = await service.get_all_prompts_scope()
-
-    # 转换为 Schema 并返回
-    result = [PromptRegistryResp.model_validate(p) for p in data]
-    return ResponseUtil.success(data=result)
-
-
 @promptController.get("/get_book_creation_tool", name="获取创建作品AI工具")
 async def get_book_creation_ai_tool(db: AsyncSession = Depends(get_db)):
     prompt_service = PromptService(db)
