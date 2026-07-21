@@ -980,16 +980,20 @@ class BookService:
 
         for parent_id, (node_type, content) in simple_fields.items():
             if content:
+                # 世界观、大纲、写作要求本身是代码固定的虚拟系统节点。
+                # 数据库只保存它们的内容承载记录，通过 system_key 关联虚拟 ID，
+                # 不能再作为 parent_id=-3/-4/-5 的普通子节点保存。
                 await self.book_dao.add_child_node(
                     bid=book.bid,
                     uid=user_id,
                     parent_node=None,
-                    parent_id=parent_id,
-                    is_leaf=1,
-                    name=node_type.key,
+                    parent_id=BOOK_SYSTEM_NODE_PARENT[parent_id],
+                    is_leaf=BOOK_SYSTEM_NODE_IS_LEAF[parent_id],
+                    name=BOOK_SYSTEM_NODE_NAME[parent_id],
+                    data={"system_key": parent_id},
                     content=content,
                     category=node_type,
-                    depth=BOOK_SYSTEM_NODE_DEPTH[parent_id] + 1,
+                    depth=BOOK_SYSTEM_NODE_DEPTH[parent_id],
                 )
 
         return book
