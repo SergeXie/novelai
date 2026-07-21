@@ -242,6 +242,7 @@ class AIService:
 
         # 2. 解析与渲染提示词模板域
         if template_key:
+            print(f"使用模版：{template_key}")
             tpl = await PromptSquareDAO.get_template_by_key(db, template_key)
             if not tpl or tpl.status == 0:
                 raise NotFoundError(msg="提示词模版不存在或已下架")
