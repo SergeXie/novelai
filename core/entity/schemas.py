@@ -52,6 +52,6 @@ class NovelWizardStepResponse(BaseModel):
     requestId: str
     step: int
     stepName: str
-    content: str
+    content: Any
     parsedContent: Optional[Any] = None
     context: Dict[str, Any] = Field(default_factory=dict)
