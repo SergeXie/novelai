@@ -340,6 +340,34 @@ class BookService:
 
         return legacy_map
 
+    @staticmethod
+    def _pick_virtual_backing_node(
+            nodes: List[BookNode],
+            legacy_system_parent_map: dict[int, int],
+            node_id: int,
+    ) -> BookNode | None:
+        mapped_nodes = [
+            node for node in nodes
+            if legacy_system_parent_map.get(node.id) == node_id
+        ]
+        if mapped_nodes:
+            return next((node for node in mapped_nodes if node.content), mapped_nodes[0])
+
+        # 历史系统节点迁移后，旧父节点可能已删除；例如“写作要求”本身带内容时会变成孤儿节点。
+        # 这里按虚拟节点 type 兜底找回有内容的旧节点，用于 /book/detail?id=-4 这类回显。
+        system_type = BOOK_SYSTEM_NODE_TYPE.get(node_id)
+        if system_type is None:
+            return None
+
+        candidates = [
+            node for node in nodes
+            if node.type == system_type and (node.content or node.data)
+        ]
+        if not candidates:
+            return None
+
+        return next((node for node in candidates if node.content), candidates[0])
+
     async def _get_tree_legacy(self, bid: str, uid: int, max_depth: Optional[int] = None) -> List[NodeTreeSchema]:
         tree = []
         # 从 DAO 获取原始数据库对象
@@ -707,9 +735,10 @@ class BookService:
         # 旧书如果曾经把系统节点入库，这里会找到对应旧节点，并复用它的 content/data 做详情回显。
         nodes = await self.book_dao.get_book_nodes(bid=bid, user_id=uid)
         legacy_system_parent_map = self._build_legacy_system_parent_map(nodes)
-        legacy_node = next(
-            (node for node in nodes if legacy_system_parent_map.get(node.id) == node_id),
-            None,
+        legacy_node = self._pick_virtual_backing_node(
+            nodes=nodes,
+            legacy_system_parent_map=legacy_system_parent_map,
+            node_id=node_id,
         )
 
         now = datetime.now()
@@ -743,9 +772,10 @@ class BookService:
         if is_system_node:
             nodes = await self.book_dao.get_book_nodes(bid=bid, user_id=uid)
             legacy_system_parent_map = self._build_legacy_system_parent_map(nodes)
-            node = next(
-                (item for item in nodes if legacy_system_parent_map.get(item.id) == node_id),
-                None,
+            node = self._pick_virtual_backing_node(
+                nodes=nodes,
+                legacy_system_parent_map=legacy_system_parent_map,
+                node_id=node_id,
             )
 
             if node is None:
