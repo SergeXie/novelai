@@ -972,29 +972,40 @@ class BookService:
                 depth=BOOK_SYSTEM_NODE_DEPTH[BOOK_SYSTEM_CONTENT_ID] + 1,
             )
 
-        simple_fields = {
+        # 世界观和大纲是可继续新增内容的虚拟目录，自动生成结果应作为真实子节点保存。
+        container_fields = {
             BOOK_SYSTEM_WORLDVIEW_ID: (BookNodeCategory.WORLDVIEW, world_view),
             BOOK_SYSTEM_OUTLINE_ID: (BookNodeCategory.OUTLINE, outline),
-            BOOK_SYSTEM_WRITING_STYLE_ID: (BookNodeCategory.WRITING_STYLE, writing_style),
         }
 
-        for parent_id, (node_type, content) in simple_fields.items():
+        for parent_id, (node_type, content) in container_fields.items():
             if content:
-                # 世界观、大纲、写作要求本身是代码固定的虚拟系统节点。
-                # 数据库只保存它们的内容承载记录，通过 system_key 关联虚拟 ID，
-                # 不能再作为 parent_id=-3/-4/-5 的普通子节点保存。
                 await self.book_dao.add_child_node(
                     bid=book.bid,
                     uid=user_id,
                     parent_node=None,
-                    parent_id=BOOK_SYSTEM_NODE_PARENT[parent_id],
-                    is_leaf=BOOK_SYSTEM_NODE_IS_LEAF[parent_id],
-                    name=BOOK_SYSTEM_NODE_NAME[parent_id],
-                    data={"system_key": parent_id},
+                    parent_id=parent_id,
+                    is_leaf=1,
+                    name=node_type.key,
                     content=content,
                     category=node_type,
-                    depth=BOOK_SYSTEM_NODE_DEPTH[parent_id],
+                    depth=BOOK_SYSTEM_NODE_DEPTH[parent_id] + 1,
                 )
+
+        if writing_style:
+            # 写作要求是虚拟叶子节点，数据库记录只负责承载其内容。
+            await self.book_dao.add_child_node(
+                bid=book.bid,
+                uid=user_id,
+                parent_node=None,
+                parent_id=BOOK_SYSTEM_NODE_PARENT[BOOK_SYSTEM_WRITING_STYLE_ID],
+                is_leaf=BOOK_SYSTEM_NODE_IS_LEAF[BOOK_SYSTEM_WRITING_STYLE_ID],
+                name=BOOK_SYSTEM_NODE_NAME[BOOK_SYSTEM_WRITING_STYLE_ID],
+                data={"system_key": BOOK_SYSTEM_WRITING_STYLE_ID},
+                content=writing_style,
+                category=BookNodeCategory.WRITING_STYLE,
+                depth=BOOK_SYSTEM_NODE_DEPTH[BOOK_SYSTEM_WRITING_STYLE_ID],
+            )
 
         return book
 
