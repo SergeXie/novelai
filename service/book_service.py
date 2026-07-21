@@ -215,17 +215,6 @@ class BookService:
             return await self.book_dao.get_book_by_bid(bid=bid, user_id=user_id)
         return None
 
-    async def count_book_words(self, bid: str) -> int:
-        """
-        统计书籍字数（去HTML）
-        """
-        contents = await self.book_dao.get_contents_by_bid(bid)
-        total = 0
-        for content in contents:
-            clean_text = strip_html_tags(content)
-            total += len(clean_text)
-        return total
-
     async def get_tree(self, bid: str, uid: int, max_depth: Optional[int] = None) -> List[NodeTreeSchema]:
         # 先构建代码固定的系统树，再把数据库里的真实节点挂到对应位置。
         tree = self._build_system_tree(bid=bid, uid=uid, max_depth=max_depth)
@@ -368,40 +357,6 @@ class BookService:
 
         return next((node for node in candidates if node.content), candidates[0])
 
-    async def _get_tree_legacy(self, bid: str, uid: int, max_depth: Optional[int] = None) -> List[NodeTreeSchema]:
-        tree = []
-        # 从 DAO 获取原始数据库对象
-        nodes = await self.book_dao.get_book_nodes(bid, uid, max_depth)
-
-        if nodes:
-            # 1. 转换原始数据库对象为模型对象
-            node_map = {}
-            for node in nodes:
-                # 验证并转换
-                node_obj = NodeTreeSchema.model_validate(node)
-                # 手动初始化 children 为独立的空列表，确保不是 None
-                node_obj.children = []
-                node_map[node.id] = node_obj
-
-            # 2. 构建层级
-            for node in node_map.values():
-                if node.parent_id is None:
-                    # 顶级节点
-                    tree.append(node)
-                else:
-                    parent = node_map.get(node.parent_id)
-                    if parent:
-                        # 此时 parent.children 已经是 []，可以安全地 append
-                        parent.children.append(node)
-                    else:
-                        # 容错：找不到父节点的（孤儿节点）归为根节点
-                        tree.append(node)
-
-        # 按照 id 或自定义排序字段进行排序（可选）
-        # tree.sort(key=lambda x: x.id)
-
-        return tree
-
     async def get_basic_nodes(self, bid: str, user_id: int) -> List[BookNode]:
         nodes = await self.book_dao.get_book_nodes(bid=bid, user_id=user_id) or []
         # 核心逻辑：保留 is_leaf 等于 1 且 type 大于 1 的元素
@@ -432,47 +387,6 @@ class BookService:
         # 3. 返回该节点及其子树（包装成列表格式）
         return [target_node] if target_node else []
 
-    async def _create_nodes_from_template(self,
-                                          uid: int,
-                                          bid: str,
-                                          nodes: list[dict],
-                                          parent_id: int,
-                                          depth: int,
-                                          ):
-        """
-        递归创建模板节点
-        """
-
-        for item in nodes:
-            # 1️⃣ 创建当前节点
-            node = BookNode(
-                bid=bid,
-                uid=uid,
-                parent_id=parent_id,
-                name=item["title"],
-                content=item.get("data"),
-                is_leaf=item.get("is_leaf", 1),
-                type=item.get("type", 0),
-                depth=depth,
-            )
-
-            self.db.add(node)
-            await self.db.flush()  # 拿到 node.id
-
-            # 2️⃣ 如果有 children，递归创建
-            children = item.get("children")
-            if children:
-                # 当前节点必须是非叶子
-                node.is_leaf = 0
-
-                await self._create_nodes_from_template(
-                    uid=uid,
-                    bid=bid,
-                    nodes=children,
-                    parent_id=node.id,
-                    depth=depth + 1,
-                )
-
     async def create_book_with_tree(
             self,
             uid: int,
@@ -496,8 +410,6 @@ class BookService:
             template_id=template_id,
             coverUrl=self.normalize_cover_path(coverUrl),
         )
-
-        template_data = []
 
         # 3️⃣ 递归创建节点（root parent_id = 0）
         # System nodes are now virtual and are not stored in mc_book_node.
@@ -1078,50 +990,6 @@ class BookService:
 
         return book
 
-        # 2. 获取一级分类节点
-        nodes = await self.book_dao.get_book_nodes(bid=book.bid, user_id=user_id, max_depth=1)
-
-        # 3. 定义简单字段的映射配置 (类型 -> 对应的内容)
-        # 这样可以处理 outline, writing_style, world_view 这种单点内容
-        simple_fields = {
-            BookNodeCategory.WORLDVIEW: world_view,
-            BookNodeCategory.OUTLINE: outline
-
-        }
-
-        notify_fields = {
-            BookNodeCategory.WRITING_STYLE: writing_style,
-        }
-
-        for node in nodes:
-            node_type = BookNodeCategory.from_code(code=node.type)
-
-            # A. 处理角色列表 (多条)
-            if node_type == BookNodeCategory.ROLES and roles:
-                for role in roles:
-                    await self.book_dao.add_child_node(
-                        bid=book.bid, uid=user_id, parent_node=node, is_leaf=1,
-                        name=role.name, content=role.role
-                    )
-
-            # B. 处理章节列表 (多条 + 排序)
-            elif node_type == BookNodeCategory.CONTENT and chapters:
-                for chapter in chapters:
-                    await self.book_dao.add_child_node(bid=book.bid, uid=user_id, parent_node=node, is_leaf=1,
-                                                       name=chapter.title, content=chapter.content,
-                                                       order=chapter.index)
-
-            # C. 处理其他简单文本节点 (单条)
-            elif node_type in simple_fields and (content := simple_fields[node_type]):
-                await self.book_dao.add_child_node(
-                    bid=book.bid, uid=user_id, parent_node=node, is_leaf=1,
-                    name=node_type.key, content=content
-                )
-            elif node_type in notify_fields and (content := notify_fields[node_type]):
-                await self.book_dao.update_node_content(node=node, book_len=len(content), content=content)
-
-        return book
-
     async def create_book_with_chapters(
             self,
             user_id: int,
@@ -1147,33 +1015,6 @@ class BookService:
         except Exception as e:
             logger.error(f"鎵归噺鍐欏叆绔犺妭澶辫触: {e}")
             raise ServerError(msg="绔犺妭鍚屾鍏ュ簱澶辫触")
-
-        return book
-
-        # 下面是暂时保留的旧实现，仅用于回滚或对照参考，当前不会执行。
-        # 新逻辑已经把导入章节写到虚拟正文父节点 -6 下。
-        content_root_nodes = await self.book_dao.get_nodes_by_parent_id(bid=book.bid, parent_id=0)
-        # 使用 next() 配合生成器更优雅地查找
-        parent_node = next(
-            (node for node in content_root_nodes if node.type == BookNodeCategory.CONTENT.code),
-            None
-        )
-
-        if not parent_node:
-            raise ServerError(msg="未找到书籍内容根节点结构")
-
-        try:
-            await self.book_dao.batch_add_child_nodes(
-                user_id=user_id,
-                bid=book.bid,
-                parent_node=parent_node,
-                chapter_data=chapters,
-                is_leaf=1
-            )
-        except Exception as e:
-            logger.error(f"批量写入章节失败: {e}")
-            # 这里建议根据业务需求考虑是否需要回滚已创建的书籍（如果是同一个事务的话）
-            raise ServerError(msg="章节同步入库失败")
 
         return book
 
@@ -1218,40 +1059,6 @@ class BookService:
 
         for parent_id in content_parent_ids:
             write_children(parent_id)
-
-        return quick_html_to_text(output.getvalue())
-
-        # 3. 寻找内容根节点（使用 next 提高效率，避免全量循环）
-        content_root = next(
-            (node for node in nodes if node.type == BookNodeCategory.CONTENT.code),
-            None
-        )
-
-        if not content_root:
-            return ""
-
-        # 4. 按父子关系递归导出，兼容“正文 -> 卷 -> 章节”等多级结构。
-        children_by_parent = {}
-        for node in nodes:
-            children_by_parent.setdefault(node.parent_id, []).append(node)
-
-        visited_node_ids = set()
-
-        def write_children(parent_id: int) -> None:
-            for child in children_by_parent.get(parent_id, []):
-                # 防止异常脏数据形成循环关系，导致递归无法结束。
-                if child.id in visited_node_ids:
-                    continue
-                visited_node_ids.add(child.id)
-
-                output.write(f"{child.name}\n\n")
-                if child.content:
-                    output.write(child.content)
-                    output.write("\n\n")
-
-                write_children(child.id)
-
-        write_children(content_root.id)
 
         return quick_html_to_text(output.getvalue())
 

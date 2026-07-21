@@ -41,18 +41,6 @@ class BookDAO:
 
         return data_map
 
-    async def get_contents_by_bid(self, bid: str) -> list[str]:
-
-        stmt = select(BookNode.content).where(
-            BookNode.bid == bid
-        )
-
-        result = await self.db.execute(stmt)
-
-        contents = result.scalars().all()
-
-        return [c for c in contents if c]
-
     async def get_book_nodes(self, bid: str, user_id:int, max_depth: Optional[int] = None) -> List[BookNode]:
         """
             获取书籍节点列表
@@ -77,13 +65,6 @@ class BookDAO:
         stmt = stmt.order_by(BookNode.id)
 
         result = await self.db.execute(stmt)
-        nodes = result.scalars().all()
-        return list(nodes)
-
-    async def get_book_node_list(self, user_id:int, bid:str, correlation: list[int])->List[BookNode]:
-        result = await self.db.execute(
-            select(BookNode).where(and_(BookNode.id.in_(correlation), BookNode.uid==user_id, BookNode.bid==bid)).order_by(BookNode.type)
-        )
         nodes = result.scalars().all()
         return list(nodes)
 
