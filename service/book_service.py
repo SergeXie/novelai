@@ -105,6 +105,16 @@ BOOK_SYSTEM_NODE_NAME = {
     for root in BOOK_SYSTEM_NODES
     for item in [root, *root.get("children", [])]
 }
+BOOK_SYSTEM_NODE_PARENT = {
+    item["id"]: item["parent_id"]
+    for root in BOOK_SYSTEM_NODES
+    for item in [root, *root.get("children", [])]
+}
+BOOK_SYSTEM_NODE_IS_LEAF = {
+    item["id"]: item["is_leaf"]
+    for root in BOOK_SYSTEM_NODES
+    for item in [root, *root.get("children", [])]
+}
 BOOK_SYSTEM_NODE_IDS = set(BOOK_SYSTEM_NODE_DEPTH)
 LEGACY_BASIC_CHILD_TYPE_TO_SYSTEM_ID = {
     BookNodeCategory.ROLES.code: BOOK_SYSTEM_ROLES_ID,
@@ -297,6 +307,15 @@ class BookService:
     def _build_legacy_system_parent_map(nodes: List[BookNode]) -> dict[int, int]:
         """把旧的入库系统节点映射到新的虚拟 ID，不修改数据库数据。"""
         legacy_map: dict[int, int] = {}
+
+        # New books persist edited virtual-node content in a hidden backing node.
+        # system_key keeps the public negative ID stable while the database uses
+        # its own positive primary key.
+        for node in nodes:
+            system_key = node.data.get("system_key") if isinstance(node.data, dict) else None
+            if system_key in BOOK_SYSTEM_NODE_IDS:
+                legacy_map[node.id] = system_key
+
         root_nodes = [node for node in nodes if node.parent_id in (None, 0)]
         # 旧模板里的“基础设定”根节点通常是 type=0，且没有正文内容。
         legacy_basic_ids = [
@@ -716,25 +735,60 @@ class BookService:
             book_len: int | None,
             content: str | None,
             data: dict | None = None,
-    ) -> BookNode:
+    ) -> BookNode | SimpleNamespace:
         """
         编辑书籍节点内容
         """
-        node = await self.book_dao.get_node_by_id(
-            node_id=node_id,
-            uid=uid,
-            bid=bid
-        )
+        is_system_node = node_id in BOOK_SYSTEM_NODE_IDS
+        if is_system_node:
+            nodes = await self.book_dao.get_book_nodes(bid=bid, user_id=uid)
+            legacy_system_parent_map = self._build_legacy_system_parent_map(nodes)
+            node = next(
+                (item for item in nodes if legacy_system_parent_map.get(item.id) == node_id),
+                None,
+            )
+
+            if node is None:
+                node = await self.book_dao.add_chapter_node(
+                    uid=uid,
+                    bid=bid,
+                    parent_id=BOOK_SYSTEM_NODE_PARENT[node_id],
+                    is_leaf=BOOK_SYSTEM_NODE_IS_LEAF[node_id],
+                    name=BOOK_SYSTEM_NODE_NAME[node_id],
+                    depth=BOOK_SYSTEM_NODE_DEPTH[node_id],
+                    data={"system_key": node_id},
+                    category=BOOK_SYSTEM_NODE_TYPE[node_id],
+                )
+        else:
+            node = await self.book_dao.get_node_by_id(
+                node_id=node_id,
+                uid=uid,
+                bid=bid
+            )
 
         if not node:
             raise ServiceWarning("书籍节点不存在")
 
-        return await self.book_dao.update_node_content(
+        if is_system_node:
+            system_data = dict(node.data or {})
+            if data is not None:
+                system_data.update(data)
+            system_data["system_key"] = node_id
+            data = system_data
+
+        updated_node = await self.book_dao.update_node_content(
             node=node,
             book_len=book_len,
             content=content,
             data=data,
         )
+        if is_system_node:
+            return await self._get_virtual_node_detail(
+                node_id=node_id,
+                uid=uid,
+                bid=bid,
+            )
+        return updated_node
 
     async def edit_book_node(
             self,
