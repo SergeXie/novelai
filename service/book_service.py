@@ -342,8 +342,12 @@ class BookService:
         if mapped_nodes:
             return next((node for node in mapped_nodes if node.content), mapped_nodes[0])
 
-        # 历史系统节点迁移后，旧父节点可能已删除；例如“写作要求”本身带内容时会变成孤儿节点。
-        # 这里按虚拟节点 type 兜底找回有内容的旧节点，用于 /book/detail?id=-4 这类回显。
+        # 写作要求已经完成数据迁移，只通过 data.system_key=-4 识别承载记录，
+        # 不再按 type=4 猜测，避免误读同类型的普通节点。
+        if node_id == BOOK_SYSTEM_WRITING_STYLE_ID:
+            return None
+
+        # 其他系统节点暂时保留旧数据兼容：旧父节点被删除后，按节点类型找回内容。
         system_type = BOOK_SYSTEM_NODE_TYPE.get(node_id)
         if system_type is None:
             return None

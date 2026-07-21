@@ -9,7 +9,7 @@ from database.db_mysql import Base
 
 
 class BookNode(Base):
-    __tablename__ = "mc_book_node"
+    __tablename__ = "mc_book_node_copy3"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     bid: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
