@@ -138,7 +138,14 @@ class AIService:
         final_system_prompt = system_prompt or settings.ai_system_prompt
         final_temperature = temperature if temperature is not None else model_config["temperature"]
         model_max_tokens = model_config["max_tokens"]
-        final_max_tokens = min(max_tokens or model_max_tokens, model_max_tokens)
+        final_max_tokens = max_tokens  # 不传入时为 None，由适配器决定默认值
+
+        # 字数提示注入（入库前），确保数据库中保存的 prompt 包含字数要求
+        if final_max_tokens:
+            range_offset = 300 if final_max_tokens >= 2000 else 200
+            min_tokens = final_max_tokens - range_offset
+            max_tokens_range = final_max_tokens + range_offset
+            user_prompt = f"{user_prompt}\n\n【字数建议：{min_tokens}~{max_tokens_range}字】\n请尽量将篇幅控制在以上范围内，以保证内容的完整性与质量。"
 
         usage_service = UsageService(self.db)
 
@@ -165,6 +172,7 @@ class AIService:
             temperature=final_temperature,
             output_content=output_content,
             action_type=AIAction(action_type),
+            max_tokens=final_max_tokens,
         )
 
         # ================================
@@ -397,7 +405,6 @@ async def async_generate_task(
             break
 
     if ai_rsp or error_msg:
-        print('我要在这里做字数审核')
         async with get_db_context() as db:
             # audit_service = get_generated_content_audit_service()
             # try:

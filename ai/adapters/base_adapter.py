@@ -67,16 +67,12 @@ class OpenAIBaseAdapter(BaseAIAdapter):
             context_messages: Optional[list[dict]] = None,
             enable_web_search: bool = False,
     ) -> AICompletionResponse:  # 指定返回类型
+        print("@@@查看max_tokens",max_tokens)
         try:
             final_user_prompt = await self._build_user_prompt_with_web_search(
                 user_prompt=user_prompt,
                 enable_web_search=enable_web_search,
             )
-            if max_tokens:
-                range_offset = 300 if max_tokens >= 2000 else 200
-                min_tokens = max_tokens - range_offset
-                max_tokens_range = max_tokens + range_offset
-                final_user_prompt = f"{final_user_prompt}\n\n【字数硬性要求：{min_tokens}~{max_tokens_range}字】\n这是不可协商的范围限制。不足{min_tokens}字视为未完成，超过{max_tokens_range}字视为违规。请精准控制篇幅，确保一次输出达标。"
             messages = [
                 {"role": "system", "content": system_prompt},
             ]
@@ -84,11 +80,12 @@ class OpenAIBaseAdapter(BaseAIAdapter):
                 messages += context_messages
             messages.append({"role": "user", "content": final_user_prompt})
             
+            final_max_tokens = max_tokens if max_tokens else self.max_tokens
             response = await self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
                 temperature=temperature or self.temperature,
-                max_tokens=min(max_tokens or self.max_tokens, self.max_tokens))
+                max_tokens=final_max_tokens)
 
             # 封装为 Pydantic 对象
             return AICompletionResponse(

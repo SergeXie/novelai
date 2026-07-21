@@ -20,15 +20,15 @@ aiTemplateController = APIRouter(prefix="/ai/template")
 @aiTemplateController.post("/execute")
 async def execute(
         background_tasks: BackgroundTasks,
-        templateKey: Optional[str] = Body(None),
+        template_key: Optional[str] = Body(None),
         level: int = Body(...),
-        userPrompt: str = Body(""),
+        user_prompt: str = Body(""),
         bid: Optional[str] = Body(None),
         inputs: Optional[dict] = Body(None),
         correlation: Optional[list] = Body(None),
-        lexiconIds: Optional[list[int]] = Body(None, description="关联的公共词条ID列表"),
+        lexicon_ids: Optional[list[int]] = Body(None, description="关联的公共词条ID列表"),
         temperature: Optional[float] = Body(None),
-        maxTokens: Optional[int] = Body(None),
+        max_tokens: Optional[int] = Body(None),
         user=Depends(get_current_user),
         db=Depends(get_db)):
     if bid:
@@ -40,12 +40,12 @@ async def execute(
                                           action_type=AIAction.Execute,
                                           level=level,
                                           temperature=temperature,
-                                          max_tokens=maxTokens,
+                                          max_tokens=max_tokens,
                                           bid=bid,
-                                          user_prompt=userPrompt,
+                                          user_prompt=user_prompt,
                                           correlation=correlation,
-                                          lexicon_ids=lexiconIds,
-                                          template_key=templateKey,
+                                          lexicon_ids=lexicon_ids,
+                                          template_key=template_key,
                                           inputs=inputs,
                                           background_tasks=background_tasks)
 

@@ -30,13 +30,8 @@ class MimoAdapter(OpenAIBaseAdapter):
                 user_prompt=user_prompt,
                 enable_web_search=enable_web_search,
             )
-            if max_tokens:
-                range_offset = 300 if max_tokens >= 2000 else 200
-                min_tokens = max_tokens - range_offset
-                max_tokens_range = max_tokens + range_offset
-                final_user_prompt = f"{final_user_prompt}\n\n【字数硬性要求：{min_tokens}~{max_tokens_range}字】\n这是不可协商的范围限制。不足{min_tokens}字视为未完成，超过{max_tokens_range}字视为违规。请精准控制篇幅，确保一次输出达标。"
             final_temperature = temperature if temperature is not None else self.temperature
-            final_max_tokens = min(max_tokens or self.max_tokens, self.max_tokens)
+            final_max_tokens = max_tokens if max_tokens else self.max_tokens
 
             messages = [
                 {"role": "system", "content": system_prompt},
