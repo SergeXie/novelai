@@ -91,10 +91,37 @@ NOVEL_WIZARD_STEPS: dict[int, dict[str, Any]] = {
     },
 }
 
+WIZARD_CONTEXT_KEYS = {
+    config["key"] for config in NOVEL_WIZARD_STEPS.values()
+}
+
 
 def _get_wizard_step_config(step: int) -> dict[str, Any] | None:
     """根据步骤编号获取向导配置，不存在时返回 None。"""
     return NOVEL_WIZARD_STEPS.get(step)
+
+
+def _deserialize_wizard_value(value: Any) -> Any:
+    """合法 JSON 字符串转为对象；历史纯文本保持原样。"""
+    if not isinstance(value, str):
+        return value
+
+    text = value.strip()
+    if not text:
+        return value
+
+    try:
+        return json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return value
+
+
+def _deserialize_wizard_context(context: dict[str, Any]) -> dict[str, Any]:
+    """反序列化各步骤的历史结果，避免 JSON 字符串被重复转义。"""
+    return {
+        key: _deserialize_wizard_value(value) if key in WIZARD_CONTEXT_KEYS else value
+        for key, value in context.items()
+    }
 
 
 def _build_wizard_prompt(request: NovelWizardStepRequest, context_json: str) -> tuple[dict[str, Any], str]:
@@ -130,7 +157,8 @@ def _normalize_wizard_context(context: dict[str, Any] | str) -> tuple[str, dict[
     - 可继续累积写入步骤结果的 dict 形式 merged_context
     """
     if isinstance(context, dict):
-        return json.dumps(context, ensure_ascii=False, indent=2), dict(context)
+        merged_context = _deserialize_wizard_context(dict(context))
+        return json.dumps(merged_context, ensure_ascii=False, indent=2), merged_context
 
     text = (context or "").strip()
     if not text:
@@ -143,7 +171,8 @@ def _normalize_wizard_context(context: dict[str, Any] | str) -> tuple[str, dict[
         return text, {"raw_context": text}
 
     if isinstance(parsed, dict):
-        return json.dumps(parsed, ensure_ascii=False, indent=2), dict(parsed)
+        merged_context = _deserialize_wizard_context(dict(parsed))
+        return json.dumps(merged_context, ensure_ascii=False, indent=2), merged_context
 
     # JSON 能解析但不是对象时，统一包一层 raw_context，避免后续上下文写入异常
     return json.dumps(parsed, ensure_ascii=False, indent=2), {"raw_context": parsed}
@@ -222,7 +251,8 @@ async def novel_wizard_step(
         parsed_content = None
 
     # 将当前步骤结果写入上下文，供下一步继续使用
-    merged_context[step_config["key"]] = parsed_content if parsed_content is not None else content
+    normalized_content = parsed_content if parsed_content is not None else content
+    merged_context[step_config["key"]] = normalized_content
     merged_context["wizardId"] = wizard_id
 
     return ResponseUtil.success(data={
@@ -230,8 +260,8 @@ async def novel_wizard_step(
         "requestId": request_id,
         "step": request.step,
         "stepName": step_config["name"],
-        # content 保留原始模型输出，便于前端展示或排查问题
-        "content": content,
+        # JSON 输出直接返回对象；历史纯文本仍返回字符串。
+        "content": normalized_content,
         # parsedContent 为结构化结果，便于前端直接消费
         "parsedContent": parsed_content,
         # context 为合并后的上下文，可直接传给下一步
