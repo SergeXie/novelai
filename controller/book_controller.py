@@ -22,7 +22,7 @@ from core.entity.do.book_deconstruct_record_do import BookDeconstructRecord
 from core.entity.do.users_do import User
 from core.entity.vo.book_node_schema import BookResp, CreateBookReq, BookNodeDetailResp, UpdateBookNodeReq, \
     EditBookNodeReq, EditBookNodeResp, AddChapterResp, AddBookNodeReq, DeleteBookNodeReq, OfflineBookReq, EditBookReq, \
-    HardDeleteBookReq, BookSearchResp
+    HardDeleteBookReq, BookSearchResp, BatchAddRoleItemReq, BatchEditRoleItemReq
 from core.entity.vo.bool_vo import AutoCreateBookReq
 from core.entity.vo.confirm_import_req import ConfirmImportRequest
 from core.processor.book_processor import Chapter, NovelProcessor
@@ -97,6 +97,34 @@ async def add_chapter(
     return ResponseUtil.success(data=resp)
 
 
+@bookController.post("/user/role/batch/add", name="批量新增角色")
+async def batch_add_roles(
+        reqs: List[BatchAddRoleItemReq] = Body(..., min_length=1, max_length=100),
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user),
+):
+    """批量新增角色；请求体直接提交角色数组。"""
+    book_service = BookService(db=db)
+    nodes = await book_service.batch_add_roles(
+        uid=current_user.pkId,
+        items=[req.model_dump() for req in reqs],
+    )
+
+    resp = [
+        AddChapterResp(
+            id=node.id,
+            bid=node.bid,
+            parent_id=node.parent_id,
+            is_leaf=node.is_leaf,
+            name=node.name,
+            data=node.data,
+            content=node.content,
+        )
+        for node in nodes
+    ]
+    return ResponseUtil.success(data=resp)
+
+
 @bookController.post("/delete", name="删除书籍节点")
 async def delete_book_node(
         req: DeleteBookNodeReq,
@@ -145,6 +173,22 @@ async def edit_book_node(
     resp_data = EditBookNodeResp.model_validate(node)
 
     return ResponseUtil.success(data=resp_data)
+
+
+@bookController.post("/user/role/batch/edit", name="批量编辑角色")
+async def batch_edit_roles(
+        reqs: List[BatchEditRoleItemReq] = Body(..., min_length=1, max_length=1000),
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user),
+):
+    """批量编辑角色；请求体直接提交角色数组。"""
+    book_service = BookService(db=db)
+    nodes = await book_service.batch_edit_roles(
+        uid=current_user.pkId,
+        items=[req.model_dump() for req in reqs],
+    )
+    resp = [EditBookNodeResp.model_validate(node) for node in nodes]
+    return ResponseUtil.success(data=resp)
 
 
 @bookController.get("/book/detail", name="书籍详情节点概要内容")
