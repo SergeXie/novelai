@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 
 from fastapi import Query
 from pydantic import BaseModel, Field, field_serializer, ConfigDict, field_validator
@@ -206,6 +206,63 @@ class AddChapterResp(BaseModel):
     name: str
     data: Optional[Dict[str, Any]] = None
     content: Optional[str] = None
+
+
+class BatchAddRoleItemReq(BaseModel):
+    """批量新增角色时的单条角色数据。"""
+
+    bid: str
+    parent_id: Literal[-2] = -2
+    is_leaf: Literal[1] = 1
+    name: str
+    data: Optional[Dict[str, Any]] = None
+    content: Optional[str] = None
+    type: Literal[2] = 2
+
+    @field_validator("data", mode="before")
+    @classmethod
+    def parse_role_data(cls, value: Any) -> Optional[Dict[str, Any]]:
+        # 兼容前端现有的 JSON 字符串，同时也允许直接提交 JSON 对象。
+        if value is None or isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            if not value.strip():
+                return None
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError as exc:
+                raise ValueError("data 必须是合法的 JSON 字符串") from exc
+            if not isinstance(parsed, dict):
+                raise ValueError("data 必须是 JSON 对象")
+            return parsed
+        raise ValueError("data 必须是 JSON 字符串或对象")
+
+
+class BatchEditRoleItemReq(BaseModel):
+    """批量编辑角色时的单条角色数据。"""
+
+    id: int
+    bid: str
+    name: Optional[str] = None
+    data: Optional[Dict[str, Any]] = None
+
+    @field_validator("data", mode="before")
+    @classmethod
+    def parse_role_data(cls, value: Any) -> Optional[Dict[str, Any]]:
+        # 与批量新增保持一致，兼容旧前端传递的序列化 JSON 字符串。
+        if value is None or isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            if not value.strip():
+                return None
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError as exc:
+                raise ValueError("data 必须是合法的 JSON 字符串") from exc
+            if not isinstance(parsed, dict):
+                raise ValueError("data 必须是 JSON 对象")
+            return parsed
+        raise ValueError("data 必须是 JSON 字符串或对象")
 
 
 
