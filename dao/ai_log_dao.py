@@ -6,9 +6,11 @@ from loguru import logger
 from sqlalchemy import select, func, update, desc, and_, Integer, cast
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer, defer
+from sqlalchemy.orm.attributes import set_committed_value
 
 from ai.adapters.enums import AIGenerateStatus
 from core.entity.do.generate_log import AiNovelGenerateLog
+from core.entity.do.generate_log_content import AiNovelGenerateLogContent
 from core.entity.vo.ai_response import AICompletionResponse
 from .base import BaseDAO
 
@@ -16,6 +18,92 @@ from .base import BaseDAO
 class AILogDAO(BaseDAO[AiNovelGenerateLog]):
     def __init__(self, db: AsyncSession):
         super().__init__(AiNovelGenerateLog, db)
+
+    @staticmethod
+    def _apply_content(
+            log: AiNovelGenerateLog,
+            content: AiNovelGenerateLogContent | None,
+    ) -> AiNovelGenerateLog:
+        """把新内容表字段装配回旧日志对象，保持上层接口字段不变。"""
+        if content is None:
+            return log
+
+        if content.user_prompt is not None:
+            set_committed_value(log, "userPrompt", content.user_prompt)
+        if content.system_prompt is not None:
+            set_committed_value(log, "systemPrompt", content.system_prompt)
+        if content.output_content is not None:
+            set_committed_value(log, "outputContent", content.output_content)
+        return log
+
+    async def _get_content_by_request_id(
+            self,
+            request_id: str,
+    ) -> AiNovelGenerateLogContent | None:
+        result = await self.db.execute(
+            select(AiNovelGenerateLogContent).where(
+                AiNovelGenerateLogContent.request_id == request_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def _hydrate_logs_from_content(
+            self,
+            logs: List[AiNovelGenerateLog],
+    ) -> List[AiNovelGenerateLog]:
+        """批量读取新内容表；没有新记录的历史日志保留主表旧字段。"""
+        if not logs:
+            return logs
+
+        request_ids = [log.requestId for log in logs]
+        result = await self.db.execute(
+            select(AiNovelGenerateLogContent).where(
+                AiNovelGenerateLogContent.request_id.in_(request_ids)
+            )
+        )
+        content_map = {
+            item.request_id: item
+            for item in result.scalars().all()
+        }
+        for log in logs:
+            self._apply_content(log, content_map.get(log.requestId))
+        return logs
+
+    async def _upsert_output_content(
+            self,
+            request_id: str,
+            output_content: str | None,
+    ) -> bool:
+        """更新新内容表输出；历史处理中日志没有内容行时自动补建。"""
+        content = await self._get_content_by_request_id(request_id)
+        if content is not None:
+            content.output_content = output_content
+            self.db.add(content)
+            await self.db.flush()
+            return True
+
+        result = await self.db.execute(
+            select(AiNovelGenerateLog)
+            .where(AiNovelGenerateLog.requestId == request_id)
+            .options(
+                undefer(AiNovelGenerateLog.userPrompt),
+                undefer(AiNovelGenerateLog.systemPrompt),
+                undefer(AiNovelGenerateLog.outputContent),
+            )
+        )
+        log = result.scalar_one_or_none()
+        if log is None:
+            return False
+
+        self.db.add(AiNovelGenerateLogContent(
+            log_id=log.id,
+            request_id=log.requestId,
+            user_prompt=log.userPrompt,
+            system_prompt=log.systemPrompt,
+            output_content=output_content,
+        ))
+        await self.db.flush()
+        return True
 
     async def get_usage_sum(self,
                             user_id: int,
@@ -108,28 +196,58 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
         return result.scalar_one()
 
     async def create_ai_generate_log(self, log_obj: AiNovelGenerateLog) -> AiNovelGenerateLog:
+        # 新日志的大文本只写内容表；主表旧字段保留空值，兼容当前非空约束。
+        user_prompt = log_obj.userPrompt
+        system_prompt = log_obj.systemPrompt
+        output_content = log_obj.outputContent
+        log_obj.userPrompt = ""
+        log_obj.systemPrompt = ""
+        log_obj.outputContent = None
+
         self.db.add(log_obj)
+        await self.db.flush()
+        self.db.add(AiNovelGenerateLogContent(
+            log_id=log_obj.id,
+            request_id=log_obj.requestId,
+            user_prompt=user_prompt,
+            system_prompt=system_prompt,
+            output_content=output_content,
+        ))
         await self.db.commit()
         await self.db.refresh(log_obj)
+
+        # 返回给当前任务的对象仍保持旧属性结构，避免影响后台生成流程。
+        set_committed_value(log_obj, "userPrompt", user_prompt)
+        set_committed_value(log_obj, "systemPrompt", system_prompt)
+        set_committed_value(log_obj, "outputContent", output_content)
         return log_obj
 
-    async def get_log_by_request_id(self, request_id: str) -> AiNovelGenerateLog:
+    async def get_log_by_request_id(
+            self,
+            request_id: str,
+            with_content: bool = True,
+    ) -> AiNovelGenerateLog | None:
         """
-        根据 requestId 查询生成日志记录
+        根据 requestId 查询生成日志记录。
+        with_content=True 时新内容表优先，不存在则读取主表历史字段。
         """
-        # 使用 select 语句构建查询
-        stmt = select(AiNovelGenerateLog).where(AiNovelGenerateLog.requestId == request_id).options(
-            # 显式取消延迟加载，确保详情页能拿到完整内容
-            undefer(AiNovelGenerateLog.outputContent),
-            undefer(AiNovelGenerateLog.systemPrompt),
-            undefer(AiNovelGenerateLog.userPrompt)
+        stmt = select(AiNovelGenerateLog).where(
+            AiNovelGenerateLog.requestId == request_id
         )
+        if with_content:
+            stmt = stmt.options(
+                undefer(AiNovelGenerateLog.outputContent),
+                undefer(AiNovelGenerateLog.systemPrompt),
+                undefer(AiNovelGenerateLog.userPrompt),
+            )
 
-        # 执行查询
         result = await self.db.execute(stmt)
+        log = result.scalar_one_or_none()
+        if log is None or not with_content:
+            return log
 
-        # 获取单个结果（如果没有则返回 None）
-        return result.scalar_one_or_none()
+        content = await self._get_content_by_request_id(request_id)
+        return self._apply_content(log, content)
 
     async def update_output_by_request_id(
             self,
@@ -146,7 +264,6 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             "status": status.value if hasattr(status, "value") else status,
             "errorMsg": error_msg,
             **({
-                   "outputContent": ai_rsp.content,
                    "outputLength": ai_rsp.usage.completion_tokens,
                    "requestInputLength": ai_rsp.usage.prompt_tokens,
                    "totalTokens": ai_rsp.usage.total_tokens,
@@ -159,6 +276,11 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
                 .values(update_fields)
             )
             result = await self.db.execute(stmt)
+            if ai_rsp:
+                await self._upsert_output_content(
+                    request_id=request_id,
+                    output_content=ai_rsp.content,
+                )
             await self.db.flush()
             return result.rowcount > 0
         except Exception as e:
@@ -180,8 +302,6 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             "errorMsg": error_msg,
         }
 
-        if output_content is not None:
-            update_fields["outputContent"] = output_content
         if output_length is not None:
             update_fields["outputLength"] = output_length
         if request_input_length is not None:
@@ -196,6 +316,11 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
                 .values(update_fields)
             )
             result = await self.db.execute(stmt)
+            if output_content is not None:
+                await self._upsert_output_content(
+                    request_id=request_id,
+                    output_content=output_content,
+                )
             await self.db.flush()
             return result.rowcount > 0
         except Exception as e:
@@ -262,8 +387,11 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
 
             # scalars().first() 会返回对象本身，如果没有结果则返回 None
             log_entry = result.scalars().first()
+            if log_entry is None:
+                return None
 
-            return log_entry
+            content = await self._get_content_by_request_id(log_entry.requestId)
+            return self._apply_content(log_entry, content)
 
         except Exception as e:
             # 这里建议记录你的项目日志
@@ -284,10 +412,9 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
         if not source_log or not target_log:
             return False, "记录不存在"
 
-        # 2. 定义需要同步的字段列表
+        # 2. 定义需要同步的主表字段列表
         fields_to_copy = [
             "requestInputLength",
-            "outputContent",
             "outputLength",
             "tokenEstimate",
             "status",
@@ -298,6 +425,12 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
         for field in fields_to_copy:
             value = getattr(source_log, field)
             setattr(target_log, field, value)
+
+        # 输出正文写入新内容表；源日志没有新内容行时已由双读逻辑从旧主表取回。
+        await self._upsert_output_content(
+            request_id=target_request_id,
+            output_content=source_log.outputContent,
+        )
 
         # 4. 提交到数据库
         try:
@@ -354,11 +487,19 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
                 .offset(offset)
             )
 
-            # --- 核心逻辑：动态处理 content 字段 ---
-            if not with_content:
-                # 如果不需要内容，则延迟加载 content 字段
-                # 注意：你可以根据需要 defer 多个大字段，如 .options(defer(Model.col1), defer(Model.col2))
-                stmt = stmt.options(defer(AiNovelGenerateLog.outputContent))
+            # 仅明确需要内容时读取主表旧字段，供尚未迁移的历史数据兜底。
+            if with_content:
+                stmt = stmt.options(
+                    undefer(AiNovelGenerateLog.outputContent),
+                    undefer(AiNovelGenerateLog.systemPrompt),
+                    undefer(AiNovelGenerateLog.userPrompt),
+                )
+            else:
+                stmt = stmt.options(
+                    defer(AiNovelGenerateLog.outputContent),
+                    defer(AiNovelGenerateLog.systemPrompt),
+                    defer(AiNovelGenerateLog.userPrompt),
+                )
 
             # 3. 查询总数
             count_stmt = (
@@ -369,7 +510,9 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             # 4. 执行
             # 执行对象查询
             result = await self.db.execute(stmt)
-            obj_list = result.scalars().all()  # 这里得到的是 List[AiNovelGenerateLog]
+            obj_list = list(result.scalars().all())
+            if with_content:
+                await self._hydrate_logs_from_content(obj_list)
 
             # 执行计数查询
             total_count = await self.db.scalar(count_stmt)
@@ -429,6 +572,7 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             result = await self.db.execute(stmt)
             # 转换为 list 确保数据被立刻读取到内存，避免 lazy load 风险
             obj_list = list(result.scalars().all())
+            await self._hydrate_logs_from_content(obj_list)
 
             total_count = await self.db.scalar(count_stmt)
 
