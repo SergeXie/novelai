@@ -183,24 +183,6 @@ class BookDAO:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_nodes_by_ids(
-            self,
-            node_ids: list[int],
-            uid: int,
-    ) -> list[BookNode]:
-        """一次查询当前用户的一组书籍节点，供批量操作使用。"""
-        if not node_ids:
-            return []
-
-        stmt = select(BookNode).where(
-            and_(
-                BookNode.id.in_(node_ids),
-                BookNode.uid == uid,
-            )
-        )
-        result = await self.db.execute(stmt)
-        return list(result.scalars().all())
-
     async def get_node_parent_by_id(
             self,
             parent_id: int,
