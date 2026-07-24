@@ -52,45 +52,6 @@ async def execute(
     return ResponseUtil.success(data=request_id)
 
 
-@aiTemplateController.post("/executeFixed", name="角色分析")
-async def execute_fixed(
-        background_tasks: BackgroundTasks,
-        level: int = Body(...),
-        user_prompt: str = Body(""),
-        bid: Optional[str] = Body(None),
-        inputs: Optional[dict] = Body(None),
-        correlation: Optional[list] = Body(None),
-        lexicon_ids: Optional[list[int]] = Body(None, description="关联的公共词条ID列表"),
-        temperature: Optional[float] = Body(None),
-        max_tokens: Optional[int] = Body(None),
-        user=Depends(get_current_user),
-        db=Depends(get_db)):
-    """
-    固定模板执行AI（templateKey 固定为 PRMTZJLVQDNYBXCGHS）
-    """
-    FIXED_TEMPLATE_KEY = "PRMTZJLVQDNYBXCGHS"
-
-    if bid:
-        await check_book_owner(bid=bid, db=db, user=user)
-
-    ai_service = AIService(db=db)
-    request_id = await ai_service.execute(db=db,
-                                          user=user,
-                                          action_type=AIAction.Execute,
-                                          level=level,
-                                          temperature=temperature,
-                                          max_tokens=max_tokens,
-                                          bid=bid,
-                                          user_prompt=user_prompt,
-                                          correlation=correlation,
-                                          lexicon_ids=lexicon_ids,
-                                          template_key=FIXED_TEMPLATE_KEY,
-                                          inputs=inputs,
-                                          background_tasks=background_tasks)
-
-    return ResponseUtil.success(data=request_id)
-
-
 @aiTemplateController.get("/publicPromptList", name="提示词广场模板库")
 async def get_public_private_prompt_list(
         page: int = Query(1, ge=1),
