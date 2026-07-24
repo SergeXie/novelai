@@ -1,4 +1,4 @@
-﻿import json
+import json
 from typing import Optional
 from loguru import logger
 from fastapi import APIRouter, Depends, Body, BackgroundTasks
@@ -181,8 +181,13 @@ async def create_book_flow(
                     completionTokens=usage.completion_tokens,
                 )
 
-            await usage_service.record_consumption(request_id=request_id, total_tokens=usage.total_tokens,
-                                                   multiplier=settings.MULTIPLIER)
+           ss(
+                request_id=request_id,
+                total_tokens=usage.total_tokens,
+                multiplier=settings.MULTIPLIER,
+                prompt_tokens=usage.prompt_tokens,
+                completion_tokens=usage.completion_tokens,
+            )
         except Exception as e:
             logger.error(f"一键成书token消耗回写失败：{str(e)}")
 

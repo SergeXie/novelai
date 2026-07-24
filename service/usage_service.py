@@ -219,7 +219,13 @@ class UsageService:
         )
 
         if status == AIGenerateStatus.SUCCESS and ai_rsp:
-            await self.record_consumption(request_id=request_id, total_tokens=ai_rsp.usage.total_tokens, multiplier=settings.MULTIPLIER)
+            await self.record_consumption(
+                request_id=request_id,
+                total_tokens=ai_rsp.usage.total_tokens,
+                multiplier=settings.MULTIPLIER,
+                prompt_tokens=ai_rsp.usage.prompt_tokens,
+                completion_tokens=ai_rsp.usage.completion_tokens,
+            )
 
         if success:
             display_content = ""
@@ -385,10 +391,16 @@ class UsageService:
             self,
             request_id: str,
             total_tokens: int,
-            multiplier: float
+            multiplier: float,
+            prompt_tokens: int | None = None,
+            completion_tokens: int | None = None,
     ):
         """
         执行实际扣减并回填日志
+        文本生成按“输入 Token 50% + 输出 Token 100%”计算计费额度；
+        prompt_tokens = 输入 Token
+        completion_tokens = 输出 Token
+        totalTokens、requestInputLength、outputLength 仍记录模型返回的原始用量。
         优先级：免费额度 (Daily Free) -> 月度额度 (Monthly) -> 永久额度 (Permanent)
         """
         # 1. 获取日志对象
@@ -399,8 +411,13 @@ class UsageService:
 
         user_id = log_entry.userId
 
-        # 计算总计费点数
-        actual_amount = int(total_tokens * float(multiplier or 1))
+        # 有输入/输出明细时，输入按半价计费；旧调用和固定成本业务仍按 total_tokens 全额计费。
+        if prompt_tokens is not None and completion_tokens is not None:
+            billable_tokens = max(0, prompt_tokens) / 2 + max(0, completion_tokens)
+        else:
+            billable_tokens = max(0, total_tokens)
+
+        actual_amount = int(billable_tokens * float(multiplier or 1))
         asset_amount = int(actual_amount * float(log_entry.multiplier or 1))
         log_entry.totalTokens = total_tokens
         log_entry.actualAmount = actual_amount
