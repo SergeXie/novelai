@@ -1,4 +1,5 @@
 ﻿from datetime import datetime, time
+from decimal import Decimal, ROUND_CEILING
 from typing import Optional
 
 from dateutil import parser
@@ -62,6 +63,37 @@ class UsageService:
             return datetime.combine(parsed_time.date(), time.max if is_end else time.min)
 
         return parsed_time
+
+    @staticmethod
+    def calculate_model_price_amount(
+            prompt_tokens: int,
+            completion_tokens: int,
+            input_price,
+            output_price,
+            sale_multiplier,
+    ) -> int:
+        """
+        按模型人民币成本价计算文墨值扣费。
+
+        input_price/output_price 是每 100 万 Token 的人民币成本价；
+        产品定价是 15 元 = 1,000,000 文墨值，所以可化简为：
+        (输入Token * 输入单价 + 输出Token * 输出单价) * 售价倍率 / 15
+        """
+        prompt = Decimal(max(0, prompt_tokens or 0))
+        completion = Decimal(max(0, completion_tokens or 0))
+        input_unit_price = Decimal(str(input_price or 0))
+        output_unit_price = Decimal(str(output_price or 0))
+        price_multiplier = Decimal(str(sale_multiplier or 5))
+
+        if input_unit_price <= 0 and output_unit_price <= 0:
+            return 0
+
+        amount = (
+            (prompt * input_unit_price + completion * output_unit_price)
+            * price_multiplier
+            / Decimal("15")
+        )
+        return int(amount.to_integral_value(rounding=ROUND_CEILING))
 
     async def get_user_daily_input_output(self, user_id: int) -> tuple[int, int]:
         """获取用户今天累计的输入长度和输出长度。"""
@@ -355,11 +387,10 @@ class UsageService:
             action_type=action_type,
         )
 
-        #  在转换为 DTO 时处理，或者在 from_orm_model 内部去乘以 multiplier
         list_data = []
         for log in logs:
             resp_obj = await AIGenerateLogResp.from_orm_model(log, self.model_dao)
-            resp_obj.totalTokens = int(log.actualAmount * log.multiplier)
+            resp_obj.totalTokens = int(log.actualAmount or 0)
             list_data.append(resp_obj)
 
         # 3. 返回标准分页模型
@@ -421,14 +452,25 @@ class UsageService:
 
         user_id = log_entry.userId
 
-        # 有输入/输出明细时，输入按半价计费；旧调用和固定成本业务仍按 total_tokens 全额计费。
-        if prompt_tokens is not None and completion_tokens is not None:
-            billable_tokens = max(0, prompt_tokens) / 2 + max(0, completion_tokens)
-        else:
-            billable_tokens = max(0, total_tokens)
+        model = await self.model_dao.get_model_by_identifier(log_entry.model)
+        actual_amount = 0
 
-        actual_amount = int(billable_tokens * float(multiplier or 1))
-        asset_amount = int(actual_amount * float(log_entry.multiplier or 1))
+        # 新模型价格计费：只使用 input_price/output_price/sale_multiplier。
+        # 不再叠加全局倍率 settings.MULTIPLIER，也不再叠加旧模型倍率 multiplier。
+        if model:
+            actual_amount = self.calculate_model_price_amount(
+                prompt_tokens=prompt_tokens or 0,
+                completion_tokens=completion_tokens if completion_tokens is not None else total_tokens,
+                input_price=getattr(model, "input_price", 0),
+                output_price=getattr(model, "output_price", 0),
+                sale_multiplier=getattr(model, "sale_multiplier", 5),
+            )
+
+        if not model:
+            # 找不到模型配置时，只按固定额度原值兜底，不再乘任何倍率。
+            actual_amount = int(max(0, total_tokens))
+
+        asset_amount = actual_amount
         log_entry.totalTokens = total_tokens
         log_entry.actualAmount = actual_amount
 
