@@ -55,6 +55,27 @@ class McAiModel(Base):
         comment="计费倍率，默认1.0",
     )
 
+    input_price: Mapped[Decimal] = mapped_column(
+        DECIMAL(10, 2),
+        nullable=False,
+        server_default="0.00",
+        comment="输入每100万Token的人民币成本价",
+    )
+
+    output_price: Mapped[Decimal] = mapped_column(
+        DECIMAL(10, 2),
+        nullable=False,
+        server_default="0.00",
+        comment="输出每100万Token的人民币成本价",
+    )
+
+    sale_multiplier: Mapped[Decimal] = mapped_column(
+        DECIMAL(10, 2),
+        nullable=False,
+        server_default="5.00",
+        comment="成本售价倍率",
+    )
+
     max_tokens: Mapped[int] = mapped_column(
         Integer,
         nullable=False,

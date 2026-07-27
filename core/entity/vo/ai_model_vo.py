@@ -69,7 +69,7 @@ class AIGenerateLogResp(BaseModel):
             "model": model_name,
             "status": log.status,
             "action": log.actionType,
-            "totalTokens": int((log.actualAmount or 0) * (log.multiplier or 1)),
+            "totalTokens": int(log.actualAmount or 0),
             "createdAt": log.createdAt,
             "outputContent": output_data,
         }
@@ -108,7 +108,7 @@ class AIGenerateLogDetailResp(AIGenerateLogResp):
 
         # 补全详情特有字段
         data.update({
-            "totalTokens": int((log.actualAmount or 0) * (log.multiplier or 1)),
+            "totalTokens": int(log.actualAmount or 0),
             "outputContent": cls._format_detail_output(log.actionType, log.outputContent, log.template_key),
             "originPrompt": log.originPrompt or ""
         })

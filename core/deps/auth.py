@@ -104,14 +104,21 @@ async def check_user_quota_or_raise(frozen_token_length: int, user_info: User, l
             if level not in [0, 2]:
                 raise InsufficientTokenException("免费用户只能使用执笔与才女模型")
 
-        model_multiplier = 1
+        model = None
         if level is not None:
             model = await AiModelDAO(db).get_model_by_level(level)
-            if model:
-                model_multiplier = float(model.multiplier or 1)
 
-        estimated_amount = int(frozen_token_length * settings.MULTIPLIER)
-        estimated_asset_amount = int(estimated_amount * model_multiplier)
+        if model:
+            # 预校验阶段没有真实输入/输出拆分，按输出价保守估算冻结额度。
+            estimated_asset_amount = UsageService.calculate_model_price_amount(
+                prompt_tokens=0,
+                completion_tokens=frozen_token_length,
+                input_price=getattr(model, "input_price", 0),
+                output_price=getattr(model, "output_price", 0),
+                sale_multiplier=getattr(model, "sale_multiplier", 5),
+            )
+        else:
+            estimated_asset_amount = int(max(0, frozen_token_length))
 
         if user_paid_balance >= estimated_asset_amount:
             return

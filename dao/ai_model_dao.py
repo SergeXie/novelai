@@ -30,6 +30,9 @@ class AiModelDAO:
             model_identifier=model.model_identifier,
             provider=model.provider,
             multiplier=model.multiplier,
+            input_price=model.input_price,
+            output_price=model.output_price,
+            sale_multiplier=model.sale_multiplier,
             max_tokens=model.max_tokens,
             temperature=model.temperature,
             context_window=model.context_window,
@@ -135,6 +138,21 @@ class AiModelDAO:
         await self.list_models()
         model = AiModelDAO._cache_identifier_map.get(identifier)
         return model.model_name if model else "默认模型"
+
+    async def get_model_by_identifier(self, identifier: str) -> SimpleNamespace | None:
+        await self.list_models()
+        model = AiModelDAO._cache_identifier_map.get(identifier)
+        if model:
+            return model
+
+        stmt = (
+            select(McAiModel)
+            .where(McAiModel.model_identifier == identifier)
+            .where(McAiModel.status == 1)
+        )
+        result = await self.db.execute(stmt)
+        orm_model = result.scalar_one_or_none()
+        return AiModelDAO._snapshot_model(orm_model) if orm_model else None
 
     async def get_all_models_by_level(self, level: int) -> list[SimpleNamespace]:
         """获取指定 level 下的全部模型（含启用和禁用），按 weight 降序"""
