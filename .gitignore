@@ -23,6 +23,7 @@ build/
 .eggs/
 test
 keys
+sql/
 *.whl
 demo/
 /novelai_envs
