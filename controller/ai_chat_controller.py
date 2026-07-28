@@ -66,7 +66,10 @@ async def completions(
         background_tasks=background_tasks,
     )
     usage_service = UsageService(db=db)
-    log = await usage_service.get_log_by_request_id(request_id=request_id)
+    log = await usage_service.get_log_by_request_id(
+        request_id=request_id,
+        with_content=False,
+    )
     data_id = log.id if log else -1
 
     # 5. 立即返回 requestId 供前端轮询
@@ -140,7 +143,10 @@ async def multi_completions(
     )
 
     usage_service = UsageService(db=db)
-    log = await usage_service.get_log_by_request_id(request_id=request_id)
+    log = await usage_service.get_log_by_request_id(
+        request_id=request_id,
+        with_content=False,
+    )
     data_id = log.id if log else -1
 
     return ResponseUtil.success(data={"requestId": request_id, "groupId": group_id, "id": data_id})

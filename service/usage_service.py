@@ -229,8 +229,15 @@ class UsageService:
         """获取指定书籍最近一条可复用的拆书记录。"""
         return await self.ai_log_dao.get_invalid_book_destructor_log(bid=bid)
 
-    async def get_log_by_request_id(self, request_id: str) -> AiNovelGenerateLog | None:
-        return await self.ai_log_dao.get_log_by_request_id(request_id=request_id)
+    async def get_log_by_request_id(
+            self,
+            request_id: str,
+            with_content: bool = True,
+    ) -> AiNovelGenerateLog | None:
+        return await self.ai_log_dao.get_log_by_request_id(
+            request_id=request_id,
+            with_content=with_content,
+        )
 
     async def update_output_content_by_request_id(
             self,
@@ -435,7 +442,10 @@ class UsageService:
         优先级：免费额度 (Daily Free) -> 月度额度 (Monthly) -> 永久额度 (Permanent)
         """
         # 1. 获取日志对象
-        log_entry: AiNovelGenerateLog = await self.ai_log_dao.get_log_by_request_id(request_id=request_id)
+        log_entry: AiNovelGenerateLog = await self.ai_log_dao.get_log_by_request_id(
+            request_id=request_id,
+            with_content=False,
+        )
         if log_entry is None:
             logger.error(f"未找到对应的请求日志: {request_id}")
             return

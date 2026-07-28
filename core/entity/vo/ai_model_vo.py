@@ -87,6 +87,7 @@ class AIGenerateLogResp(BaseModel):
 class AIGenerateLogDetailResp(AIGenerateLogResp):
     outputContent: str
     originPrompt: str
+    template_key: Optional[str] = None
 
     @staticmethod
     def _format_detail_output(
@@ -110,7 +111,8 @@ class AIGenerateLogDetailResp(AIGenerateLogResp):
         data.update({
             "totalTokens": int(log.actualAmount or 0),
             "outputContent": cls._format_detail_output(log.actionType, log.outputContent, log.template_key),
-            "originPrompt": log.originPrompt or ""
+            "originPrompt": log.originPrompt or "",
+            "template_key": log.template_key,
         })
 
         # 此时实例化子类，校验一次性通过
