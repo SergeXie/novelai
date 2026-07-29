@@ -39,7 +39,6 @@ class AIGenerateLogResp(BaseModel):
     action: str
     totalTokens: int
     model: str
-    # 将 outputContent 设置为 Optional，兼容 defer() 没查出来的情况
     outputContent: Optional[str] = Field(None, description="模型输出内容")
     createdAt: datetime
 
@@ -54,13 +53,7 @@ class AIGenerateLogResp(BaseModel):
         prompt_preview = (prompt_content[:200] + "...") if len(prompt_content) > 200 else prompt_content
         model_name = await model_dao.get_model_name_by_identifier(log.model)
 
-        # --- 修复点：安全获取 outputContent ---
-        # 不要直接 log.outputContent，那样会触发 MissingGreenlet
-        # 只有当 outputContent 确实在内存里（没被 defer）时才读取
-        output_data = None
-        if 'outputContent' in log.__dict__:
-            output_data = log.outputContent
-        # ------------------------------------
+        output_data = log.outputContent
 
         return {
             "id":log.id,

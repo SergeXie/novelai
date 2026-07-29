@@ -6,7 +6,12 @@ from common.exception.lzsd_exception import ServiceWarning
 from common.utils.time_format_util import parse_and_format_date
 from core.entity.do.order_do import Order
 from core.entity.do.users_do import User
-from core.entity.vo.order_schema_vo import CreateInternalOrderResponse, CreateOrderResponse, OrderListItem
+from core.entity.vo.order_schema_vo import (
+    CreateInternalOrderResponse,
+    CreateOrderResponse,
+    OrderListItem,
+    UserOrderListItem,
+)
 from dao.order_dao import OrderDAO
 from dao.product_dao import ProductDAO
 from service.account_service import AccountService
@@ -118,6 +123,42 @@ class OrderService:
                 )
             )
 
+        return result, total
+
+    @staticmethod
+    async def get_user_orders_with_product(
+            db: AsyncSession,
+            user_id: int,
+            page: int,
+            page_size: int,
+    ) -> tuple[list[UserOrderListItem], int]:
+        """内部查询指定用户的订单，并返回下单时的产品快照。"""
+        await OrderService.cancel_expired_pending_orders(db, user_id=user_id)
+
+        records, total = await OrderDAO.list_orders(
+            db=db,
+            user_id=user_id,
+            page=page,
+            page_size=page_size,
+        )
+
+        result = [
+            UserOrderListItem(
+                order_no=item.order_no,
+                user_id=item.user_id,
+                order_type=item.order_type,
+                target_code=item.target_code,
+                product_name=item.snapshot_name,
+                product_snapshot=item.snapshot_content or {},
+                total_amount=item.total_amount,
+                pay_amount=item.pay_amount,
+                status=item.status,
+                pay_method=item.pay_method,
+                paid_at=parse_and_format_date(item.paid_at),
+                created_at=item.created_at,
+            )
+            for item in records
+        ]
         return result, total
 
     @staticmethod

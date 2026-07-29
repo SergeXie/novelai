@@ -100,6 +100,35 @@ async def get_orders_history(
     return ResponseUtil.success(data=rsp_data)
 
 
+@productRouter.get("/user/history", name="按用户查询订单")
+async def get_user_orders_history(
+    userId: int,
+    page: int = 1,
+    pageSize: int = 20,
+    x_internal_token: str | None = Header(None, alias="X-Internal-Token"),
+    db: AsyncSession = Depends(get_db),
+):
+    """供后台管理或内部服务按用户 ID 查询订单及产品快照。"""
+    if settings.INTERNAL_ORDER_SECRET:
+        if x_internal_token != settings.INTERNAL_ORDER_SECRET:
+            raise ServiceWarning("内部查询密钥错误")
+    elif settings.is_prod:
+        raise ServiceWarning("生产环境未配置 INTERNAL_ORDER_SECRET，禁止内部查询订单")
+
+    data, total = await OrderService.get_user_orders_with_product(
+        db=db,
+        user_id=userId,
+        page=page,
+        page_size=pageSize,
+    )
+    return ResponseUtil.success(data=PageResp(
+        page=page,
+        pageSize=pageSize,
+        total=total,
+        list=data,
+    ))
+
+
 @productRouter.get("/plans", name="产品列表")
 async def get_product_list(
     db: AsyncSession = Depends(get_db),

@@ -64,14 +64,15 @@ class AiNovelGenerateLog(Base):
         comment="提示词模板唯一标识"
     )
 
-    # ========= 输入(Input) =========
-    userPrompt: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-        deferred=True,  # 默认不查询此字段
-        default=None,
-        comment="用户输入的提示词"
-    )
+    # Long-text content has moved to ai_novel_generate_log_content.
+    # These transient properties preserve the existing service-layer API after hydration.
+    @property
+    def userPrompt(self) -> str | None:
+        return getattr(self, "_user_prompt", None)
+
+    @userPrompt.setter
+    def userPrompt(self, value: str | None) -> None:
+        self._user_prompt = value
 
     requestInputLength: Mapped[int] = mapped_column(
         Integer,
@@ -80,12 +81,13 @@ class AiNovelGenerateLog(Base):
         comment="生成请求输入总字符数"
     )
 
-    systemPrompt: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-        deferred=True,  # 默认不查询此字段
-        comment="系统拼装后的提示词"
-    )
+    @property
+    def systemPrompt(self) -> str | None:
+        return getattr(self, "_system_prompt", None)
+
+    @systemPrompt.setter
+    def systemPrompt(self, value: str | None) -> None:
+        self._system_prompt = value
 
     model: Mapped[str] = mapped_column(
         String(64),
@@ -112,13 +114,15 @@ class AiNovelGenerateLog(Base):
         comment="最大生成token数"
     )
 
+    @property
+    def outputContent(self) -> str | None:
+        return getattr(self, "_output_content", None)
+
+    @outputContent.setter
+    def outputContent(self, value: str | None) -> None:
+        self._output_content = value
+
     # ========= 输出(Output) =========
-    outputContent: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
-        deferred=True,  # 默认不查询此字段
-        comment="模型生成的内容全文"
-    )
 
     outputLength: Mapped[int] = mapped_column(
         Integer,

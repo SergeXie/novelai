@@ -189,15 +189,10 @@ class UsageService:
             template_key=template_key,
             originPrompt=origin_prompt,
             multiplier=ai_model_multiplier,
-            # 输入信息
-            userPrompt=user_prompt,
-            systemPrompt=system_prompt,
             requestInputLength=promptTokens,
             model=model_name,
             temperature=temperature,
             maxTokens=final_max_tokens,
-            # 输出信息
-            outputContent=output_content,
             outputLength=completionTokens,
             # 这里只是粗略估算，不是严格 tokenizer 结果。
             tokenEstimate=tokenEstimate,
@@ -211,7 +206,12 @@ class UsageService:
             bonusDeduct=bonusDeduct,
             permanentDeduct=permanentDeduct,
         )
-        return await self.ai_log_dao.create_ai_generate_log(log_obj=log)
+        return await self.ai_log_dao.create_ai_generate_log(
+            log_obj=log,
+            user_prompt=user_prompt,
+            system_prompt=system_prompt,
+            output_content=output_content,
+        )
 
     async def poll_content_by_request_id(self, request_id: str, user_id:int):
         """根据 request_id 查询生成内容，常用于前端轮询结果。"""

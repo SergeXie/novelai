@@ -5,8 +5,6 @@ from fastapi import params
 from loguru import logger
 from sqlalchemy import select, func, update, desc, and_, Integer, cast
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import undefer, defer
-from sqlalchemy.orm.attributes import set_committed_value
 
 from ai.adapters.enums import AIGenerateStatus
 from core.entity.do.generate_log import AiNovelGenerateLog
@@ -28,12 +26,9 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
         if content is None:
             return log
 
-        if content.user_prompt is not None:
-            set_committed_value(log, "userPrompt", content.user_prompt)
-        if content.system_prompt is not None:
-            set_committed_value(log, "systemPrompt", content.system_prompt)
-        if content.output_content is not None:
-            set_committed_value(log, "outputContent", content.output_content)
+        log.userPrompt = content.user_prompt
+        log.systemPrompt = content.system_prompt
+        log.outputContent = content.output_content
         return log
 
     async def _get_content_by_request_id(
@@ -51,7 +46,7 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             self,
             logs: List[AiNovelGenerateLog],
     ) -> List[AiNovelGenerateLog]:
-        """批量读取新内容表；没有新记录的历史日志保留主表旧字段。"""
+        """批量读取内容表，并装配到日志对象的临时内容属性。"""
         if not logs:
             return logs
 
@@ -83,12 +78,8 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             return True
 
         result = await self.db.execute(
-            select(AiNovelGenerateLog)
-            .where(AiNovelGenerateLog.requestId == request_id)
-            .options(
-                undefer(AiNovelGenerateLog.userPrompt),
-                undefer(AiNovelGenerateLog.systemPrompt),
-                undefer(AiNovelGenerateLog.outputContent),
+            select(AiNovelGenerateLog).where(
+                AiNovelGenerateLog.requestId == request_id
             )
         )
         log = result.scalar_one_or_none()
@@ -98,8 +89,8 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
         self.db.add(AiNovelGenerateLogContent(
             log_id=log.id,
             request_id=log.requestId,
-            user_prompt=log.userPrompt,
-            system_prompt=log.systemPrompt,
+            user_prompt=None,
+            system_prompt=None,
             output_content=output_content,
         ))
         await self.db.flush()
@@ -195,15 +186,14 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
         result = await self.db.execute(stmt)
         return result.scalar_one()
 
-    async def create_ai_generate_log(self, log_obj: AiNovelGenerateLog) -> AiNovelGenerateLog:
-        # 新日志的大文本只写内容表；主表旧字段保留空值，兼容当前非空约束。
-        user_prompt = log_obj.userPrompt
-        system_prompt = log_obj.systemPrompt
-        output_content = log_obj.outputContent
-        log_obj.userPrompt = ""
-        log_obj.systemPrompt = ""
-        log_obj.outputContent = None
-
+    async def create_ai_generate_log(
+            self,
+            log_obj: AiNovelGenerateLog,
+            user_prompt: str | None,
+            system_prompt: str | None,
+            output_content: str | None,
+    ) -> AiNovelGenerateLog:
+        """Create the lightweight log row and its one-to-one long-text content row."""
         self.db.add(log_obj)
         await self.db.flush()
         self.db.add(AiNovelGenerateLogContent(
@@ -216,10 +206,9 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
         await self.db.commit()
         await self.db.refresh(log_obj)
 
-        # 返回给当前任务的对象仍保持旧属性结构，避免影响后台生成流程。
-        set_committed_value(log_obj, "userPrompt", user_prompt)
-        set_committed_value(log_obj, "systemPrompt", system_prompt)
-        set_committed_value(log_obj, "outputContent", output_content)
+        log_obj.userPrompt = user_prompt
+        log_obj.systemPrompt = system_prompt
+        log_obj.outputContent = output_content
         return log_obj
 
     async def get_log_by_request_id(
@@ -229,18 +218,11 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
     ) -> AiNovelGenerateLog | None:
         """
         根据 requestId 查询生成日志记录。
-        with_content=True 时新内容表优先，不存在则读取主表历史字段。
+        with_content=True 时同时装配内容表的大文本字段。
         """
         stmt = select(AiNovelGenerateLog).where(
             AiNovelGenerateLog.requestId == request_id
         )
-        if with_content:
-            stmt = stmt.options(
-                undefer(AiNovelGenerateLog.outputContent),
-                undefer(AiNovelGenerateLog.systemPrompt),
-                undefer(AiNovelGenerateLog.userPrompt),
-            )
-
         result = await self.db.execute(stmt)
         log = result.scalar_one_or_none()
         if log is None or not with_content:
@@ -370,11 +352,6 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
                     AiNovelGenerateLog.bid == bid,
                     AiNovelGenerateLog.status == AIGenerateStatus.SUCCESS,  # 这里的状态码请根据你实际逻辑调整
                     AiNovelGenerateLog.isDelete == 0
-                ).options(
-                    # 显式取消延迟加载，确保详情页能拿到完整内容
-                    undefer(AiNovelGenerateLog.outputContent),
-                    undefer(AiNovelGenerateLog.systemPrompt),
-                    undefer(AiNovelGenerateLog.userPrompt)
                 )
                 # 2. 按照创建时间倒序排列，确保拿到的是最新的一条
                 .order_by(desc(AiNovelGenerateLog.createdAt))
@@ -405,7 +382,6 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
         将 source_log 的指定字段复制给 target_log 并更新
         """
         # 1. 获取源记录和目标记录
-        # 注意：如果 source_log 的 outputContent 是 deferred，这里会自动触发加载
         source_log = await self.get_log_by_request_id(source_request_id)
         target_log = await self.get_log_by_request_id(target_request_id)
 
@@ -426,7 +402,7 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             value = getattr(source_log, field)
             setattr(target_log, field, value)
 
-        # 输出正文写入新内容表；源日志没有新内容行时已由双读逻辑从旧主表取回。
+        # The source content has been hydrated from the content table.
         await self._upsert_output_content(
             request_id=target_request_id,
             output_content=source_log.outputContent,
@@ -477,8 +453,7 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
                 if action_type:
                     filters.append(AiNovelGenerateLog.actionType == action_type)
 
-            # 2. 查询对象列表（使用 defer 排除所有 LongText 字段）
-            # 这样加载到内存中的对象非常轻量
+            # The main log table no longer contains long-text content.
             stmt = (
                 select(AiNovelGenerateLog)
                 .where(and_(*filters))
@@ -486,20 +461,6 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
                 .limit(pageSize)
                 .offset(offset)
             )
-
-            # 仅明确需要内容时读取主表旧字段，供尚未迁移的历史数据兜底。
-            if with_content:
-                stmt = stmt.options(
-                    undefer(AiNovelGenerateLog.outputContent),
-                    undefer(AiNovelGenerateLog.systemPrompt),
-                    undefer(AiNovelGenerateLog.userPrompt),
-                )
-            else:
-                stmt = stmt.options(
-                    defer(AiNovelGenerateLog.outputContent),
-                    defer(AiNovelGenerateLog.systemPrompt),
-                    defer(AiNovelGenerateLog.userPrompt),
-                )
 
             # 3. 查询总数
             count_stmt = (
@@ -531,7 +492,7 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
             size: int = 10
     ) -> Tuple[List[AiNovelGenerateLog], int]:
         """
-        通过 offset_id 分页查询，并包含 outputContent 字段
+        通过 offset_id 分页查询，并装配内容表字段
         """
         try:
             # 1. 构造基础过滤条件
@@ -553,14 +514,6 @@ class AILogDAO(BaseDAO[AiNovelGenerateLog]):
                 .order_by(desc(AiNovelGenerateLog.id))  # 使用 ID 排序比使用 createdAt 性能更稳
                 .limit(size)
             )
-            stmt = stmt.options(
-                undefer(AiNovelGenerateLog.outputContent),
-                undefer(AiNovelGenerateLog.userPrompt)
-            )
-
-            # 注意：这里去掉了 if not with_content 的 defer 逻辑
-            # outputContent 会被自然地 select 出来
-
             # 4. 查询总数 (总数查询通常不带 id 过滤条件，除非是查剩余数量)
             count_filters = [AiNovelGenerateLog.isDelete == 0]
             if user_id is not None: count_filters.append(AiNovelGenerateLog.userId == user_id)

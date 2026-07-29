@@ -67,6 +67,29 @@ class OrderListItem(BaseModel):
         return created_at.strftime("%Y-%m-%d %H:%M:%S")
 
 
+class UserOrderListItem(BaseModel):
+    """内部按用户查询订单时使用，包含下单时冻结的产品快照。"""
+
+    order_no: str
+    user_id: int
+    order_type: str
+    target_code: str
+    product_name: str
+    product_snapshot: dict
+    total_amount: float
+    pay_amount: float
+    status: str
+    pay_method: Optional[str] = None
+    paid_at: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    @field_serializer("created_at")
+    def serialize_created_at(self, created_at: datetime | None, _info):
+        if created_at is None:
+            return None
+        return created_at.strftime("%Y-%m-%d %H:%M:%S")
+
+
 class OrderListResponse(BaseModel):
     """订单列表返回结构。"""
 
