@@ -262,6 +262,17 @@ class BookDAO:
         await self.db.refresh(node)
         return node
 
+    async def update_detail_outline_binding(
+            self,
+            chapter: BookNode,
+            detail_outline_id: int | None,
+    ) -> BookNode:
+        chapter.detail_outline_id = detail_outline_id
+        self.db.add(chapter)
+        await self.db.commit()
+        await self.db.refresh(chapter)
+        return chapter
+
     async def add_chapter_node(
             self,
             uid: int,
@@ -425,6 +436,40 @@ class BookDAO:
         )
         nodes = result.scalars().all()
         return list(nodes)
+
+    async def get_chapter_by_detail_outline_id(
+            self,
+            bid: str,
+            uid: int,
+            detail_outline_id: int,
+    ) -> BookNode | None:
+        result = await self.db.execute(
+            select(BookNode).where(
+                BookNode.bid == bid,
+                BookNode.uid == uid,
+                BookNode.type == BookNodeCategory.CONTENT.code,
+                BookNode.detail_outline_id == detail_outline_id,
+            )
+        )
+        return result.scalars().first()
+
+    async def get_chapter_by_detail_outline_ids(
+            self,
+            bid: str,
+            uid: int,
+            detail_outline_ids: list[int],
+    ) -> BookNode | None:
+        if not detail_outline_ids:
+            return None
+        result = await self.db.execute(
+            select(BookNode).where(
+                BookNode.bid == bid,
+                BookNode.uid == uid,
+                BookNode.type == BookNodeCategory.CONTENT.code,
+                BookNode.detail_outline_id.in_(detail_outline_ids),
+            )
+        )
+        return result.scalars().first()
 
     async def delete_nodes(
             self,

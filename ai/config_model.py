@@ -11,4 +11,5 @@ class LLMProviderConfig(BaseModel):
     output_price: float = 0.0
     sale_multiplier: float = 5.0
     max_tokens: int = 32000
+    max_word_count: int = 0
     temperature: float = 0.7

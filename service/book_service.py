@@ -35,6 +35,9 @@ BOOK_SYSTEM_WORLDVIEW_ID = -3
 BOOK_SYSTEM_WRITING_STYLE_ID = -4
 BOOK_SYSTEM_OUTLINE_ID = -5
 BOOK_SYSTEM_CONTENT_ID = -6
+BOOK_SYSTEM_DETAILED_OUTLINE_ID = -7
+DETAIL_OUTLINE_TEMPLATE_KEY = "PRMTVIQPUPIHMSUSIFLA"
+DETAIL_OUTLINE_AI_LEVEL = 2
 
 BOOK_SYSTEM_NODES = [
     {
@@ -75,6 +78,14 @@ BOOK_SYSTEM_NODES = [
                 "parent_id": BOOK_SYSTEM_BASIC_ID,
                 "is_leaf": 0,
                 "type": BookNodeCategory.OUTLINE.code,
+                "depth": 1,
+            },
+            {
+                "id": BOOK_SYSTEM_DETAILED_OUTLINE_ID,
+                "name": "细纲",
+                "parent_id": BOOK_SYSTEM_BASIC_ID,
+                "is_leaf": 0,
+                "type": BookNodeCategory.DETAILED_OUTLINE.code,
                 "depth": 1,
             },
         ],
@@ -121,6 +132,7 @@ LEGACY_BASIC_CHILD_TYPE_TO_SYSTEM_ID = {
     BookNodeCategory.WORLDVIEW.code: BOOK_SYSTEM_WORLDVIEW_ID,
     BookNodeCategory.WRITING_STYLE.code: BOOK_SYSTEM_WRITING_STYLE_ID,
     BookNodeCategory.OUTLINE.code: BOOK_SYSTEM_OUTLINE_ID,
+    BookNodeCategory.DETAILED_OUTLINE.code: BOOK_SYSTEM_DETAILED_OUTLINE_ID,
 }
 
 
@@ -662,7 +674,7 @@ class BookService:
             id=node_id,
             bid=bid,
             uid=uid,
-            is_leaf=1 if node_id == BOOK_SYSTEM_WRITING_STYLE_ID else 0,
+            is_leaf=BOOK_SYSTEM_NODE_IS_LEAF[node_id],
             content=legacy_node.content if legacy_node else None,
             name=BOOK_SYSTEM_NODE_NAME[node_id],
             type=BOOK_SYSTEM_NODE_TYPE[node_id],
@@ -784,6 +796,11 @@ class BookService:
             parent_depth = BOOK_SYSTEM_NODE_DEPTH[parent_id]
             if type is None:
                 type = BOOK_SYSTEM_NODE_TYPE[parent_id]
+            if parent_id == BOOK_SYSTEM_DETAILED_OUTLINE_ID:
+                if type != BookNodeCategory.DETAILED_OUTLINE.code:
+                    raise ServiceWarning("细纲子节点类型必须为细纲")
+                if is_leaf != 1:
+                    raise ServiceWarning("细纲目录下只能创建细纲叶子节点")
         else:
             # 1️⃣ 校验节点
             parent = await self.book_dao.get_node_parent_by_id(parent_id=parent_id, uid=uid, bid=bid)
@@ -817,6 +834,135 @@ class BookService:
         await self.db.refresh(node)
 
         return node
+
+    async def bind_chapter_detail_outline(
+            self,
+            uid: int,
+            bid: str,
+            chapter_id: int,
+            detail_outline_id: int | None,
+    ) -> BookNode:
+        """Bind a content chapter to a detailed-outline child node, or unbind it."""
+        chapter = await self.book_dao.get_node_by_id(
+            node_id=chapter_id,
+            uid=uid,
+            bid=bid,
+        )
+        if not chapter or chapter.type != BookNodeCategory.CONTENT.code:
+            raise ServiceWarning("章节不存在或不是正文节点")
+
+        if detail_outline_id is not None and not (chapter.content or "").strip():
+            raise ServiceWarning("章节正文为空，无法生成细纲")
+
+        if detail_outline_id == BOOK_SYSTEM_DETAILED_OUTLINE_ID:
+            # The frontend submits the virtual "细纲" directory ID (-7). In that
+            # case, create one real detailed-outline child for the current chapter.
+            # A repeated request keeps the existing association and never creates a duplicate.
+            if chapter.detail_outline_id is not None:
+                existing_outline = await self.book_dao.get_node_by_id(
+                    node_id=chapter.detail_outline_id,
+                    uid=uid,
+                    bid=bid,
+                )
+                if existing_outline:
+                    return chapter
+
+            detail_outline = await self.book_dao.add_chapter_node(
+                uid=uid,
+                bid=bid,
+                parent_id=BOOK_SYSTEM_DETAILED_OUTLINE_ID,
+                is_leaf=1,
+                name=chapter.name,
+                depth=BOOK_SYSTEM_NODE_DEPTH[BOOK_SYSTEM_DETAILED_OUTLINE_ID] + 1,
+                data={"chapter_id": chapter.id},
+                content=None,
+                category=BookNodeCategory.DETAILED_OUTLINE,
+            )
+            detail_outline_id = detail_outline.id
+
+        if detail_outline_id is not None:
+            detail_outline = await self.book_dao.get_node_by_id(
+                node_id=detail_outline_id,
+                uid=uid,
+                bid=bid,
+            )
+            if (
+                not detail_outline
+                or detail_outline.type != BookNodeCategory.DETAILED_OUTLINE.code
+                or detail_outline.parent_id != BOOK_SYSTEM_DETAILED_OUTLINE_ID
+            ):
+                raise ServiceWarning("细纲不存在或不属于当前书籍")
+
+            bound_chapter = await self.book_dao.get_chapter_by_detail_outline_id(
+                bid=bid,
+                uid=uid,
+                detail_outline_id=detail_outline_id,
+            )
+            if bound_chapter and bound_chapter.id != chapter.id:
+                raise ServiceWarning("该细纲已关联其他章节")
+
+        return await self.book_dao.update_detail_outline_binding(
+            chapter=chapter,
+            detail_outline_id=detail_outline_id,
+        )
+
+    async def get_chapter_detail_outline_for_generation(
+            self,
+            uid: int,
+            bid: str,
+            chapter_id: int,
+    ) -> tuple[BookNode, BookNode]:
+        """Return a content chapter and its already-bound detailed-outline node."""
+        chapter = await self.book_dao.get_node_by_id(
+            node_id=chapter_id,
+            uid=uid,
+            bid=bid,
+        )
+        if not chapter or chapter.type != BookNodeCategory.CONTENT.code:
+            raise ServiceWarning("章节不存在或不是正文节点")
+        if not (chapter.content or "").strip():
+            raise ServiceWarning("章节正文为空，无法生成细纲")
+        if chapter.detail_outline_id is None:
+            raise ServiceWarning("当前章节尚未关联细纲")
+
+        detail_outline = await self.book_dao.get_node_by_id(
+            node_id=chapter.detail_outline_id,
+            uid=uid,
+            bid=bid,
+        )
+        if (
+            not detail_outline
+            or detail_outline.type != BookNodeCategory.DETAILED_OUTLINE.code
+            or detail_outline.parent_id != BOOK_SYSTEM_DETAILED_OUTLINE_ID
+        ):
+            raise ServiceWarning("关联细纲不存在或已失效")
+        return chapter, detail_outline
+
+    async def save_generated_detail_outline(
+            self,
+            uid: int,
+            bid: str,
+            detail_outline_id: int,
+            content: str,
+    ) -> BookNode:
+        """Persist a successful AI result in the detailed-outline content node."""
+        detail_outline = await self.book_dao.get_node_by_id(
+            node_id=detail_outline_id,
+            uid=uid,
+            bid=bid,
+        )
+        if (
+            not detail_outline
+            or detail_outline.type != BookNodeCategory.DETAILED_OUTLINE.code
+            or detail_outline.parent_id != BOOK_SYSTEM_DETAILED_OUTLINE_ID
+        ):
+            raise ServiceWarning("关联细纲不存在或已删除")
+
+        return await self.book_dao.update_node_content(
+            node=detail_outline,
+            content=content,
+            book_len=len(strip_html_tags(content)),
+        )
 
     async def batch_add_roles(
             self,
@@ -931,6 +1077,14 @@ class BookService:
 
             children = await self.book_dao.get_nodes_by_parent_ids([current_id])
             queue.extend([c.id for c in children])
+
+        bound_chapter = await self.book_dao.get_chapter_by_detail_outline_ids(
+            bid=bid,
+            uid=uid,
+            detail_outline_ids=to_delete_ids,
+        )
+        if bound_chapter:
+            raise ServiceWarning("该细纲已关联章节，请先解绑后再删除")
 
         # 3️⃣ 执行删除
         await self.book_dao.delete_nodes(uid=uid, bid=bid, node_ids=to_delete_ids)

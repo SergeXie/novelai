@@ -34,6 +34,7 @@ class AiModelDAO:
             output_price=model.output_price,
             sale_multiplier=model.sale_multiplier,
             max_tokens=model.max_tokens,
+            max_word_count=model.max_word_count,
             temperature=model.temperature,
             context_window=model.context_window,
             base_url=model.base_url,

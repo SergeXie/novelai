@@ -18,6 +18,7 @@ class AiModelResp(BaseModel):
     model_name: str
     multiplier: Decimal
     max_tokens: int
+    max_word_count: int
     temperature: Decimal
     context_window: int
     weight: int
