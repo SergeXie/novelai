@@ -212,7 +212,7 @@ class AddChapterResp(BaseModel):
 
 
 class BindChapterDetailOutlineReq(BaseModel):
-    """Bind or unbind one chapter to a detailed-outline node."""
+    """Use -7 to create a detailed-outline child for the chapter; use null to unbind."""
 
     bid: str
     chapterId: int

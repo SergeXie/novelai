@@ -3,7 +3,7 @@
   "info": {
     "title": "Book Chapter Detail Outline API",
     "version": "1.0.0",
-    "description": "Bind or unbind a content chapter to a detailed-outline item."
+    "description": "Pass -7 to create a detailed-outline child for the chapter, or null to unbind."
   },
   "servers": [
     {
@@ -13,7 +13,7 @@
   "paths": {
     "/book/chapter/bindDetailOutline": {
       "post": {
-        "summary": "Bind chapter to detailed outline",
+          "summary": "Create or bind chapter detailed outline",
         "security": [
           {
             "bearerAuth": []
@@ -31,7 +31,7 @@
                   "value": {
                     "bid": "BID202607301000000000000000000001",
                     "chapterId": 9101,
-                    "detailOutlineId": 9001
+                    "detailOutlineId": -7
                   }
                 },
                 "unbind": {
@@ -90,7 +90,7 @@
           "detailOutlineId": {
             "type": "integer",
             "nullable": true,
-            "description": "Use null to unbind the chapter."
+            "description": "Use -7 to create a detailed-outline child, an existing detailed-outline item ID to bind, or null to unbind."
           }
         }
       }

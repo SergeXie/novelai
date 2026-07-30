@@ -105,7 +105,7 @@ async def bind_chapter_detail_outline(
         db: AsyncSession = Depends(get_db),
         current_user=Depends(get_current_user),
 ):
-    """detailOutlineId 传 null 时解除当前章节的细纲关联。"""
+    """传 -7 自动创建当前章节的细纲；传 null 时解除关联。"""
     chapter = await BookService(db).bind_chapter_detail_outline(
         uid=current_user.pkId,
         bid=req.bid,

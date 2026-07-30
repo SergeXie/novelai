@@ -849,6 +849,32 @@ class BookService:
         if not chapter or chapter.type != BookNodeCategory.CONTENT.code:
             raise ServiceWarning("章节不存在或不是正文节点")
 
+        if detail_outline_id == BOOK_SYSTEM_DETAILED_OUTLINE_ID:
+            # The frontend submits the virtual "细纲" directory ID (-7). In that
+            # case, create one real detailed-outline child for the current chapter.
+            # A repeated request keeps the existing association and never creates a duplicate.
+            if chapter.detail_outline_id is not None:
+                existing_outline = await self.book_dao.get_node_by_id(
+                    node_id=chapter.detail_outline_id,
+                    uid=uid,
+                    bid=bid,
+                )
+                if existing_outline:
+                    return chapter
+
+            detail_outline = await self.book_dao.add_chapter_node(
+                uid=uid,
+                bid=bid,
+                parent_id=BOOK_SYSTEM_DETAILED_OUTLINE_ID,
+                is_leaf=1,
+                name=chapter.name,
+                depth=BOOK_SYSTEM_NODE_DEPTH[BOOK_SYSTEM_DETAILED_OUTLINE_ID] + 1,
+                data={"chapter_id": chapter.id},
+                content=None,
+                category=BookNodeCategory.DETAILED_OUTLINE,
+            )
+            detail_outline_id = detail_outline.id
+
         if detail_outline_id is not None:
             detail_outline = await self.book_dao.get_node_by_id(
                 node_id=detail_outline_id,
