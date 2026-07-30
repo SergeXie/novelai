@@ -17,6 +17,7 @@ class NodeTreeSchema(BaseModel):
     is_leaf: int = 0
     type: int = 0
     book_len: Optional[int] = 0
+    detail_outline_id: Optional[int] = None
     data: Optional[Dict[str, Any]] = Field(
         default=None,
         description="扩展配置数据"
@@ -109,6 +110,7 @@ class BookNodeDetailResp(BaseModel):
     name: str
     type: int = 0
     depth: int = 0
+    detail_outline_id: Optional[int] = None
     createTime: datetime
     updateTime: datetime
 
@@ -206,6 +208,20 @@ class AddChapterResp(BaseModel):
     name: str
     data: Optional[Dict[str, Any]] = None
     content: Optional[str] = None
+    detail_outline_id: Optional[int] = None
+
+
+class BindChapterDetailOutlineReq(BaseModel):
+    """Bind or unbind one chapter to a detailed-outline node."""
+
+    bid: str
+    chapterId: int
+    detailOutlineId: Optional[int] = None
+
+
+class BindChapterDetailOutlineResp(BaseModel):
+    chapterId: int
+    detailOutlineId: Optional[int] = None
 
 
 class BatchAddRoleItemReq(BaseModel):

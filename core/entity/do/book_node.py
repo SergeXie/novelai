@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional, Dict
 
 from sqlalchemy import (
-    String, Text, DateTime, BigInteger, Integer, JSON
+    String, Text, DateTime, BigInteger, Integer, JSON, Index
 )
 from sqlalchemy.orm import mapped_column, Mapped
 from database.db_mysql import Base
@@ -10,6 +10,9 @@ from database.db_mysql import Base
 
 class BookNode(Base):
     __tablename__ = "mc_book_node"
+    __table_args__ = (
+        Index("idx_bid_detail_outline", "bid", "detail_outline_id"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     bid: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
@@ -66,5 +69,10 @@ class BookNode(Base):
         comment="排序"
     )
     parent_id: Mapped[Optional[int]] = mapped_column(BigInteger, index=True)
+    detail_outline_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        nullable=True,
+        comment="正文节点关联的细纲节点ID",
+    )
     createTime: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     updateTime: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

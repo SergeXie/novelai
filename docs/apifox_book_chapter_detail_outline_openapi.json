@@ -1,0 +1,99 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Book Chapter Detail Outline API",
+    "version": "1.0.0",
+    "description": "Bind or unbind a content chapter to a detailed-outline item."
+  },
+  "servers": [
+    {
+      "url": "/novelAI"
+    }
+  ],
+  "paths": {
+    "/book/chapter/bindDetailOutline": {
+      "post": {
+        "summary": "Bind chapter to detailed outline",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindChapterDetailOutlineReq"
+              },
+              "examples": {
+                "bind": {
+                  "value": {
+                    "bid": "BID202607301000000000000000000001",
+                    "chapterId": 9101,
+                    "detailOutlineId": 9001
+                  }
+                },
+                "unbind": {
+                  "value": {
+                    "bid": "BID202607301000000000000000000001",
+                    "chapterId": 9101,
+                    "detailOutlineId": null
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 200,
+                  "msg": "Success",
+                  "data": {
+                    "chapterId": 9101,
+                    "detailOutlineId": 9001
+                  },
+                  "success": true
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "schemas": {
+      "BindChapterDetailOutlineReq": {
+        "type": "object",
+        "required": [
+          "bid",
+          "chapterId"
+        ],
+        "properties": {
+          "bid": {
+            "type": "string"
+          },
+          "chapterId": {
+            "type": "integer"
+          },
+          "detailOutlineId": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Use null to unbind the chapter."
+          }
+        }
+      }
+    }
+  }
+}

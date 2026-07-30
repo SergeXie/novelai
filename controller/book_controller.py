@@ -22,7 +22,8 @@ from core.entity.do.book_deconstruct_record_do import BookDeconstructRecord
 from core.entity.do.users_do import User
 from core.entity.vo.book_node_schema import BookResp, CreateBookReq, BookNodeDetailResp, UpdateBookNodeReq, \
     EditBookNodeReq, EditBookNodeResp, AddChapterResp, AddBookNodeReq, DeleteBookNodeReq, OfflineBookReq, EditBookReq, \
-    HardDeleteBookReq, BookSearchResp, BatchAddRoleItemReq, BatchEditRoleItemReq
+    HardDeleteBookReq, BookSearchResp, BatchAddRoleItemReq, BatchEditRoleItemReq, BindChapterDetailOutlineReq, \
+    BindChapterDetailOutlineResp
 from core.entity.vo.bool_vo import AutoCreateBookReq
 from core.entity.vo.confirm_import_req import ConfirmImportRequest
 from core.processor.book_processor import Chapter, NovelProcessor
@@ -88,13 +89,33 @@ async def add_chapter(
         is_leaf=chapter.is_leaf,
         name=chapter.name,
         data=chapter.data,
-        content=content
+        content=content,
+        detail_outline_id=chapter.detail_outline_id,
 
     )
 
     logger.info("新增节点成功 响应体：{}".format(resp))
 
     return ResponseUtil.success(data=resp)
+
+
+@bookController.post("/book/chapter/bindDetailOutline", name="章节关联细纲")
+async def bind_chapter_detail_outline(
+        req: BindChapterDetailOutlineReq,
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user),
+):
+    """detailOutlineId 传 null 时解除当前章节的细纲关联。"""
+    chapter = await BookService(db).bind_chapter_detail_outline(
+        uid=current_user.pkId,
+        bid=req.bid,
+        chapter_id=req.chapterId,
+        detail_outline_id=req.detailOutlineId,
+    )
+    return ResponseUtil.success(data=BindChapterDetailOutlineResp(
+        chapterId=chapter.id,
+        detailOutlineId=chapter.detail_outline_id,
+    ))
 
 
 @bookController.post("/user/role/batch/add", name="批量新增角色")
