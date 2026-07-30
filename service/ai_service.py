@@ -50,6 +50,7 @@ class AIService:
             "output_price": float(model.output_price or 0),
             "sale_multiplier": float(model.sale_multiplier or 5),
             "max_tokens": int(model.max_tokens or 4096),
+            "max_word_count": int(model.max_word_count or 0),
             "temperature": float(model.temperature or 0.7),
             "context_window": int(model.context_window or 32768),
             "base_url": model.base_url,

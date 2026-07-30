@@ -83,6 +83,13 @@ class McAiModel(Base):
         comment="该模型允许的最大生成Token数",
     )
 
+    max_word_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default="0",
+        comment="模型单次生成字数上限，0表示不限制",
+    )
+
     temperature: Mapped[Decimal] = mapped_column(
         DECIMAL(10, 1),
         nullable=False,
