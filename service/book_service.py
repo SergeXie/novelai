@@ -36,6 +36,8 @@ BOOK_SYSTEM_WRITING_STYLE_ID = -4
 BOOK_SYSTEM_OUTLINE_ID = -5
 BOOK_SYSTEM_CONTENT_ID = -6
 BOOK_SYSTEM_DETAILED_OUTLINE_ID = -7
+DETAIL_OUTLINE_TEMPLATE_KEY = "PRMTVIQPUPIHMSUSIFLA"
+DETAIL_OUTLINE_AI_LEVEL = 2
 
 BOOK_SYSTEM_NODES = [
     {
@@ -849,6 +851,9 @@ class BookService:
         if not chapter or chapter.type != BookNodeCategory.CONTENT.code:
             raise ServiceWarning("章节不存在或不是正文节点")
 
+        if detail_outline_id is not None and not (chapter.content or "").strip():
+            raise ServiceWarning("章节正文为空，无法生成细纲")
+
         if detail_outline_id == BOOK_SYSTEM_DETAILED_OUTLINE_ID:
             # The frontend submits the virtual "细纲" directory ID (-7). In that
             # case, create one real detailed-outline child for the current chapter.
@@ -899,6 +904,64 @@ class BookService:
         return await self.book_dao.update_detail_outline_binding(
             chapter=chapter,
             detail_outline_id=detail_outline_id,
+        )
+
+    async def get_chapter_detail_outline_for_generation(
+            self,
+            uid: int,
+            bid: str,
+            chapter_id: int,
+    ) -> tuple[BookNode, BookNode]:
+        """Return a content chapter and its already-bound detailed-outline node."""
+        chapter = await self.book_dao.get_node_by_id(
+            node_id=chapter_id,
+            uid=uid,
+            bid=bid,
+        )
+        if not chapter or chapter.type != BookNodeCategory.CONTENT.code:
+            raise ServiceWarning("章节不存在或不是正文节点")
+        if not (chapter.content or "").strip():
+            raise ServiceWarning("章节正文为空，无法生成细纲")
+        if chapter.detail_outline_id is None:
+            raise ServiceWarning("当前章节尚未关联细纲")
+
+        detail_outline = await self.book_dao.get_node_by_id(
+            node_id=chapter.detail_outline_id,
+            uid=uid,
+            bid=bid,
+        )
+        if (
+            not detail_outline
+            or detail_outline.type != BookNodeCategory.DETAILED_OUTLINE.code
+            or detail_outline.parent_id != BOOK_SYSTEM_DETAILED_OUTLINE_ID
+        ):
+            raise ServiceWarning("关联细纲不存在或已失效")
+        return chapter, detail_outline
+
+    async def save_generated_detail_outline(
+            self,
+            uid: int,
+            bid: str,
+            detail_outline_id: int,
+            content: str,
+    ) -> BookNode:
+        """Persist a successful AI result in the detailed-outline content node."""
+        detail_outline = await self.book_dao.get_node_by_id(
+            node_id=detail_outline_id,
+            uid=uid,
+            bid=bid,
+        )
+        if (
+            not detail_outline
+            or detail_outline.type != BookNodeCategory.DETAILED_OUTLINE.code
+            or detail_outline.parent_id != BOOK_SYSTEM_DETAILED_OUTLINE_ID
+        ):
+            raise ServiceWarning("关联细纲不存在或已删除")
+
+        return await self.book_dao.update_node_content(
+            node=detail_outline,
+            content=content,
+            book_len=len(strip_html_tags(content)),
         )
 
     async def batch_add_roles(

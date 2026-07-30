@@ -3,7 +3,7 @@
   "info": {
     "title": "Book Chapter Detail Outline API",
     "version": "1.0.0",
-    "description": "Pass -7 to create a detailed-outline child for the chapter, or null to unbind."
+    "description": "Bind or unbind a chapter and generate its detailed outline."
   },
   "servers": [
     {
@@ -13,21 +13,16 @@
   "paths": {
     "/book/chapter/bindDetailOutline": {
       "post": {
-          "summary": "Create or bind chapter detailed outline",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
+        "summary": "Bind chapter and generate detailed outline",
+        "description": "Use -7 to create a detailed-outline child for the chapter and generate its content. Use an existing detailed-outline ID to regenerate that item. Use null to unbind without generation.",
+        "security": [{ "bearerAuth": [] }],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BindChapterDetailOutlineReq"
-              },
+              "schema": { "$ref": "#/components/schemas/BindChapterDetailOutlineReq" },
               "examples": {
-                "bind": {
+                "create_and_generate": {
                   "value": {
                     "bid": "BID202607301000000000000000000001",
                     "chapterId": 9101,
@@ -55,7 +50,8 @@
                   "msg": "Success",
                   "data": {
                     "chapterId": 9101,
-                    "detailOutlineId": 9001
+                    "detailOutlineId": 9001,
+                    "requestId": "REQ20260730140000ABCDEF"
                   },
                   "success": true
                 }
@@ -76,21 +72,14 @@
     "schemas": {
       "BindChapterDetailOutlineReq": {
         "type": "object",
-        "required": [
-          "bid",
-          "chapterId"
-        ],
+        "required": ["bid", "chapterId"],
         "properties": {
-          "bid": {
-            "type": "string"
-          },
-          "chapterId": {
-            "type": "integer"
-          },
+          "bid": { "type": "string" },
+          "chapterId": { "type": "integer" },
           "detailOutlineId": {
             "type": "integer",
             "nullable": true,
-            "description": "Use -7 to create a detailed-outline child, an existing detailed-outline item ID to bind, or null to unbind."
+            "description": "Use -7 to create and generate, an existing detailed-outline item ID to bind and regenerate, or null to unbind."
           }
         }
       }

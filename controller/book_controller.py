@@ -13,10 +13,10 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.adapters.enums import AIProvider, AIAction
-from common.config.get_db import get_db
+from common.config.get_db import get_db, get_db_context
 from common.exception.errors import RequestError, NotFoundError, ServerError
 from common.response.response_util import ResponseUtil
-from common.utils.text_util import generate_text_sha256_id
+from common.utils.text_util import generate_text_sha256_id, strip_html_tags
 from core.deps.auth import get_current_user, check_user_quota_or_raise
 from core.entity.do.book_deconstruct_record_do import BookDeconstructRecord
 from core.entity.do.users_do import User
@@ -29,7 +29,11 @@ from core.entity.vo.confirm_import_req import ConfirmImportRequest
 from core.processor.book_processor import Chapter, NovelProcessor
 from service.ai_prompt_service import PromptService
 from service.ai_service import AIService
-from service.book_service import BookService
+from service.book_service import (
+    BookService,
+    DETAIL_OUTLINE_AI_LEVEL,
+    DETAIL_OUTLINE_TEMPLATE_KEY,
+)
 
 bookController = APIRouter()
 
@@ -102,19 +106,58 @@ async def add_chapter(
 @bookController.post("/book/chapter/bindDetailOutline", name="章节关联细纲")
 async def bind_chapter_detail_outline(
         req: BindChapterDetailOutlineReq,
+        background_tasks: BackgroundTasks,
         db: AsyncSession = Depends(get_db),
         current_user=Depends(get_current_user),
 ):
-    """传 -7 自动创建当前章节的细纲；传 null 时解除关联。"""
-    chapter = await BookService(db).bind_chapter_detail_outline(
+    """关联细纲后立即根据章节正文异步生成细纲；传 null 时仅解除关联。"""
+    book_service = BookService(db)
+    chapter = await book_service.bind_chapter_detail_outline(
         uid=current_user.pkId,
         bid=req.bid,
         chapter_id=req.chapterId,
         detail_outline_id=req.detailOutlineId,
     )
+
+    if req.detailOutlineId is None:
+        return ResponseUtil.success(data=BindChapterDetailOutlineResp(
+            chapterId=chapter.id,
+            detailOutlineId=None,
+        ))
+
+    chapter, detail_outline = await book_service.get_chapter_detail_outline_for_generation(
+        uid=current_user.pkId,
+        bid=req.bid,
+        chapter_id=chapter.id,
+    )
+    user_id = current_user.pkId
+    bid = req.bid
+    detail_outline_id = detail_outline.id
+
+    async def save_result(ai_rsp):
+        async with get_db_context() as task_db:
+            await BookService(task_db).save_generated_detail_outline(
+                uid=user_id,
+                bid=bid,
+                detail_outline_id=detail_outline_id,
+                content=ai_rsp.content,
+            )
+
+    request_id = await AIService(db).execute(
+        db=db,
+        user=current_user,
+        action_type=AIAction.Execute,
+        level=DETAIL_OUTLINE_AI_LEVEL,
+        bid=bid,
+        template_key=DETAIL_OUTLINE_TEMPLATE_KEY,
+        inputs={"novel": strip_html_tags(chapter.content or "")},
+        background_tasks=background_tasks,
+        on_success_callback=save_result,
+    )
     return ResponseUtil.success(data=BindChapterDetailOutlineResp(
         chapterId=chapter.id,
-        detailOutlineId=chapter.detail_outline_id,
+        detailOutlineId=detail_outline_id,
+        requestId=request_id,
     ))
 
 

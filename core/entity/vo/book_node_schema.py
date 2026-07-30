@@ -222,6 +222,7 @@ class BindChapterDetailOutlineReq(BaseModel):
 class BindChapterDetailOutlineResp(BaseModel):
     chapterId: int
     detailOutlineId: Optional[int] = None
+    requestId: Optional[str] = None
 
 
 class BatchAddRoleItemReq(BaseModel):

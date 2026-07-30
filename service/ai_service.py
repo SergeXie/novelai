@@ -1,5 +1,5 @@
 import textwrap
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Callable, Awaitable
 
 from fastapi import BackgroundTasks
 from loguru import logger
@@ -125,6 +125,7 @@ class AIService:
             correlation=None,
             template_key: str | None = None,
             background_tasks=None,
+            on_success_callback: Callable[[AICompletionResponse], Awaitable[None]] | None = None,
     ) -> tuple[str, None] | tuple[str, AICompletionResponse | None]:
         await check_user_quota_or_raise(frozen_token_length=tokenEstimate, user_info=user, level=level)
         """
@@ -192,6 +193,7 @@ class AIService:
             "model_config": model_config,
             "log": log,
             "context": self.fill_context,
+            "on_success_callback": on_success_callback,
         }
 
         if background_tasks is not None:
@@ -219,7 +221,8 @@ class AIService:
             user_prompt: str = None,
             correlation: Optional[List[Any]] = None,
             lexicon_ids: Optional[List[int]] = None,
-            background_tasks: Optional[BackgroundTasks] = None
+            background_tasks: Optional[BackgroundTasks] = None,
+            on_success_callback: Callable[[AICompletionResponse], Awaitable[None]] | None = None,
     ) -> str:
         """
         智能解析提示词组件，拼装上下文，估算冻结Token并记录AI调用流水
@@ -328,7 +331,8 @@ class AIService:
             template_key=template_key,
             max_tokens=max_tokens,
             tokenEstimate=frozen_tokens,
-            background_tasks=background_tasks
+            background_tasks=background_tasks,
+            on_success_callback=on_success_callback,
         )
         return request_id
 
@@ -354,6 +358,7 @@ async def async_generate_task(
         log: AiNovelGenerateLog,
         enable_web_search: bool = False,
         model_config: dict | None = None,
+        on_success_callback: Callable[[AICompletionResponse], Awaitable[None]] | None = None,
 ) -> AICompletionResponse | None:
     """后台异步执行 AI 调用并更新结果"""
     nexus = get_ai_nexus()
@@ -424,6 +429,13 @@ async def async_generate_task(
                 ai_rsp=ai_rsp,
                 status=AIGenerateStatus.SUCCESS if ai_rsp else AIGenerateStatus.FAILED,
                 error_msg=error_msg)
+
+    if ai_rsp and on_success_callback:
+        try:
+            await on_success_callback(ai_rsp)
+        except Exception as exc:
+            # The generation result and billing are already committed at this point.
+            logger.exception(f"RequestId: {request_id} post-success callback failed: {exc}")
 
     return ai_rsp
 
