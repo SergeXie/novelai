@@ -453,23 +453,25 @@ class BookDAO:
         )
         return result.scalars().first()
 
-    async def get_chapter_by_detail_outline_ids(
+    async def clear_detail_outline_bindings(
             self,
             bid: str,
             uid: int,
             detail_outline_ids: list[int],
-    ) -> BookNode | None:
+    ) -> None:
+        """删除细纲前，清空正文节点中指向这些细纲的关联。"""
         if not detail_outline_ids:
-            return None
-        result = await self.db.execute(
-            select(BookNode).where(
+            return
+
+        await self.db.execute(
+            update(BookNode)
+            .where(
                 BookNode.bid == bid,
                 BookNode.uid == uid,
-                BookNode.type == BookNodeCategory.CONTENT.code,
                 BookNode.detail_outline_id.in_(detail_outline_ids),
             )
+            .values(detail_outline_id=None)
         )
-        return result.scalars().first()
 
     async def delete_nodes(
             self,

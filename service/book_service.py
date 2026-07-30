@@ -1078,13 +1078,12 @@ class BookService:
             children = await self.book_dao.get_nodes_by_parent_ids([current_id])
             queue.extend([c.id for c in children])
 
-        bound_chapter = await self.book_dao.get_chapter_by_detail_outline_ids(
+        # 细纲允许直接删除：先清除正文节点的引用，避免留下失效的细纲 ID。
+        await self.book_dao.clear_detail_outline_bindings(
             bid=bid,
             uid=uid,
             detail_outline_ids=to_delete_ids,
         )
-        if bound_chapter:
-            raise ServiceWarning("该细纲已关联章节，请先解绑后再删除")
 
         # 3️⃣ 执行删除
         await self.book_dao.delete_nodes(uid=uid, bid=bid, node_ids=to_delete_ids)
