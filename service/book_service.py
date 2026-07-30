@@ -35,6 +35,7 @@ BOOK_SYSTEM_WORLDVIEW_ID = -3
 BOOK_SYSTEM_WRITING_STYLE_ID = -4
 BOOK_SYSTEM_OUTLINE_ID = -5
 BOOK_SYSTEM_CONTENT_ID = -6
+BOOK_SYSTEM_DETAILED_OUTLINE_ID = -7
 
 BOOK_SYSTEM_NODES = [
     {
@@ -75,6 +76,14 @@ BOOK_SYSTEM_NODES = [
                 "parent_id": BOOK_SYSTEM_BASIC_ID,
                 "is_leaf": 0,
                 "type": BookNodeCategory.OUTLINE.code,
+                "depth": 1,
+            },
+            {
+                "id": BOOK_SYSTEM_DETAILED_OUTLINE_ID,
+                "name": "细纲",
+                "parent_id": BOOK_SYSTEM_BASIC_ID,
+                "is_leaf": 1,
+                "type": BookNodeCategory.DETAILED_OUTLINE.code,
                 "depth": 1,
             },
         ],
@@ -121,6 +130,7 @@ LEGACY_BASIC_CHILD_TYPE_TO_SYSTEM_ID = {
     BookNodeCategory.WORLDVIEW.code: BOOK_SYSTEM_WORLDVIEW_ID,
     BookNodeCategory.WRITING_STYLE.code: BOOK_SYSTEM_WRITING_STYLE_ID,
     BookNodeCategory.OUTLINE.code: BOOK_SYSTEM_OUTLINE_ID,
+    BookNodeCategory.DETAILED_OUTLINE.code: BOOK_SYSTEM_DETAILED_OUTLINE_ID,
 }
 
 
@@ -662,7 +672,7 @@ class BookService:
             id=node_id,
             bid=bid,
             uid=uid,
-            is_leaf=1 if node_id == BOOK_SYSTEM_WRITING_STYLE_ID else 0,
+            is_leaf=BOOK_SYSTEM_NODE_IS_LEAF[node_id],
             content=legacy_node.content if legacy_node else None,
             name=BOOK_SYSTEM_NODE_NAME[node_id],
             type=BOOK_SYSTEM_NODE_TYPE[node_id],
