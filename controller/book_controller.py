@@ -23,7 +23,7 @@ from core.entity.do.users_do import User
 from core.entity.vo.book_node_schema import BookResp, CreateBookReq, BookNodeDetailResp, UpdateBookNodeReq, \
     EditBookNodeReq, EditBookNodeResp, AddChapterResp, AddBookNodeReq, DeleteBookNodeReq, OfflineBookReq, EditBookReq, \
     HardDeleteBookReq, BookSearchResp, BatchAddRoleItemReq, BatchEditRoleItemReq, BindChapterDetailOutlineReq, \
-    BindChapterDetailOutlineResp
+    BindChapterDetailOutlineResp, ChapterDetailOutlineStatusResp
 from core.entity.vo.bool_vo import AutoCreateBookReq
 from core.entity.vo.confirm_import_req import ConfirmImportRequest
 from core.processor.book_processor import Chapter, NovelProcessor
@@ -110,19 +110,27 @@ async def bind_chapter_detail_outline(
         db: AsyncSession = Depends(get_db),
         current_user=Depends(get_current_user),
 ):
-    """关联细纲后立即根据章节正文异步生成细纲；传 null 时仅解除关联。"""
+    """可选择 AI 生成细纲，或直接保存前端填写的细纲内容；传 null 时仅解除关联。"""
     book_service = BookService(db)
     chapter = await book_service.bind_chapter_detail_outline(
         uid=current_user.pkId,
         bid=req.bid,
         chapter_id=req.chapterId,
         detail_outline_id=req.detailOutlineId,
+        use_ai_prompt=req.useAiPrompt,
+        content=req.content,
     )
 
     if req.detailOutlineId is None:
         return ResponseUtil.success(data=BindChapterDetailOutlineResp(
             chapterId=chapter.id,
             detailOutlineId=None,
+        ))
+
+    if not req.useAiPrompt:
+        return ResponseUtil.success(data=BindChapterDetailOutlineResp(
+            chapterId=chapter.id,
+            detailOutlineId=chapter.detail_outline_id,
         ))
 
     chapter, detail_outline = await book_service.get_chapter_detail_outline_for_generation(
@@ -158,6 +166,27 @@ async def bind_chapter_detail_outline(
         chapterId=chapter.id,
         detailOutlineId=detail_outline_id,
         requestId=request_id,
+    ))
+
+
+@bookController.get("/book/chapter/detailOutline/status", name="查询章节细纲关联状态")
+async def get_chapter_detail_outline_status(
+        bid: str,
+        chapterId: int,
+        db: AsyncSession = Depends(get_db),
+        current_user=Depends(get_current_user),
+):
+    """仅查询章节是否关联有效细纲，不修改关联关系。"""
+    chapter, detail_outline = await BookService(db).get_chapter_detail_outline_status(
+        uid=current_user.pkId,
+        bid=bid,
+        chapter_id=chapterId,
+    )
+    return ResponseUtil.success(data=ChapterDetailOutlineStatusResp(
+        chapterId=chapter.id,
+        isBound=detail_outline is not None,
+        detailOutlineId=detail_outline.id if detail_outline else None,
+        detailOutlineName=detail_outline.name if detail_outline else None,
     ))
 
 
