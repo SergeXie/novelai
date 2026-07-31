@@ -165,6 +165,10 @@ class PromptService:
 
         # 3. 拼装【正文类】 (作为前情提要)
         content_items = grouped.get(BookNodeCategory.CONTENT, [])
+
+        outline_items = grouped.get(BookNodeCategory.DETAILED_OUTLINE, [])
+
+        content_items.extend(outline_items)
         if content_items:
             chapters = []
             for n in content_items:
