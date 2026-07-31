@@ -225,6 +225,15 @@ class BindChapterDetailOutlineResp(BaseModel):
     requestId: Optional[str] = None
 
 
+class ChapterDetailOutlineStatusResp(BaseModel):
+    """章节与细纲的关联状态。"""
+
+    chapterId: int
+    isBound: bool
+    detailOutlineId: Optional[int] = None
+    detailOutlineName: Optional[str] = None
+
+
 class BatchAddRoleItemReq(BaseModel):
     """批量新增角色时的单条角色数据。"""
 

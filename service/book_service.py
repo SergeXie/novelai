@@ -938,6 +938,37 @@ class BookService:
             raise ServiceWarning("关联细纲不存在或已失效")
         return chapter, detail_outline
 
+    async def get_chapter_detail_outline_status(
+            self,
+            uid: int,
+            bid: str,
+            chapter_id: int,
+    ) -> tuple[BookNode, BookNode | None]:
+        """查询正文节点是否仍关联一个有效的细纲节点。"""
+        chapter = await self.book_dao.get_node_by_id(
+            node_id=chapter_id,
+            uid=uid,
+            bid=bid,
+        )
+        if not chapter or chapter.type != BookNodeCategory.CONTENT.code:
+            raise ServiceWarning("章节不存在或不是正文节点")
+
+        if chapter.detail_outline_id is None:
+            return chapter, None
+
+        detail_outline = await self.book_dao.get_node_by_id(
+            node_id=chapter.detail_outline_id,
+            uid=uid,
+            bid=bid,
+        )
+        if (
+            not detail_outline
+            or detail_outline.type != BookNodeCategory.DETAILED_OUTLINE.code
+            or detail_outline.parent_id != BOOK_SYSTEM_DETAILED_OUTLINE_ID
+        ):
+            return chapter, None
+        return chapter, detail_outline
+
     async def save_generated_detail_outline(
             self,
             uid: int,
