@@ -284,6 +284,7 @@ class BookDAO:
             category: BookNodeCategory | int,
             data: dict | None = None,
             content: str | None = None,
+            book_len: int = 0,
     ) -> BookNode:
         """
         新增章节（自动补正文根节点）
@@ -297,6 +298,7 @@ class BookDAO:
             depth=depth,
             data=data,
             content=content,
+            book_len=book_len,
             type=category.code if isinstance(category, BookNodeCategory) else int(category)
         )
         self.db.add(node)

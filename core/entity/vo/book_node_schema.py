@@ -212,11 +212,13 @@ class AddChapterResp(BaseModel):
 
 
 class BindChapterDetailOutlineReq(BaseModel):
-    """Use -7 to create a detailed-outline child for the chapter; use null to unbind."""
+    """Use -7 to create a detailed-outline child; use null to unbind."""
 
     bid: str
     chapterId: int
     detailOutlineId: Optional[int] = None
+    useAiPrompt: bool = True
+    content: Optional[str] = None
 
 
 class BindChapterDetailOutlineResp(BaseModel):

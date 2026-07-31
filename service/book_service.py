@@ -841,6 +841,8 @@ class BookService:
             bid: str,
             chapter_id: int,
             detail_outline_id: int | None,
+            use_ai_prompt: bool = True,
+            content: str | None = None,
     ) -> BookNode:
         """Bind a content chapter to a detailed-outline child node, or unbind it."""
         chapter = await self.book_dao.get_node_by_id(
@@ -851,7 +853,7 @@ class BookService:
         if not chapter or chapter.type != BookNodeCategory.CONTENT.code:
             raise ServiceWarning("章节不存在或不是正文节点")
 
-        if detail_outline_id is not None and not (chapter.content or "").strip():
+        if use_ai_prompt and detail_outline_id is not None and not (chapter.content or "").strip():
             raise ServiceWarning("章节正文为空，无法生成细纲")
 
         if detail_outline_id == BOOK_SYSTEM_DETAILED_OUTLINE_ID:
@@ -865,20 +867,24 @@ class BookService:
                     bid=bid,
                 )
                 if existing_outline:
-                    return chapter
+                    if use_ai_prompt:
+                        return chapter
+                    detail_outline_id = existing_outline.id
 
-            detail_outline = await self.book_dao.add_chapter_node(
-                uid=uid,
-                bid=bid,
-                parent_id=BOOK_SYSTEM_DETAILED_OUTLINE_ID,
-                is_leaf=1,
-                name=chapter.name,
-                depth=BOOK_SYSTEM_NODE_DEPTH[BOOK_SYSTEM_DETAILED_OUTLINE_ID] + 1,
-                data={"chapter_id": chapter.id},
-                content=None,
-                category=BookNodeCategory.DETAILED_OUTLINE,
-            )
-            detail_outline_id = detail_outline.id
+            if detail_outline_id == BOOK_SYSTEM_DETAILED_OUTLINE_ID:
+                detail_outline = await self.book_dao.add_chapter_node(
+                    uid=uid,
+                    bid=bid,
+                    parent_id=BOOK_SYSTEM_DETAILED_OUTLINE_ID,
+                    is_leaf=1,
+                    name=chapter.name,
+                    depth=BOOK_SYSTEM_NODE_DEPTH[BOOK_SYSTEM_DETAILED_OUTLINE_ID] + 1,
+                    data={"chapter_id": chapter.id},
+                    content=None if use_ai_prompt else content,
+                    book_len=len(strip_html_tags(content or "")) if not use_ai_prompt else 0,
+                    category=BookNodeCategory.DETAILED_OUTLINE,
+                )
+                detail_outline_id = detail_outline.id
 
         if detail_outline_id is not None:
             detail_outline = await self.book_dao.get_node_by_id(
@@ -900,6 +906,12 @@ class BookService:
             )
             if bound_chapter and bound_chapter.id != chapter.id:
                 raise ServiceWarning("该细纲已关联其他章节")
+
+            # 不使用 AI 时，细纲内容完全由前端传入并直接保存。
+            if not use_ai_prompt and content is not None:
+                detail_outline.content = content
+                detail_outline.book_len = len(strip_html_tags(content))
+                self.db.add(detail_outline)
 
         return await self.book_dao.update_detail_outline_binding(
             chapter=chapter,

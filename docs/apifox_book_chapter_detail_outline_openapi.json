@@ -3,7 +3,7 @@
   "info": {
     "title": "Book Chapter Detail Outline API",
     "version": "1.0.0",
-    "description": "Bind or unbind a chapter and generate its detailed outline."
+    "description": "Bind or unbind a chapter and optionally generate its detailed outline with AI."
   },
   "servers": [
     {
@@ -14,7 +14,7 @@
     "/book/chapter/bindDetailOutline": {
       "post": {
         "summary": "Bind chapter and generate detailed outline",
-        "description": "Use -7 to create a detailed-outline child for the chapter and generate its content. Use an existing detailed-outline ID to regenerate that item. Use null to unbind without generation.",
+        "description": "When useAiPrompt=true (default), use -7 to create a detailed-outline child and generate its content. When useAiPrompt=false, content is saved directly without an AI request. Use null to unbind.",
         "security": [{ "bearerAuth": [] }],
         "requestBody": {
           "required": true,
@@ -27,6 +27,15 @@
                     "bid": "BID202607301000000000000000000001",
                     "chapterId": 9101,
                     "detailOutlineId": -7
+                  }
+                },
+                "create_with_manual_content": {
+                  "value": {
+                    "bid": "BID202607301000000000000000000001",
+                    "chapterId": 9101,
+                    "detailOutlineId": -7,
+                    "useAiPrompt": false,
+                    "content": "第1章：主角初入公司，与直属主管发生第一次冲突。"
                   }
                 },
                 "unbind": {
@@ -138,6 +147,16 @@
             "type": "integer",
             "nullable": true,
             "description": "Use -7 to create and generate, an existing detailed-outline item ID to bind and regenerate, or null to unbind."
+          },
+          "useAiPrompt": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether to generate the detailed outline with AI. Set false to save content directly."
+          },
+          "content": {
+            "type": "string",
+            "nullable": true,
+            "description": "Manual detailed-outline content. Used when useAiPrompt is false."
           }
         }
       }
