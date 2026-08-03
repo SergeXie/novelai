@@ -221,6 +221,9 @@ class UsageService:
             if log_record.status == AIGenerateStatus.SUCCESS:
                 return log_record.outputContent
             elif log_record.status == AIGenerateStatus.FAILED:
+                # 仅透出已确认可面向用户展示的业务校验提示；模型原始异常仍使用通用文案。
+                if log_record.errorMsg == "当前输入内容较长，已超过该模型的处理上限，请精简内容后重试或切换模型。":
+                    return log_record.errorMsg
                 return "生成失败，请切换模型或者稍后重试"
 
         return ""
