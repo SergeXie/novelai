@@ -59,6 +59,13 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
+# Local database backups and credentials
+backups/
+*.sql
+*.sql.zip
+mysql-backup.cnf
+backup.env
+
 # Flask stuff:
 instance/
 .webassets-cache
