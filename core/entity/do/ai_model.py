@@ -87,7 +87,7 @@ class McAiModel(Base):
         Integer,
         nullable=False,
         server_default="0",
-        comment="模型单次生成字数上限，0表示不限制",
+        comment="模型单次请求提示词字数上限，0表示不限制",
     )
 
     temperature: Mapped[Decimal] = mapped_column(

@@ -127,8 +127,8 @@ class AIService:
             template_key: str | None = None,
             background_tasks=None,
             on_success_callback: Callable[[AICompletionResponse], Awaitable[None]] | None = None,
+            enforce_prompt_word_limit: bool = False,
     ) -> tuple[str, None] | tuple[str, AICompletionResponse | None]:
-        await check_user_quota_or_raise(frozen_token_length=tokenEstimate, user_info=user, level=level)
         """
         第一阶段：校验、记录、生成请求ID
         当 background_tasks 为 None 时，直接同步等待任务完成。
@@ -139,10 +139,12 @@ class AIService:
             correlation = []
 
         model_config = await self.get_model_config_by_level(level)
+        normalized_action_type = AIAction(action_type)
 
         final_system_prompt = system_prompt or settings.ai_system_prompt
         final_temperature = temperature if temperature is not None else model_config["temperature"]
         model_max_tokens = model_config["max_tokens"]
+        model_max_word_count = int(model_config.get("max_word_count") or 0)
         final_max_tokens = max_tokens  # 不传入时为 None，由适配器决定默认值
 
         # 字数提示注入（入库前），确保数据库中保存的 prompt 包含字数要求
@@ -155,6 +157,24 @@ class AIService:
         usage_service = UsageService(self.db)
 
         input_user_prompt = user_prompt
+        input_word_count = len(input_user_prompt)
+        exceeds_input_word_limit = (
+            enforce_prompt_word_limit
+            and model_max_word_count > 0
+            and input_word_count > model_max_word_count
+        )
+        word_limit_error = (
+            "当前输入内容较长，已超过该模型的处理上限，请精简内容后重试或切换模型。"
+            if exceeds_input_word_limit else ""
+        )
+
+        # 超限请求也需要保留失败日志供前端 /poll 查询，但不冻结或扣除额度。
+        if not exceeds_input_word_limit:
+            await check_user_quota_or_raise(
+                frozen_token_length=tokenEstimate,
+                user_info=user,
+                level=level,
+            )
 
         # ================================
         # 检查本地模型时间限制
@@ -176,9 +196,21 @@ class AIService:
             user_prompt=input_user_prompt,
             temperature=final_temperature,
             output_content=output_content,
-            action_type=AIAction(action_type),
+            action_type=normalized_action_type,
+            status=AIGenerateStatus.FAILED if exceeds_input_word_limit else AIGenerateStatus.PENDING,
             max_tokens=final_max_tokens,
         )
+
+        if exceeds_input_word_limit:
+            await usage_service.update_request_result_by_request_id(
+                request_id=request_id,
+                status=AIGenerateStatus.FAILED,
+                error_msg=word_limit_error,
+                request_input_length=input_word_count,
+                total_tokens=0,
+            )
+            logger.warning(f"RequestId: {request_id} {word_limit_error}")
+            return request_id, None
 
         # ================================
         # 任务分发逻辑
@@ -334,6 +366,7 @@ class AIService:
             tokenEstimate=frozen_tokens,
             background_tasks=background_tasks,
             on_success_callback=on_success_callback,
+            enforce_prompt_word_limit=True,
         )
         return request_id
 
